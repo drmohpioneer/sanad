@@ -1,0 +1,13 @@
+.env
+*.json
+__pycache__/
+.venv/
+*.ogg
+*.wav
+*.aiff
+README*
+*.md
+.git/
+.gitignore
+# The acceptance-run lab slips live in the repo, not in the image.
+test-assets/

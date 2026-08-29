@@ -1,0 +1,242 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1240" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#33363f"/></marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9c3b2e"/></marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6a4fa8"/></marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f6f4f"/></marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3b4f9c"/></marker>
+    <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#a8622f"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1660" height="1240" fill="#ffffff"/>
+  <text x="40" y="36" font-size="19" font-weight="bold" fill="#1c1f26">Sanad: three agents, one safety kernel, durable infrastructure</text>
+  <g id="g-channels">
+    <rect x="40" y="56" width="660" height="112" rx="12" fill="#eaf1fb" stroke="#4b6fa8" stroke-width="1.6"/>
+    <text x="56" y="78" font-size="13.5" font-weight="bold" fill="#4b6fa8">Channels: one interface, interchangeable</text>
+  </g>
+  <g id="n-WEB">
+    <rect x="60" y="92" width="300" height="60" rx="8" fill="#ffffff" stroke="#4b6fa8" stroke-width="1.4"/>
+    <text x="210.0" y="112" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Web console (/c/token)</text>
+    <text x="210.0" y="128" font-size="11" fill="#4a4f59" text-anchor="middle">doctor box + patient box + board + feed</text>
+  </g>
+  <g id="n-TG">
+    <rect x="380" y="92" width="300" height="60" rx="8" fill="#ffffff" stroke="#4b6fa8" stroke-width="1.4"/>
+    <text x="530.0" y="112" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Telegram adapter</text>
+    <text x="530.0" y="128" font-size="11" fill="#4a4f59" text-anchor="middle">webhook, secret_token verified</text>
+  </g>
+  <g id="n-ADAPT">
+    <rect x="170" y="196" width="400" height="52" rx="8" fill="#f5f7fa" stroke="#1c1f26" stroke-width="1.4"/>
+    <text x="370.0" y="216" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">ChannelAdapter interface</text>
+    <text x="370.0" y="232" font-size="11" fill="#4a4f59" text-anchor="middle">inbound(message) / send(target, text | card)</text>
+  </g>
+  <g id="g-core">
+    <rect x="40" y="268" width="1180" height="912" rx="12" fill="#ffffff" stroke="#1c1f26" stroke-width="1.6"/>
+    <text x="56" y="290" font-size="13.5" font-weight="bold" fill="#1c1f26">Cloud Run service sanad, stateless per request</text>
+  </g>
+  <g id="n-DISPATCH">
+    <rect x="70" y="310" width="520" height="56" rx="8" fill="#f5f5f5" stroke="#1c1f26" stroke-width="1.4"/>
+    <text x="330.0" y="330" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">dispatch.py: routing by sender identity</text>
+    <text x="330.0" y="346" font-size="11" fill="#4a4f59" text-anchor="middle">plain Python, NO model in this decision</text>
+  </g>
+  <g id="g-doctorpath">
+    <rect x="620" y="310" width="580" height="190" rx="12" fill="#eef6f0" stroke="#2f6f4f" stroke-width="1.6"/>
+    <text x="636" y="332" font-size="13.5" font-weight="bold" fill="#2f6f4f">Doctor path</text>
+  </g>
+  <g id="n-REG">
+    <rect x="640" y="344" width="540" height="74" rx="8" fill="#ffffff" stroke="#2f6f4f" stroke-width="1.4"/>
+    <text x="910.0" y="364" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Registrar (ADK agent)</text>
+    <text x="910.0" y="380" font-size="11" fill="#4a4f59" text-anchor="middle">dictation or text -&gt; ProposedRecord (pydantic)</text>
+    <text x="910.0" y="394" font-size="11" fill="#4a4f59" text-anchor="middle">code validates loop types and required fields</text>
+  </g>
+  <g id="n-CONFIRM">
+    <rect x="640" y="430" width="540" height="56" rx="8" fill="#ffffff" stroke="#2f6f4f" stroke-width="1.4"/>
+    <text x="910.0" y="450" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Confirm card -&gt; pending_confirms</text>
+    <text x="910.0" y="466" font-size="11" fill="#4a4f59" text-anchor="middle">the doctor taps Confirm or Cancel</text>
+  </g>
+  <g id="g-patientpath">
+    <rect x="60" y="390" width="540" height="740" rx="12" fill="#fbf3ec" stroke="#a8622f" stroke-width="1.6"/>
+    <text x="76" y="412" font-size="13.5" font-weight="bold" fill="#a8622f">Patient path: the safety kernel, in the order code runs it</text>
+  </g>
+  <g id="n-VITALS">
+    <rect x="80" y="428" width="500" height="54" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="448" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">1. Blood-pressure table (code)</text>
+    <text x="330.0" y="464" font-size="11" fill="#4a4f59" text-anchor="middle">core/vitals.py: three numbers, no model</text>
+  </g>
+  <g id="n-S1NET">
+    <rect x="80" y="500" width="500" height="70" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="520" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">2. Sentinel net 1 (code)</text>
+    <text x="330.0" y="536" font-size="11" fill="#4a4f59" text-anchor="middle">phrase table plus concept rules</text>
+    <text x="330.0" y="550" font-size="11" fill="#4a4f59" text-anchor="middle">core/sentinel.py MUST_WAKE, CONCEPT_RULES</text>
+  </g>
+  <g id="n-S2NET">
+    <rect x="80" y="588" width="500" height="84" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="608" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">3. Sentinel net 2 (model)</text>
+    <text x="330.0" y="624" font-size="11" fill="#4a4f59" text-anchor="middle">would the doctor want to be woken now?</text>
+    <text x="330.0" y="638" font-size="11" fill="#4a4f59" text-anchor="middle">yes/no, structured, add-only</text>
+    <text x="330.0" y="652" font-size="11" fill="#4a4f59" text-anchor="middle">fails closed to a relay</text>
+  </g>
+  <g id="n-CHANGE">
+    <rect x="80" y="690" width="500" height="70" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="710" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">4. Treatment-change gate (code, then one vote)</text>
+    <text x="330.0" y="726" font-size="11" fill="#4a4f59" text-anchor="middle">core/validator.wants_treatment_change</text>
+    <text x="330.0" y="740" font-size="11" fill="#4a4f59" text-anchor="middle">add-only, fails closed to a relay</text>
+  </g>
+  <g id="n-ADMIN">
+    <rect x="80" y="778" width="500" height="70" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="798" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">5. Administrative tier (code)</text>
+    <text x="330.0" y="814" font-size="11" fill="#4a4f59" text-anchor="middle">core/intents.py: six chores</text>
+    <text x="330.0" y="828" font-size="11" fill="#4a4f59" text-anchor="middle">acts only through the Coordinator's tools</text>
+  </g>
+  <g id="n-CONC">
+    <rect x="80" y="866" width="500" height="84" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="886" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">7. Concierge (ADK agent)</text>
+    <text x="330.0" y="902" font-size="11" fill="#4a4f59" text-anchor="middle">no tools at all (output_schema + tools is</text>
+    <text x="330.0" y="916" font-size="11" fill="#4a4f59" text-anchor="middle">disallowed in ADK 2.8.0); the plan and the open</text>
+    <text x="330.0" y="930" font-size="11" fill="#4a4f59" text-anchor="middle">loops are injected as text by code</text>
+  </g>
+  <g id="n-VALID">
+    <rect x="80" y="968" width="500" height="70" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="988" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">8. Output validator (code)</text>
+    <text x="330.0" y="1004" font-size="11" fill="#4a4f59" text-anchor="middle">no-reassurance list, then every number traced</text>
+    <text x="330.0" y="1018" font-size="11" fill="#4a4f59" text-anchor="middle">to a plan number of the same class</text>
+  </g>
+  <g id="n-REASSURE">
+    <rect x="80" y="1056" width="500" height="54" rx="8" fill="#ffffff" stroke="#a8622f" stroke-width="1.4"/>
+    <text x="330.0" y="1076" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">9. Reassurance vote (model, add-only)</text>
+    <text x="330.0" y="1092" font-size="11" fill="#4a4f59" text-anchor="middle">fails closed to a relay</text>
+  </g>
+  <g id="n-ESCALATE">
+    <rect x="640" y="530" width="560" height="76" rx="8" fill="#fbecea" stroke="#9c3b2e" stroke-width="1.4"/>
+    <text x="920.0" y="550" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Escalation: canned ER block to the patient</text>
+    <text x="920.0" y="566" font-size="11" fill="#4a4f59" text-anchor="middle">plus a red card to the doctor</text>
+    <text x="920.0" y="580" font-size="11" fill="#4a4f59" text-anchor="middle">NO model call happens</text>
+  </g>
+  <g id="g-labpath">
+    <rect x="640" y="636" width="560" height="190" rx="12" fill="#eef2fb" stroke="#3b4f9c" stroke-width="1.6"/>
+    <text x="656" y="658" font-size="13.5" font-weight="bold" fill="#3b4f9c">Lab path</text>
+  </g>
+  <g id="n-LAB">
+    <rect x="660" y="672" width="520" height="74" rx="8" fill="#ffffff" stroke="#3b4f9c" stroke-width="1.4"/>
+    <text x="920.0" y="692" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Lab-Extractor</text>
+    <text x="920.0" y="708" font-size="11" fill="#4a4f59" text-anchor="middle">photo -&gt; structured analytes (Gemini), then</text>
+    <text x="920.0" y="722" font-size="11" fill="#4a4f59" text-anchor="middle">compared in code vs target / baseline / critical</text>
+  </g>
+  <g id="n-VERIFY">
+    <rect x="660" y="758" width="520" height="56" rx="8" fill="#ffffff" stroke="#3b4f9c" stroke-width="1.4"/>
+    <text x="920.0" y="778" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Slip verifier (code)</text>
+    <text x="920.0" y="794" font-size="11" fill="#4a4f59" text-anchor="middle">core/verify.py: name, collection date, every analyte</text>
+  </g>
+  <g id="g-chasepath">
+    <rect x="640" y="840" width="560" height="300" rx="12" fill="#f3f0fb" stroke="#6a4fa8" stroke-width="1.6"/>
+    <text x="656" y="862" font-size="13.5" font-weight="bold" fill="#6a4fa8">Chase path</text>
+  </g>
+  <g id="n-CHASER">
+    <rect x="660" y="876" width="520" height="74" rx="8" fill="#ffffff" stroke="#6a4fa8" stroke-width="1.4"/>
+    <text x="920.0" y="896" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Chaser: the Cloud Tasks handler</text>
+    <text x="920.0" y="912" font-size="11" fill="#4a4f59" text-anchor="middle">run id, quiet hours, one a day, the ladder</text>
+    <text x="920.0" y="926" font-size="11" fill="#4a4f59" text-anchor="middle">the ledger is claimed before the agent thinks</text>
+  </g>
+  <g id="n-COORD">
+    <rect x="660" y="962" width="520" height="84" rx="8" fill="#ffffff" stroke="#6a4fa8" stroke-width="1.4"/>
+    <text x="920.0" y="982" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">6. Care Coordinator (ADK agent)</text>
+    <text x="920.0" y="998" font-size="11" fill="#4a4f59" text-anchor="middle">seven guarded tools, one action per wake-up</text>
+    <text x="920.0" y="1012" font-size="11" fill="#4a4f59" text-anchor="middle">templates only, never free text</text>
+    <text x="920.0" y="1026" font-size="11" fill="#4a4f59" text-anchor="middle">fails closed to the ladder</text>
+  </g>
+  <g id="n-POLICY">
+    <rect x="660" y="1052" width="520" height="76" rx="8" fill="#ffffff" stroke="#6a4fa8" stroke-width="1.4"/>
+    <text x="920.0" y="1072" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">core/policy.py (code)</text>
+    <text x="920.0" y="1088" font-size="11" fill="#4a4f59" text-anchor="middle">registered as ADK's before_tool_callback</text>
+    <text x="920.0" y="1102" font-size="11" fill="#4a4f59" text-anchor="middle">every tool call is checked before it runs</text>
+    <text x="920.0" y="1116" font-size="11" fill="#4a4f59" text-anchor="middle">a refusal goes back with its reason</text>
+  </g>
+  <g id="n-GEMINI">
+    <rect x="1250" y="320" width="370" height="66" rx="8" fill="#eef2fb" stroke="#3b4f9c" stroke-width="1.4"/>
+    <rect x="1254" y="324" width="362" height="58" rx="5" fill="none" stroke="#3b4f9c" stroke-width="0.9"/>
+    <text x="1435.0" y="340" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Gemini 3.5 Flash: Vertex AI, global</text>
+    <text x="1435.0" y="356" font-size="11" fill="#4a4f59" text-anchor="middle">service-account auth, no API key</text>
+  </g>
+  <g id="n-TASKS">
+    <rect x="1250" y="410" width="370" height="66" rx="8" fill="#f3f0fb" stroke="#6a4fa8" stroke-width="1.4"/>
+    <rect x="1254" y="414" width="362" height="58" rx="5" fill="none" stroke="#6a4fa8" stroke-width="0.9"/>
+    <text x="1435.0" y="430" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Cloud Tasks queue, europe-west1</text>
+    <text x="1435.0" y="446" font-size="11" fill="#4a4f59" text-anchor="middle">OIDC-signed wake calls</text>
+  </g>
+  <g id="n-FS">
+    <rect x="1250" y="500" width="370" height="96" rx="14" fill="#f2f4f7" stroke="#33363f" stroke-width="1.4"/>
+    <path d="M1250 514 Q1435.0 530 1620 514" fill="none" stroke="#33363f" stroke-width="1.1"/>
+    <text x="1435.0" y="544" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Firestore Native, europe-west1</text>
+    <text x="1435.0" y="560" font-size="11" fill="#4a4f59" text-anchor="middle">doctors · patients · loops</text>
+    <text x="1435.0" y="574" font-size="11" fill="#4a4f59" text-anchor="middle">events · sends · pending_confirms</text>
+  </g>
+  <g id="n-GCS">
+    <rect x="1250" y="620" width="370" height="76" rx="14" fill="#f2f4f7" stroke="#33363f" stroke-width="1.4"/>
+    <path d="M1250 634 Q1435.0 650 1620 634" fill="none" stroke="#33363f" stroke-width="1.1"/>
+    <text x="1435.0" y="664" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Cloud Storage</text>
+    <text x="1435.0" y="680" font-size="11" fill="#4a4f59" text-anchor="middle">lab slip images, private bucket</text>
+  </g>
+  <g id="n-SM">
+    <rect x="1250" y="720" width="370" height="66" rx="8" fill="#f5f5f5" stroke="#1c1f26" stroke-width="1.4"/>
+    <rect x="1254" y="724" width="362" height="58" rx="5" fill="none" stroke="#1c1f26" stroke-width="0.9"/>
+    <text x="1435.0" y="740" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Secret Manager</text>
+    <text x="1435.0" y="756" font-size="11" fill="#4a4f59" text-anchor="middle">admin secret · bot token</text>
+  </g>
+  <path d="M210 152 L280 196" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M530 152 L460 196" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M370 248 L330 310" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M590 338 L640 378" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="614" y="348" font-size="10.5" fill="#33363f" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">sender = doctor</text>
+  <path d="M330 366 L330 428" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="340" y="400" font-size="10.5" fill="#33363f" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">sender = patient</text>
+  <path d="M330 482 L330 500" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M330 570 L330 588" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M330 672 L330 690" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="340" y="684" font-size="10.5" fill="#33363f" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">no</text>
+  <path d="M330 760 L330 778" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="340" y="772" font-size="10.5" fill="#33363f" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">clear</text>
+  <path d="M330 950 L330 968" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M330 1038 L330 1056" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M580 452 L640 544" fill="none" stroke="#9c3b2e" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="604" y="486" font-size="10.5" fill="#9c3b2e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">red reading</text>
+  <path d="M580 532 L640 566" fill="none" stroke="#9c3b2e" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="606" y="540" font-size="10.5" fill="#9c3b2e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">hit</text>
+  <path d="M580 626 L640 592" fill="none" stroke="#9c3b2e" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="606" y="620" font-size="10.5" fill="#9c3b2e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">yes</text>
+  <path d="M80 722 L48 722 L48 1000 L80 1000" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="58" y="862" font-size="10.5" fill="#33363f" text-anchor="middle" transform="rotate(-90 58 862)" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">relay line, no generation</text>
+  <path d="M580 812 L614 812 L614 1004 L660 1004" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="618" y="928" font-size="10.5" fill="#33363f" text-anchor="middle" transform="rotate(-90 618 928)" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">a chore or a reply</text>
+  <path d="M660 1026 L630 1026 L630 906 L580 906" fill="none" stroke="#33363f" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="638" y="1005" font-size="10.5" fill="#33363f" text-anchor="middle" transform="rotate(-90 638 1005)" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">stands down</text>
+  <path d="M660 1090 L650 1090 L650 1010 L660 1010" fill="none" stroke="#6a4fa8" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowPurple)"/>
+    <text x="694" y="1054" font-size="10.5" fill="#6a4fa8" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">refused, with the reason</text>
+  <path d="M920 1046 L920 1058" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+  <path d="M80 1083 L26 1083 L26 222 L170 222" fill="none" stroke="#33363f" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="20" y="700" font-size="10.5" fill="#33363f" text-anchor="middle" transform="rotate(-90 20 700)" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">out through one adapter</text>
+  <path d="M662 1040 L642 1040 L642 1166 L26 1166 L26 1090" fill="none" stroke="#33363f" stroke-width="1.5"/>
+  <path d="M662 926 L620 926 L620 1158 L32 1158 L32 1090" fill="none" stroke="#33363f" stroke-width="1.5"/>
+  <path d="M1200 568 L1236 568 L1236 236 L570 236" fill="none" stroke="#9c3b2e" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="1228" y="260" font-size="10.5" fill="#9c3b2e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">the emergency block, and the red card</text>
+  <path d="M910 418 L910 430" fill="none" stroke="#2f6f4f" stroke-width="1.5" marker-end="url(#arrowTeal)"/>
+  <path d="M1180 378 L1250 350" fill="none" stroke="#2f6f4f" stroke-width="1.5" marker-end="url(#arrowTeal)"/>
+  <path d="M1180 452 L1250 524" fill="none" stroke="#2f6f4f" stroke-width="1.5" marker-end="url(#arrowTeal)"/>
+  <path d="M1180 470 L1210 470 L1210 442 L1250 442" fill="none" stroke="#2f6f4f" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowTeal)"/>
+    <text x="1206" y="496" font-size="10.5" fill="#2f6f4f" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">due-date loop</text>
+  <path d="M1200 596 L1250 546" fill="none" stroke="#9c3b2e" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+  <path d="M1180 700 L1250 366" fill="none" stroke="#3b4f9c" stroke-width="1.5" marker-end="url(#arrowBlue)"/>
+  <path d="M1180 726 L1250 646" fill="none" stroke="#3b4f9c" stroke-width="1.5" marker-end="url(#arrowBlue)"/>
+  <path d="M920 746 L920 758" fill="none" stroke="#3b4f9c" stroke-width="1.5" marker-end="url(#arrowBlue)"/>
+  <path d="M1180 786 L1250 566" fill="none" stroke="#3b4f9c" stroke-width="1.5" marker-end="url(#arrowBlue)"/>
+  <path d="M1180 690 L1202 610" fill="none" stroke="#9c3b2e" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="1178" y="664" font-size="10.5" fill="#9c3b2e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">critical value</text>
+  <path d="M660 786 L606 786 L606 980 L660 980" fill="none" stroke="#3b4f9c" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowBlue)"/>
+    <text x="598" y="820" font-size="10.5" fill="#3b4f9c" text-anchor="middle" transform="rotate(-90 598 820)" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">evidence gap</text>
+  <path d="M1250 466 L1216 466 L1216 900 L1180 900" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+    <text x="1210" y="700" font-size="10.5" fill="#6a4fa8" text-anchor="middle" transform="rotate(-90 1210 700)" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">on schedule or /force_due</text>
+  <path d="M1180 940 L1250 586" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+  <path d="M1180 1000 L1250 592" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+  <path d="M1180 1004 L1250 372" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+  <path d="M660 950 L640 950 L640 962 L660 962" fill="none" stroke="#6a4fa8" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowPurple)"/>
+  <path d="M1160 1180 L1250 792" fill="none" stroke="#33363f" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="1150" y="1130" font-size="10.5" fill="#33363f" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">read at boot and per request</text>
+  <text x="40" y="1214" font-size="11.5" fill="#4a4f59">Node for node the mermaid block in docs/ARCHITECTURE.md. The numbers on the patient path are the order code runs the gates in; a model never decides whether a gate runs.</text>
+</svg>

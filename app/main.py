@@ -1,0 +1,1055 @@
+"""Sanad HTTP surface: routes only, no product logic.
+
+Four groups:
+  /health            - liveness (never /healthz, see the note on the handler)
+  /c/{token}/*       - the doctor's web console
+  /tg, /qr/*         - the Telegram webhook and the patient link's QR image
+  /p/{link_token}    - the patient's own phone page (the no-Telegram fallback)
+  /tasks/*           - Cloud Tasks calling Sanad back, OIDC-verified
+  /admin/*           - seed, reset, the twenty background patients, bind the
+                       doctor's phone, webhook, demo knobs
+
+Every route is stateless: resolve the token, load what it needs from Firestore,
+hand off to core/, return. Nothing is cached between requests. Rev 17 deleted
+the last two exceptions: POST /spike/gemini and POST /spike/voice, the S0
+spikes, had no check of any kind on a public service, so anyone with the URL
+had a free Gemini proxy and a free transcription service on this billing
+account, and the module-level ADK session service they shared grew a session
+per call and never dropped one. The S0 proof lives in research/s0-results.md,
+which is where a proof belongs; it does not need to stay reachable in
+production to count.
+"""
+
+from __future__ import annotations
+
+import hmac
+import logging
+import os
+from contextlib import asynccontextmanager
+from typing import Optional
+
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
+
+from core import (
+    background,
+    board,
+    cards,
+    chaser,
+    concierge,
+    contract,
+    dispatch,
+    events,
+    extractor,
+    gender,
+    lang,
+    links,
+    media,
+    monitoring,
+    policy,
+    registrar,
+    settings,
+    storage,
+    store,
+    summary,
+    tasks,
+    telegram,
+    tg_router,
+    timing,
+    uploads,
+    views,
+)
+from core.adapters import InboundMessage, OutboundMessage, fanout
+from core.models import Doctor, Patient
+
+MODEL = media.MODEL
+WEB = os.path.join(os.path.dirname(__file__), "web")
+CONSOLE_HTML = os.path.join(WEB, "console.html")
+PATIENT_HTML = os.path.join(WEB, "patient.html")
+DASHBOARD_HTML = os.path.join(WEB, "dashboard.html")
+
+# Cloud Run captures stdout, but an unconfigured root logger drops INFO, which
+# is where the Chaser says why it dropped a task ("stale run id", "already
+# sent"). That reasoning is the audit trail, so it is turned on here.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+# httpx writes one INFO line per request, and it prints the whole URL. The
+# Telegram API carries the bot token IN THE PATH
+# (api.telegram.org/bot<token>/sendMessage), so every card Sanad sent wrote the
+# live bot token into Cloud Logging, where it is kept for thirty days and can be
+# read by anyone with roles/logging.viewer. That is the same defect as security
+# audit H1, which took the admin secret out of the query string for exactly this
+# reason, and it was found in the logs of the deployed service, not in a test:
+#   INFO httpx HTTP Request: POST https://api.telegram.org/bot<TOKEN>/sendMessage
+#     "HTTP/1.1 400 Bad Request"
+# Warnings and errors from httpx still come through; only the per-request line
+# with the URL in it goes.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+log = logging.getLogger("sanad")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """One check when the container comes up, and nothing else.
+
+    S12 item 2. A patient record holding a doctor's own Telegram chat is the
+    quietest wrong state this system has: everything keeps working, the doctor's
+    typed messages simply arrive as that patient's words. It survived a whole
+    evening of live testing on 2026-08-29 because nothing anywhere said so. It
+    is said now, on the doctor's own board and in the log, every time an
+    instance starts and every time a board is reset.
+
+    It is best effort by design. A startup check that could stop the service
+    would be a worse failure than the one it is looking for, so a Firestore
+    that is not answering yet costs a log line and the instance still serves.
+    """
+    try:
+        await tg_router.wrong_bindings()
+    except Exception:  # noqa: BLE001 - the service starts either way
+        log.warning("the doctor-chat binding check could not run", exc_info=True)
+    yield
+
+
+app = FastAPI(title="Sanad", lifespan=lifespan)
+
+
+# --------------------------------------------------------------------------- #
+# Health
+# --------------------------------------------------------------------------- #
+# Cloud Run's Google Frontend swallows the exact path /healthz before it reaches
+# the container (proved 2026-08-28: /healthz returns a GFE HTML 404 with no
+# `server: Google Frontend` header, while /health, /healthz2 and /nonexistent all
+# reach FastAPI). /health is the reachable alias - use it, never /healthz.
+@app.get("/healthz")
+@app.get("/health")
+async def healthz() -> dict:
+    run_id, time_scale = await settings.current()
+    return {
+        "ok": True,
+        "ffmpeg": await media.ffmpeg_version_async(),
+        "model": MODEL,
+        "telegram": telegram.enabled(),
+        # Named from the runtime's own environment, never hard-coded: what the
+        # console header shows is what this container actually is.
+        "service": os.environ.get("K_SERVICE"),
+        "region": os.environ.get("TASKS_REGION"),
+        "project": store.PROJECT,
+        "revision": os.environ.get("K_REVISION"),
+        # The Chaser's engine is reported, never assumed: "cloudtasks" is the
+        # product path, "inprocess" is the documented fallback.
+        "chaser": tasks.engine(),
+        "labs_bucket": storage.enabled(),
+        "run_id": run_id,
+        "time_scale": time_scale,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Seed
+# --------------------------------------------------------------------------- #
+# The admin secret travels in this header and nowhere else (security audit H1).
+ADMIN_HEADER = "X-Sanad-Admin"
+QUERY_SECRET_REFUSED = (
+    "the admin secret goes in the X-Sanad-Admin header, never in the URL"
+)
+
+
+def require_admin(request: Request) -> None:
+    """Admin routes share one secret, in a header, and 404 when it is wrong.
+
+    Security audit H1. The secret used to be a query parameter, which put it in
+    the path of every access-log line: `POST /admin/seed?secret=<48 hex>` sat in
+    Cloud Logging for thirty days, readable by anyone with roles/logging.viewer,
+    and the same log carried every doctor's console token in `GET /c/<token>/
+    feed`. Moving it to a header is the half that matters, because Cloud Run's
+    own request log records the query string whatever uvicorn does; the
+    Dockerfile turns uvicorn's access log off as well, so the container stops
+    writing a second copy of the console tokens.
+
+    A secret in the query string is refused with 401 and never compared, so
+    nothing keeps writing one out of habit: a caller that has not been updated
+    is told, once, in the response body. A wrong header is still a 404, not a
+    403, so an attacker cannot tell an admin route from a typo.
+
+    `hmac.compare_digest` for the comparison, which is what `secrets.compare_
+    digest` already was (it is the same function), named here as the thing the
+    audit asked for so a reader does not have to know that.
+    """
+    if "secret" in request.query_params:
+        raise HTTPException(401, QUERY_SECRET_REFUSED)
+    expected = os.environ.get("ADMIN_SECRET", "")
+    if not expected:
+        raise HTTPException(503, "ADMIN_SECRET is not configured")
+    if not hmac.compare_digest(request.headers.get(ADMIN_HEADER, ""), expected):
+        raise HTTPException(404, "Not Found")
+
+
+DEMO_DOCTOR = "Dr Mohamed"
+DEMO_SPECIALTY = "cardiology"
+
+
+@app.post("/admin/seed")
+async def seed(
+    request: Request, name: str = DEMO_DOCTOR,
+    specialty: str = DEMO_SPECIALTY,
+    _: None = Depends(require_admin),
+) -> dict:
+    """Create the doctor if he is not there yet, and return his console URL.
+
+    `name` and `specialty` default to the demo doctor, so the runbook's command
+    is unchanged. They are parameters because automated tests need a doctor of
+    their own: every card Sanad produces fans out to whatever Telegram chat is
+    bound, and an agent running the suite against the demo doctor put about
+    thirty cards on Mohamed's phone in one night (S4). A second doctor with no
+    chat bound is visible in his own console and silent everywhere else, so a
+    test run cannot reach a real phone at all.
+    """
+
+    name = (name or DEMO_DOCTOR).strip() or DEMO_DOCTOR
+    doctor = await store.doctor_by_name(name)
+    created = doctor is None
+    if doctor is None:
+        doctor = await store.create_doctor(name, specialty=specialty)
+    elif doctor.specialty != specialty:
+        # Doctors seeded before specialties existed default to general practice.
+        await store.update_doctor(doctor.id, specialty=specialty)
+        doctor = await store.doctor_by_id(doctor.id) or doctor
+    log.info("seed doctor_id=%s name=%s created=%s", doctor.id, name, created)
+    return {
+        "created": created,
+        "doctor_id": doctor.id,
+        "name": doctor.name,
+        "telegram_bound": doctor.telegram_chat_id is not None,
+        "console_url": str(request.base_url).rstrip("/") + f"/c/{doctor.web_token}",
+    }
+
+
+@app.post("/admin/reset")
+async def reset(name: str = DEMO_DOCTOR,
+                _: None = Depends(require_admin)) -> dict:
+    """Wipe one doctor's board so a rehearsal starts from nothing.
+
+    Patients, loops, events, pending confirms, link tokens and relays go; the
+    doctor and his console token survive, so the URL in the runbook keeps
+    working. `name` defaults to the demo doctor, and naming a test doctor here
+    clears that doctor's board without touching the demo board.
+
+    Every per-doctor knob goes with the board (rev 17 item 16). The stored
+    policy is the one that matters: a rehearsal that set `max_contacts` to 2 to
+    film a refusal left that 2 on the record, so the next reseeded board ran on
+    a ceiling nobody remembered setting and the guard refused things the runbook
+    said would be sent. Reset means defaults, and the defaults live in
+    core/policy.py, so an empty policy is the whole of it. The half-typed relay
+    and note the doctor was in the middle of go too: they point at rows that no
+    longer exist.
+    """
+    doctor = await store.doctor_by_name((name or DEMO_DOCTOR).strip() or DEMO_DOCTOR)
+    if doctor is None:
+        raise HTTPException(404, "Not Found")
+    deleted = await store.wipe_doctor(doctor.id)
+    await store.update_doctor(
+        doctor.id, policy={}, awaiting_relay_id=None,
+        awaiting_note_loop_id=None, awaiting_since=None,
+    )
+    # S12 item 2. A doctor's own chat bound to a patient record is silent and
+    # wrong: his typed messages arrive as that patient's and every message meant
+    # for the patient reaches his phone instead. It happened live on 2026-08-29
+    # and nothing on the board said so. The wipe above is the repair, because
+    # the binding lives on a patient record and reset deletes those; this is the
+    # report, and it runs AFTER the wipe so what it names is what is still
+    # wrong. It runs at startup too (`check_doctor_chats`).
+    bindings = await tg_router.wrong_bindings()
+    log.info("reset doctor_id=%s deleted=%s policy=cleared", doctor.id, deleted)
+    return {"ok": True, "doctor_id": doctor.id, "deleted": deleted,
+            "policy": "cleared, back to the defaults in core/policy.py",
+            "doctor_chats_bound_as_patients": bindings}
+
+
+@app.post("/admin/rotate-token")
+async def rotate_token(
+    request: Request, name: str = DEMO_DOCTOR,
+    revoke_links: bool = False,
+    _: None = Depends(require_admin),
+) -> dict:
+    """Mint this doctor a new console token and kill the old one.
+
+    rev 17 item 8. The console URL is a bearer credential: whoever has it can
+    dictate, confirm and answer cards on that board. The submission video is
+    required to show a live `.run` URL in the address bar, and the demo is the
+    console, so the token is legible on YouTube for the weeks between upload and
+    the result. Rotating it after the final take and before the upload is what
+    makes the one on camera worthless.
+
+    Nothing else changes: the doctor, his patients, his loops and his whole feed
+    are the same records. Only the door key is new, so re-open the console at
+    the URL this returns before recording anything else.
+
+    `revoke_links=true` also kills every patient link on the board (codex item
+    14). Use it when a patient page or a QR was on camera: the record survives,
+    and each patient is given a fresh link the next time the doctor confirms
+    anything about him.
+    """
+    doctor = await store.doctor_by_name((name or DEMO_DOCTOR).strip() or DEMO_DOCTOR)
+    if doctor is None:
+        raise HTTPException(404, "Not Found")
+    token = store.new_web_token()
+    await store.update_doctor(doctor.id, web_token=token)
+    log.info("rotated console token doctor_id=%s", doctor.id)
+    # `revoke_links=true` kills every patient link this doctor has minted, which
+    # is the doctor-side revoke of codex item 14. It hangs off this call because
+    # this is the gesture that already exists for "everything on camera is now
+    # worthless", and a patient link on camera is worth more than the console
+    # one: it opens one person's record with no second factor at all.
+    revoked = await store.revoke_link_tokens(doctor.id) if revoke_links else 0
+    return {
+        "ok": True,
+        "doctor_id": doctor.id,
+        "name": doctor.name,
+        "console_url": str(request.base_url).rstrip("/") + f"/c/{token}",
+        "old_token": "dead: the URL in the recording is now a 404",
+        "patient_links_revoked": revoked,
+    }
+
+
+@app.post("/admin/seed-background")
+async def seed_background(name: str = DEMO_DOCTOR,
+                          _: None = Depends(require_admin)) -> dict:
+    """Put the twenty synthetic background patients on one doctor's board.
+
+    S6++ item J. All twenty are invented (core/background.py says so at the top
+    and the names, the phone block and the diagnoses are all made up), and the
+    seeder writes patients, loops, events and relays and nothing else: no Cloud
+    Task is created and no message is sent, so seeding cannot reach anybody's
+    phone. The document ids are derived from the doctor, so running this twice
+    replaces the same twenty rather than creating forty.
+
+    `name` defaults to the demo doctor and the runbook names the Test Doctor.
+    """
+    doctor = await store.doctor_by_name((name or DEMO_DOCTOR).strip() or DEMO_DOCTOR)
+    if doctor is None:
+        raise HTTPException(404, "Not Found")
+    written = await background.seed(doctor)
+    log.info("seed-background doctor_id=%s wrote=%s", doctor.id, written)
+    return {"ok": True, "doctor_id": doctor.id, "doctor": doctor.name, **written}
+
+
+class PolicyIn(BaseModel):
+    """One doctor's Coordinator policy. Every field is optional.
+
+    Anything missing, and anything unreadable, falls back to the defaults in
+    core/policy.py, which is what the demo runs on: there is no settings screen
+    in this build and there does not need to be one.
+    """
+
+    earliest_days: Optional[int] = None
+    grace_days: Optional[int] = None
+    max_contacts: Optional[int] = None
+    max_per_day: Optional[int] = None
+    quiet_from: Optional[int] = None
+    quiet_until: Optional[int] = None
+    max_evidence_requests: Optional[int] = None
+    cost_escalate_only: Optional[bool] = None
+    followup_reason: Optional[str] = None
+
+
+@app.post("/admin/settings")
+async def admin_settings(
+    body: Optional[PolicyIn] = None,
+    run_id: Optional[str] = None,
+    time_scale: Optional[int] = None, doctor_name: str = "",
+    _: None = Depends(require_admin),
+) -> dict:
+    """Turn the two demo knobs, and set a doctor's policy, without a redeploy.
+
+    `run_id` bumps the demo run: tasks created under the old one are dropped
+    when they fire. `time_scale` is how many real seconds make one Sanad day.
+    A body, with `doctor_name`, stores that doctor's Coordinator policy.
+    Passing none of them just reads everything back.
+    """
+    await store.set_settings(run_id=run_id, time_scale=time_scale)
+    now_run_id, now_scale = await settings.current()
+
+    stored = None
+    if body is not None and doctor_name.strip():
+        doctor = await store.doctor_by_name(doctor_name.strip())
+        if doctor is None:
+            raise HTTPException(404, "Not Found")
+        given = {k: v for k, v in body.model_dump().items() if v is not None}
+        # Read back through core/policy.parse, so what is stored is what the
+        # guards will actually enforce and not what was typed.
+        await store.update_doctor(doctor.id, policy=given)
+        stored = policy.parse(given).as_meta()
+
+    return {"ok": True, "run_id": now_run_id, "time_scale": now_scale,
+            "policy": stored}
+
+
+BIND_NEEDS_CHAT_ID = (
+    "chat_id is required: send /start to the bot, read the chat id off "
+    "GET /admin/pending-starts or the bot's own reply, and pass it here"
+)
+
+
+@app.get("/admin/pending-starts")
+async def pending_starts(_: None = Depends(require_admin)) -> dict:
+    """Which chats have said /start, so the bind call can name one.
+
+    The other half of the M3 fix below: binding needs an explicit chat id, so
+    there has to be somewhere to read one that is not "the newest". This lists
+    them with their display names, behind the same admin secret, and creates
+    nothing.
+    """
+    rows = await store.list_pending_starts()
+    return {"pending": [{"chat_id": r.chat_id, "name": r.display_name,
+                         "at": r.created_at.isoformat()} for r in rows]}
+
+
+@app.post("/admin/bind-doctor")
+async def bind_doctor(chat_id: Optional[int] = None,
+                      _: None = Depends(require_admin)) -> dict:
+    """Bind Mohamed's Telegram chat to the doctor record, once.
+
+    Security audit M3. This used to bind "the newest unknown /start" when no
+    chat id was given, and the bot's username is public: anyone who sent /start
+    in the seconds between Mohamed's /start and his bind call became the
+    doctor's phone, and every card, every patient message and every lab result
+    went to that chat. The window was small and the consequence was total.
+
+    So the chat id is required. He reads it from the bot's own reply or from
+    GET /admin/pending-starts, and passes it. Nothing is guessed.
+
+    Passing chat_id=0 unbinds, for when a rehearsal bound the wrong phone.
+    """
+    doctor = await store.doctor_by_name(DEMO_DOCTOR)
+    if doctor is None:
+        raise HTTPException(404, "Not Found")
+    if chat_id is None:
+        raise HTTPException(400, BIND_NEEDS_CHAT_ID)
+    if chat_id == 0:
+        await store.update_doctor(doctor.id, telegram_chat_id=None)
+        return {"ok": True, "doctor_id": doctor.id, "chat_id": None}
+    await store.update_doctor(doctor.id, telegram_chat_id=chat_id)
+    await telegram.send_card(chat_id, f"Bound. This phone is now {doctor.name}'s.")
+    return {"ok": True, "doctor_id": doctor.id, "chat_id": chat_id}
+
+
+@app.post("/admin/telegram/setup")
+async def telegram_setup(request: Request,
+                         _: None = Depends(require_admin)) -> dict:
+    """Point the bot at this service's /tg, with the webhook secret attached.
+
+    Done from inside the container on purpose: the bot token never has to appear
+    in a shell command to register the webhook.
+    """
+    if not telegram.enabled():
+        return {"ok": False, "reason": "no bot token configured"}
+    url = str(request.base_url).rstrip("/") + "/tg"
+    result = await telegram.set_webhook(url)
+    return {"ok": bool(result.get("ok")), "webhook": url,
+            "bot": await telegram.bot_username(),
+            "description": result.get("description", "")}
+
+
+# --------------------------------------------------------------------------- #
+# Cloud Tasks calling back
+# --------------------------------------------------------------------------- #
+@app.post("/tasks/nudge")
+async def tasks_nudge(request: Request) -> dict:
+    """The Chaser's only door, and it is locked.
+
+    Cloud Tasks presents a Google-signed OIDC token for the runtime service
+    account, minted for this service's own URL as its audience. Anything else -
+    no token, another audience, another service account, a hand-rolled JWT - is
+    a 403, so the fact that this URL is public buys an attacker nothing.
+
+    It always answers 200. A refusal ("stale run id", "already sent") is a
+    decision, not a failure, and a non-2xx would have Cloud Tasks retry it.
+    """
+    try:
+        await tasks.verify_caller(request.headers.get("authorization"))
+    except Exception as exc:  # noqa: BLE001 - every failure is the same 403
+        log.warning("rejected /tasks/nudge: %s", exc)
+        raise HTTPException(403, "Forbidden")
+    # codex re-audit 4. A wake-up is the one moment Sanad is already awake and
+    # already looking at this data, so it is where the stranded claims of dead
+    # instances are swept: a send row still "claimed" five minutes later, a
+    # confirm still "committing". Best effort by design, and it runs before the
+    # nudge rather than instead of it: a sweep that threw would turn a reminder
+    # into a 503 and a Cloud Tasks retry, which is a worse failure than the one
+    # it is clearing.
+    try:
+        freed = await store.reclaim_stale()
+        if any(freed.values()):
+            log.info("reclaimed stale claims: %s", freed)
+    except Exception:  # noqa: BLE001 - the nudge is what this request is for
+        log.warning("the stale-claim sweep could not run", exc_info=True)
+
+    payload = await request.json()
+    result = await chaser.fire(payload)
+    log.info("nudge result=%s", result)
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# Telegram webhook + the patient link's QR image
+# --------------------------------------------------------------------------- #
+@app.post("/tg")
+async def telegram_webhook(request: Request) -> dict:
+    """Every update is rejected unless it carries the secret we registered."""
+    if not telegram.verify_secret(
+        request.headers.get("x-telegram-bot-api-secret-token")
+    ):
+        raise HTTPException(404, "Not Found")
+    update = await request.json()
+    log.info("tg update=%s", update.get("update_id"))
+    await tg_router.handle_update(update, str(request.base_url))
+    return {"ok": True}
+
+
+@app.get("/qr/{link_token}.png")
+async def qr(link_token: str) -> Response:
+    """QR of one patient's deep link. Rendered per request, never stored."""
+    token = await store.get_link_token(link_token)
+    if token is None:
+        raise HTTPException(404, "Not Found")
+    url = await telegram.deep_link(token.id)
+    if not url:
+        raise HTTPException(503, "Telegram is not configured yet")
+    return Response(content=links.qr_png(url), media_type="image/png")
+
+
+# --------------------------------------------------------------------------- #
+# Patient page - the same one-time link, opened in a browser instead of Telegram
+# --------------------------------------------------------------------------- #
+# Telegram is the patient's real channel. This page exists so a judge with no
+# Telegram can still play the patient from a phone: same link, same patient
+# record, same brain, same gates. It does not burn the link token, so opening
+# the page never costs the patient his Telegram binding.
+async def patient_from_link(link_token: str) -> Patient:
+    """The patient behind a link, or a 404. Expiry and revocation are 404s too.
+
+    codex item 14: this page is a patient's whole record and the link had no
+    life at all. `core/links.usable` is the one rule, so the page, the QR and
+    the Telegram bind cannot disagree about which links are dead. A link that is
+    merely used still opens the page, which is what makes the no-Telegram
+    demo path work.
+    """
+    token = await store.get_link_token(link_token)
+    if not links.usable(token):
+        raise HTTPException(404, "Not Found")
+    patient = await store.get_patient(token.patient_id)
+    if patient is None:
+        raise HTTPException(404, "Not Found")
+    return patient
+
+
+@app.get("/p/{link_token}")
+async def patient_page(link_token: str) -> FileResponse:
+    """The patient's own page, and the first thing he ever reads on it.
+
+    rev 17 item 9: the chat opens with the doctor's confirmed plan already in
+    it, under the doctor's name, before the patient has typed anything. It is
+    written as ordinary agent_out events, so the feed poll two seconds later
+    shows it and the doctor's board shows it too. `links.welcome` is idempotent
+    on the patient record, so a reload sends nothing.
+    """
+    patient = await patient_from_link(link_token)
+    doctor = await store.doctor_by_id(patient.doctor_id)
+    if doctor is not None:
+        await links.welcome(patient, doctor)
+    return FileResponse(PATIENT_HTML, media_type="text/html")
+
+
+@app.get("/p/{link_token}/feed")
+async def patient_feed(link_token: str, since: int = 0) -> dict:
+    """Only this patient's own conversation. No cards, no other patients."""
+    patient = await patient_from_link(link_token)
+    rows = await events.last_events(patient.doctor_id, since)
+    return {
+        "name": patient.name,
+        "events": [
+            {"kind": e.kind, "text": e.text, "ts_ms": events.ts_ms(e)}
+            for e in rows
+            if e.patient_id == patient.id and e.kind in ("patient_in", "agent_out")
+        ],
+    }
+
+
+async def refuse_upload(patient: Patient, why: uploads.Rejected) -> dict:
+    """One polite line, one event, and a 200. Security audit M2.
+
+    An upload that is too large or is not a photo or a voice note is not an
+    error and it is not a clinical event: nothing about the patient's care has
+    happened. He is told, in his own language, what to send instead; the board
+    carries the attempt so the doctor is not surprised by a gap; and the route
+    answers 200 so the page shows the line rather than "not sent".
+    """
+    doctor = await store.doctor_by_id(patient.doctor_id)
+    speak = await lang.for_patient(patient, patient.doctor_id)
+    await events.append_event(
+        patient.doctor_id, "system", f"upload refused: {why.reason}",
+        patient_id=patient.id, channel="web",
+        # `refusal`, not `refused`. Everywhere else in this system a meta
+        # `refused` is the LIST of guard calls code turned down, and the board
+        # renders it with `list.forEach` (web/dashboard.html refusedRows). This
+        # event put a plain string there, and one oversized upload then threw
+        # `TypeError: list.forEach is not a function` on the doctor's dashboard,
+        # killing the render and with it the 2 s poll, so the board stopped
+        # updating while the live pill still said "Live · synced". Found live on
+        # rev 22, not in a test. The board is hardened as well, but the string
+        # does not belong in that field.
+        meta={"refusal": why.reason, "too_large": why.too_large,
+              "decided_by": "code (core/uploads.py size and type rules)"},
+    )
+    if doctor is not None:
+        await fanout().send(f"patient:{patient.id}", OutboundMessage(
+            text=uploads.refusal_text(speak, gender.of_patient(patient),
+                                      too_large=why.too_large),
+            meta={"audit": {"tier": "upload", "refusal": why.reason}}))
+    return {"ok": False, "refused": why.reason}
+
+
+@app.post("/p/{link_token}")
+async def patient_send(
+    link_token: str, text: str = Form(""), file: Optional[UploadFile] = File(None)
+) -> dict:
+    patient = await patient_from_link(link_token)
+    raw, lane, mime = None, "", None
+    if file is not None:
+        # Security audit M2. The cap is applied while reading, and the lane is
+        # decided from the bytes: the client's own content_type used to choose
+        # between ffmpeg and Pillow, and it is a claim, not a fact.
+        try:
+            raw, lane, mime = await uploads.take(file)
+        except uploads.Rejected as why:
+            log.info("patient_page refused patient_id=%s why=%s",
+                     patient.id, why.reason)
+            return await refuse_upload(patient, why)
+    is_audio = lane == uploads.AUDIO
+    log.info("patient_page patient_id=%s attachment=%s", patient.id, mime)
+    await dispatch.handle_inbound(
+        InboundMessage(
+            channel="web",
+            sender_ref=f"patient:{patient.id}",
+            text=text,
+            audio_bytes=raw if is_audio else None,
+            image_bytes=None if is_audio else raw,
+            mime=mime,
+        )
+    )
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Console - token check on every route, wrong token is a 404
+# --------------------------------------------------------------------------- #
+async def current_doctor(token: str) -> Doctor:
+    doctor = await store.doctor_by_token(token)
+    if doctor is None:
+        raise HTTPException(404, "Not Found")
+    return doctor
+
+
+@app.get("/c/{token}")
+async def console(doctor: Doctor = Depends(current_doctor)) -> FileResponse:
+    return FileResponse(CONSOLE_HTML, media_type="text/html")
+
+
+@app.get("/c/{token}/app")
+async def dashboard(doctor: Doctor = Depends(current_doctor)) -> FileResponse:
+    """The designed dashboard, behind the same token check as the console.
+
+    Same dependency, so a wrong token is the same 404 it has always been. The
+    plain console keeps /c/{token} and is untouched: the two pages read the same
+    routes, and this one is the one built to the design system.
+
+    The page reads its own token out of `location.pathname.split("/")[2]`, which
+    is `<token>` at both /c/<token> and /c/<token>/app, so nothing about the
+    token scheme changes by serving it one level deeper.
+    """
+    return FileResponse(DASHBOARD_HTML, media_type="text/html")
+
+
+@app.get("/c/{token}/board")
+async def board_view(doctor: Doctor = Depends(current_doctor)) -> dict:
+    """The doctor's whole board, plus the four counts above it and the QR.
+
+    Named `board_view`, not `board`: a route function called `board` would
+    shadow the `core.board` module it calls, which is exactly what it did once.
+
+    `last_event_ms`, `last_event_kind`, `next_due`, `channel` and `link` are
+    read from the records here rather than derived in the browser. The page used
+    to take the last event time from the feed window, which is the newest two
+    hundred events for the whole board, so a quiet patient on a busy board lost
+    his last event entirely; and it took the channel from `/health.telegram`,
+    which is a fact about the deployment and not about the patient.
+    """
+    history = await store.list_events(doctor.id)
+    tokens = views.links_by_patient(await store.list_link_tokens(doctor.id))
+    patients = []
+    for patient in await store.list_patients(doctor.id):
+        loops = await store.list_loops(patient.id)
+        patients.append(
+            {
+                "id": patient.id,
+                "name": patient.name,
+                "diagnosis": patient.diagnosis,
+                "status": patient.status,
+                # The plan is what the Concierge answers from, and what a
+                # doctor's reply appends to, so the board shows it verbatim.
+                "plan": patient.plan_text,
+                "next_due": views.next_due(loops),
+                **views.last_event(history, patient.id),
+                **views.reach(patient, tokens.get(patient.id)),
+                "loops": [
+                    {
+                        "id": l.id,
+                        "type": l.type,
+                        "title": l.title,
+                        "state": l.state,
+                        "details": l.details,
+                        "due_at": l.due_at.isoformat() if l.due_at else None,
+                    }
+                    for l in loops
+                ],
+            }
+        )
+    counts = board.tally(
+        l["state"] for p in patients for l in p["loops"]
+    )
+    latest = await store.latest_link_token(doctor.id)
+    qr = None
+    if latest is not None:
+        who = await store.get_patient(latest.patient_id)
+        qr = {"url": f"/qr/{latest.id}.png",
+              "patient": who.name if who else "",
+              "page": f"/p/{latest.id}"}
+    return {"doctor": doctor.name, "patients": patients, "counts": counts, "qr": qr}
+
+
+@app.get("/c/{token}/cards")
+async def open_cards(doctor: Doctor = Depends(current_doctor)) -> dict:
+    """Only the cards that still need the doctor, newest first.
+
+    The whole feed still comes back from /c/{token}/feed, resolved cards and
+    all, because the feed is the history. This is the inbox: one rule, in
+    core/cards.is_open, applied on the server so a page reload cannot resurrect
+    a card the doctor already finished.
+    """
+    rows = cards.open_cards(await store.list_events(doctor.id))
+    return {"cards": [cards.row(e) for e in rows]}
+
+
+@app.get("/c/{token}/reports")
+async def reports(doctor: Doctor = Depends(current_doctor)) -> dict:
+    """Completion reports and digests, newest first, as records.
+
+    Stored at the moment each one is written (core/report.record), so this never
+    matches text against a heading. Reports written before this route existed
+    are not backfilled and do not appear here; they are still in the feed.
+    """
+    return {"reports": [views.report_row(r)
+                        for r in await store.list_reports(doctor.id)]}
+
+
+@app.get("/c/{token}/settings")
+async def doctor_settings(doctor: Doctor = Depends(current_doctor)) -> dict:
+    """The doctor's own record and his Coordinator policy. Read only.
+
+    Nothing here writes: the policy is set through POST /admin/settings, behind
+    the admin secret, and a console token is not an admin credential. The
+    Telegram chat id itself is never returned either, only whether one is bound,
+    because that number identifies a real phone.
+    """
+    return views.settings_view(doctor, policy.for_doctor(doctor))
+
+
+@app.get("/c/{token}/feed")
+async def feed(since: int = 0, doctor: Doctor = Depends(current_doctor)) -> dict:
+    return {
+        "events": [
+            {
+                "id": e.id,
+                "kind": e.kind,
+                "patient_id": e.patient_id,
+                "text": e.text,
+                "media": e.media,
+                "meta": e.meta,
+                "ts_ms": events.ts_ms(e),
+            }
+            for e in await events.last_events(doctor.id, since)
+        ]
+    }
+
+
+@app.post("/c/{token}/doctor")
+async def doctor_in(
+    text: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+    doctor: Doctor = Depends(current_doctor),
+) -> dict:
+    """The doctor's box: typed, a voice note, or a photo of his prescription.
+
+    Which of the three it is comes from the upload's own content type, in code.
+    All three end up in the Registrar and all three end at the same confirm card.
+    """
+    raw, lane, mime = None, "", None
+    if file is not None:
+        # The same cap and the same sniff as the patient lane (M2). A doctor
+        # who uploads the wrong thing is told plainly and nothing is created.
+        try:
+            raw, lane, mime = await uploads.take(file)
+        except uploads.Rejected as why:
+            return {"ok": False, "refused": why.reason,
+                    "detail": "Send a photo of the prescription, or a voice "
+                              "note, under 10 MB."}
+    is_audio = lane == uploads.AUDIO
+    log.info("doctor_in doctor_id=%s attachment=%s", doctor.id, mime)
+    await dispatch.handle_inbound(
+        InboundMessage(
+            channel="web",
+            sender_ref=f"doctor:{doctor.web_token}",
+            text=text,
+            audio_bytes=raw if is_audio else None,
+            image_bytes=None if is_audio else raw,
+            mime=mime,
+        )
+    )
+    return {"ok": True}
+
+
+@app.post("/c/{token}/patient/{patient_id}")
+async def patient_in(
+    patient_id: str,
+    text: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+    doctor: Doctor = Depends(current_doctor),
+) -> dict:
+    patient = await store.get_patient(patient_id)
+    if patient is None or patient.doctor_id != doctor.id:
+        raise HTTPException(404, "Not Found")
+
+    raw, lane, mime = None, "", None
+    if file is not None:
+        try:
+            raw, lane, mime = await uploads.take(file)
+        except uploads.Rejected as why:
+            return await refuse_upload(patient, why)
+    is_audio = lane == uploads.AUDIO
+    log.info("patient_in patient_id=%s attachment=%s", patient.id, mime)
+    await dispatch.handle_inbound(
+        InboundMessage(
+            channel="web",
+            sender_ref=f"patient:{patient.id}",
+            text=text,
+            audio_bytes=raw if is_audio else None,
+            image_bytes=None if is_audio else raw,
+            mime=mime,
+        )
+    )
+    return {"ok": True}
+
+
+@app.get("/c/{token}/patient/{patient_id}")
+async def patient_view(
+    patient_id: str, doctor: Doctor = Depends(current_doctor)
+) -> dict:
+    """One patient: the record, the loops, and everything that has happened."""
+    patient = await store.get_patient(patient_id)
+    if patient is None or patient.doctor_id != doctor.id:
+        raise HTTPException(404, "Not Found")
+    loops = await store.list_loops(patient.id)
+    history = [e for e in await events.last_events(doctor.id, 0)
+               if e.patient_id == patient.id]
+    tokens = views.links_by_patient(await store.list_link_tokens(doctor.id))
+    # A rehearsal at time_scale=3 makes a Sanad day three real seconds long, and
+    # the monitoring summary counts days (wave A F11). Reading the live scale
+    # here is what stops this panel reporting slots nobody was ever asked on.
+    _, time_scale = await settings.current()
+    return {
+        # Which channel this patient is actually on, and where his own link
+        # is. Both are facts about him, not about whether the bot is
+        # configured, which is what the page had to guess from before.
+        **views.reach(patient, tokens.get(patient.id)),
+        "patient": {
+            "id": patient.id, "name": patient.name, "age": patient.age,
+            "sex": patient.sex, "diagnosis": patient.diagnosis,
+            "plan": patient.plan_text, "targets": patient.targets,
+            "baseline": patient.baseline, "status": patient.status,
+            "results": patient.results,
+            # Who this person is, in the doctor's own words, dated (S9). Doctor
+            # text only: the Registrar writes it at confirm time and nothing on
+            # the patient path can reach it.
+            "notes": patient.notes,
+        },
+        "loops": [
+            {"id": l.id, "type": l.type, "title": l.title, "state": l.state,
+             "details": l.details, "attempts": l.attempts,
+             "due_at": l.due_at.isoformat() if l.due_at else None,
+             "results": l.results, "readings": l.readings,
+             "contacts": l.contacts, "barrier": l.barrier, "paused": l.paused,
+             "doctor_reviewed": l.doctor_reviewed, "verified": l.verified}
+            for l in loops
+        ],
+        # The same loops, said as the contracts they are: objective, evidence,
+        # permitted actions, the fixed safety sentence, deadline, escalation
+        # conditions. Nothing new is stored; this is a rendering of the loop
+        # plus the doctor's policy (core/contract.py).
+        "contracts": [
+            contract.render(l, policy.for_doctor(doctor), doctor.name, patient.name)
+            for l in loops
+        ],
+        # One monitoring loop, counted: what was asked for, what arrived, which
+        # slots did not, the trend, the threshold alerts and the barrier the
+        # patient reported (core/monitoring.py, S6++ item H). Counted from the
+        # readings in code; no model is asked and nothing is stored.
+        "monitoring": [
+            {"loop_id": l.id, "title": l.title,
+             **monitoring.summary(l, time_scale).as_dict()}
+            for l in loops if monitoring.is_monitoring(l)
+        ],
+        "timeline": [
+            {"kind": e.kind, "text": e.text, "meta": e.meta,
+             "ts_ms": events.ts_ms(e)}
+            for e in history
+        ],
+    }
+
+
+@app.get("/c/{token}/summary")
+async def summary_view(doctor: Doctor = Depends(current_doctor)) -> dict:
+    """The end of the day, counted from the records. No model is asked.
+
+    "Lost" is zero by construction and not by hope: every obligation the doctor
+    has falls into exactly one of six buckets in core/summary.classify, which is
+    a total function with an else branch, so the buckets always add up to the
+    number carried. The suite drives every combination through it and asserts
+    that sum.
+    """
+    loops = []
+    for patient in await store.list_patients(doctor.id):
+        loops += await store.list_loops(patient.id)
+    history = await events.last_events(doctor.id, 0)
+    relays = await store.open_relays(doctor.id)
+    # The doctor's day is Cairo's day, on both sides of this call (kernel
+    # review F13). `store.now().date()` is a UTC date, so between midnight and
+    # 03:00 Cairo this route asked for the previous day's summary while the
+    # event-side comparison inside core/summary.py was already Cairo: one
+    # endpoint, two calendars. `summary.today()` is the Cairo date, and the card
+    # is stamped from the same clock, so the title cannot name a different day
+    # from the one that was counted.
+    cairo_now = store.now().astimezone(timing.CAIRO)
+    counts = summary.compute(loops, history, relays, on=summary.today(store.now()))
+    return {
+        "doctor": doctor.name,
+        "line": summary.line(counts),
+        "counts": counts.as_dict(),
+        "card": summary.card(counts, doctor.name, cairo_now),
+    }
+
+
+class ActionIn(BaseModel):
+    # "confirm:<id>" | "cancel:<id>" | "reply:<relay_id>" |
+    # "reviewed:<loop_id>" | "note:<loop_id>" (these two carry text) |
+    # "attach:<event_id>" | "openloop:<event_id>" (an unexpected lab result) |
+    # "seen:<event_id>" (a red card, which carries no other button) |
+    # "existing:<patient_id>:<proposal_id>" and "newpatient:<proposal_id>"
+    # (S9: which record a dictation is about) |
+    # "openpatient:<patient_id>" (a row on a lookup list)
+    action_id: str
+    text: str = ""
+
+
+@app.post("/c/{token}/action")
+async def action(
+    body: ActionIn, request: Request, doctor: Doctor = Depends(current_doctor)
+) -> dict:
+    verb, _, ident = body.action_id.partition(":")
+    log.info("action doctor_id=%s verb=%s id=%s", doctor.id, verb, ident)
+
+    # codex item 17. The claim is in front of the domain work, not behind it: a
+    # second press while the first is still running is answered instead of
+    # carried out. A press that fails gives the card back at the bottom of this
+    # function, so a real failure is still something the doctor can retry.
+    may, claimed = await cards.claim(doctor.id, body.action_id)
+    if not may:
+        return {"ok": False, "already": True, "action_id": body.action_id,
+                "detail": "already done"}
+
+    # codex re-audit 17, the second half of it. The card claim is a fact on the
+    # CARD, and it is handed back when the work behind the button fails, which
+    # is what lets a doctor press again after a real failure. It could not
+    # answer the other case: the work SUCCEEDED and the write that retires the
+    # card threw. The claim went back, the doctor pressed again, and Confirm
+    # made a second patient.
+    #
+    # So the domain work carries its own key, and the key is the action id he
+    # pressed. It is written before the work and released only when the work
+    # itself throws, never when the bookkeeping after it does. A verb no card
+    # carries (a purged card, a script) is covered by this and by nothing else,
+    # because `cards.claim` has nothing to claim for one.
+    if cards.retires(body.action_id):
+        if not await store.claim_action(doctor.id, body.action_id):
+            await cards.release(claimed)
+            return {"ok": False, "already": True, "action_id": body.action_id,
+                    "detail": "already done"}
+
+    try:
+        answer = await _carry_out(body, request, doctor, verb, ident)
+    except Exception:
+        await cards.release(claimed)
+        if cards.retires(body.action_id):
+            await store.release_action(doctor.id, body.action_id)
+        raise
+
+    # The work is done; now the card behind the button is finished. This is
+    # OUTSIDE the block above on purpose. Retiring the card is bookkeeping about
+    # a thing that has already happened, so a failure here must not give the
+    # action back: the claim stands, the doctor's next press is answered
+    # "already done", and the work is not repeated. He sees a card that is still
+    # open, which is the honest picture of a card whose flag could not be
+    # written.
+    answer["resolved"] = await cards.resolve(doctor.id, body.action_id)
+    return answer
+
+
+async def _carry_out(body: ActionIn, request: Request, doctor: Doctor,
+                     verb: str, ident: str) -> dict:
+    """One claimed action, carried out and then retired."""
+    if verb == "confirm":
+        await registrar.commit(doctor, ident, str(request.base_url))
+    elif verb == "cancel":
+        await registrar.cancel(doctor, ident)
+    elif verb == "reply":
+        await concierge.doctor_reply(doctor, ident, body.text)
+    elif verb == "reviewed":
+        await concierge.mark_reviewed(doctor, ident)
+    elif verb == "note":
+        await concierge.note_to_patient(doctor, ident, body.text)
+    elif verb == "attach":
+        await extractor.attach_results(doctor, ident)
+    elif verb == "openloop":
+        await extractor.open_loop_for(doctor, ident)
+    elif verb == "existing":
+        # "existing:<patient id>:<proposal id>". The proposal id is last so the
+        # verb and the patient still read left to right, and so the split is the
+        # same one every other action id uses.
+        patient_id, _, confirm_id = ident.partition(":")
+        await registrar.choose_existing(doctor, patient_id, confirm_id)
+    elif verb == "newpatient":
+        await registrar.choose_new(doctor, ident)
+    elif verb == "openpatient":
+        # A row on a lookup list. There is nothing to do on the server: the
+        # list created nothing and this button only opens a record that already
+        # exists. The dashboard opens the patient panel; pressing it here
+        # retires the list, which is what a list that has been used is.
+        pass
+    elif verb == cards.SEEN:
+        # A red emergency card has nothing to do to it but read it, so "Seen"
+        # does no work of its own. It exists so that acknowledging one is a
+        # fact on the server rather than a tab that is still open.
+        pass
+    else:
+        raise HTTPException(400, "unknown action")
+
+    return {"ok": True, "resolved": []}

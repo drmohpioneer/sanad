@@ -1,0 +1,88 @@
+{
+  "_note": "Synthetic demo data for Sanad. All names, phone numbers, and clinical details are fictional. Phone numbers use the fake prefix 0100 000 00xx so nothing resolves to a real subscriber. Loop 'type' is one of TEST, MONITOR, MEDICATION, VISIT (matches specs/S1-core-web-console.md and specs/S3-lab-extractor-chaser-report.md). due_in_days is resolved to a real due_at date in code at commit time, never by the model.",
+  "patients": [
+    {
+      "name": "Ahmed Ali",
+      "phone": "0100 000 0011",
+      "age": 58,
+      "sex": "male",
+      "specialty": "cardiology",
+      "diagnosis": "Heart failure with reduced ejection fraction, high LDL",
+      "baseline": { "LDL": 160, "HDL": 40, "Total_Cholesterol": 240, "Triglycerides": 180 },
+      "targets": { "LDL": 70 },
+      "plan_text": "Start atorvastatin 40 mg at night for high cholesterol. Get a lipid panel in 2 weeks to check it's working. Check your blood pressure twice a day for the next 7 days and tell me the readings. Come back for a follow-up visit in a month.",
+      "loops": [
+        { "type": "MEDICATION", "title": "Start Atorvastatin", "details": { "drug": "atorvastatin", "dose": "40 mg at night", "action": "start" } },
+        { "type": "TEST", "title": "Lipid panel", "details": { "test_name": "Lipid panel" }, "due_in_days": 14 },
+        { "type": "MONITOR", "title": "Blood pressure monitoring", "details": { "metric": "BP", "schedule": "twice a day", "days": 7 } },
+        { "type": "VISIT", "title": "Follow-up visit", "details": {}, "due_in_days": 30 }
+      ]
+    },
+    {
+      "name": "Nourhan Samir",
+      "phone": "0100 000 0022",
+      "age": 34,
+      "sex": "female",
+      "specialty": "endocrinology",
+      "diagnosis": "Newly diagnosed type 2 diabetes",
+      "baseline": { "HbA1c": 9.2, "Fasting_Glucose": 210 },
+      "targets": { "HbA1c": 7.0, "Fasting_Glucose": 130 },
+      "plan_text": "Start metformin 500 mg twice a day with meals. Check your fasting blood sugar every morning for 2 weeks and send me the readings. Get an HbA1c test in 3 months. Come back for a visit in 6 weeks to see how you're doing.",
+      "loops": [
+        { "type": "MEDICATION", "title": "Start Metformin", "details": { "drug": "metformin", "dose": "500 mg twice a day", "action": "start" } },
+        { "type": "MONITOR", "title": "Fasting glucose monitoring", "details": { "metric": "Fasting glucose", "schedule": "every morning", "days": 14 } },
+        { "type": "TEST", "title": "HbA1c", "details": { "test_name": "HbA1c" }, "due_in_days": 90 },
+        { "type": "VISIT", "title": "Follow-up visit", "details": {}, "due_in_days": 42 }
+      ]
+    },
+    {
+      "name": "Karim Adel",
+      "phone": "0100 000 0033",
+      "age": 61,
+      "sex": "male",
+      "specialty": "nephrology",
+      "diagnosis": "Chronic kidney disease stage 3",
+      "baseline": { "Creatinine": 1.8, "Potassium": 4.5 },
+      "targets": { "Creatinine": 1.4 },
+      "plan_text": "Stop ibuprofen and any other painkillers from the pharmacy without asking me first, they hurt your kidneys. Start losartan 50 mg once a day in the morning. Get a creatinine and potassium test in 2 weeks. Come back for a visit in a month.",
+      "loops": [
+        { "type": "MEDICATION", "title": "Stop Ibuprofen", "details": { "drug": "ibuprofen", "dose": "n/a", "action": "stop" } },
+        { "type": "MEDICATION", "title": "Start Losartan", "details": { "drug": "losartan", "dose": "50 mg once a day, morning", "action": "start" } },
+        { "type": "TEST", "title": "Creatinine and potassium", "details": { "test_name": "Creatinine, Potassium" }, "due_in_days": 14 },
+        { "type": "VISIT", "title": "Follow-up visit", "details": {}, "due_in_days": 30 }
+      ]
+    },
+    {
+      "name": "Mariam Fathy",
+      "phone": "0100 000 0044",
+      "age": 29,
+      "sex": "female",
+      "specialty": "obstetrics",
+      "diagnosis": "Pregnancy, 28 weeks, mild gestational hypertension",
+      "baseline": { "BP_systolic": 138, "BP_diastolic": 88 },
+      "targets": { "BP_systolic": 130, "BP_diastolic": 80 },
+      "plan_text": "Check your blood pressure once in the morning and once in the evening every day and send me both readings. Take labetalol 100 mg twice a day. Come back for your next antenatal visit in 2 weeks. Tell me right away about any severe headache, blurred vision, or reduced baby movement.",
+      "loops": [
+        { "type": "MONITOR", "title": "Blood pressure monitoring", "details": { "metric": "BP", "schedule": "twice a day", "days": 14 } },
+        { "type": "MEDICATION", "title": "Start Labetalol", "details": { "drug": "labetalol", "dose": "100 mg twice a day", "action": "start" } },
+        { "type": "VISIT", "title": "Antenatal follow-up", "details": {}, "due_in_days": 14 }
+      ]
+    },
+    {
+      "name": "Youssef Hany",
+      "phone": "0100 000 0055",
+      "age": 6,
+      "sex": "male",
+      "specialty": "pediatrics",
+      "diagnosis": "Asthma, recent flare",
+      "baseline": {},
+      "targets": {},
+      "plan_text": "Use the salbutamol inhaler with the spacer, 2 puffs, whenever he coughs or feels tight in the chest, up to every 4 hours. Take fluticasone inhaler 1 puff twice a day every day, even when he feels fine. Come back for a check-up visit in 3 weeks. If he can't finish a sentence, his lips look blue, or the inhaler isn't helping, go to the nearest emergency room right away.",
+      "loops": [
+        { "type": "MEDICATION", "title": "Salbutamol as needed", "details": { "drug": "salbutamol", "dose": "2 puffs via spacer, as needed up to every 4h", "action": "start" } },
+        { "type": "MEDICATION", "title": "Start Fluticasone", "details": { "drug": "fluticasone", "dose": "1 puff twice a day", "action": "start" } },
+        { "type": "VISIT", "title": "Follow-up visit", "details": {}, "due_in_days": 21 }
+      ]
+    }
+  ]
+}

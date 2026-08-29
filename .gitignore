@@ -1,0 +1,20 @@
+# Secrets and anything that could carry one. Sanad keeps no credentials in
+# the tree: the admin secret, the webhook secret and the bot token live only
+# in Secret Manager, and the deploy script never prints a value.
+.env
+*.env
+*credentials*.json
+*service-account*.json
+
+# Local noise
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+
+# Scratch audio (not part of the public repo)
+*.ogg
+*.wav
+*.aiff

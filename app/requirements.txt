@@ -1,0 +1,17 @@
+# Resolved 2026-08-28 with `uv pip compile --python-version 3.12`.
+google-adk==2.8.0
+google-genai==2.20.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
+google-cloud-firestore==2.29.0
+# S2: the Telegram Bot API client and the patient link's QR image.
+httpx==0.28.1
+qrcode[pil]==8.2
+# S3: Cloud Tasks (the Chaser), Cloud Storage (lab-slip bytes), Pillow (EXIF
+# orientation before the slip is read), tzdata (Africa/Cairo quiet hours; the
+# slim image ships no zoneinfo database).
+google-cloud-tasks==2.24.0
+google-cloud-storage==3.13.1
+pillow==12.3.0
+tzdata==2026.3

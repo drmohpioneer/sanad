@@ -1,0 +1,119 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanad</title>
+<!--
+  The patient's phone page: the judge fallback for the Telegram chat, nothing
+  more. Same one-time link, same patient record, same brain, same gates. Kept
+  deliberately small - it is a chat bubble list and three inputs.
+-->
+<style>
+  :root { color-scheme: light; }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #eef1f4;
+         color: #18181b; display: flex; flex-direction: column; height: 100dvh; }
+  header { padding: 12px 14px; background: #18181b; color: #fff; font-weight: 600; }
+  header small { display: block; font-weight: 400; opacity: .7; font-size: 12px; }
+  #chat { flex: 1; overflow-y: auto; padding: 12px; }
+  .b { max-width: 82%; padding: 8px 11px; border-radius: 14px; margin: 6px 0;
+       white-space: pre-wrap; word-wrap: break-word; }
+  .me { background: #18181b; color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+  .them { background: #fff; border: 1px solid #e4e4e7; border-bottom-left-radius: 4px; }
+  footer { padding: 8px; background: #fff; border-top: 1px solid #e4e4e7; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  textarea { flex: 1; font: inherit; padding: 8px; border: 1px solid #d4d4d8;
+             border-radius: 8px; resize: none; height: 44px; }
+  button { font: inherit; padding: 10px 14px; border: 0; border-radius: 8px;
+           background: #18181b; color: #fff; }
+  button[disabled] { opacity: .5; }
+  label.file { font-size: 13px; color: #52525b; padding: 4px 0; display: block; }
+  input[type=file] { font-size: 13px; max-width: 100%; }
+  /* One line under the box for the two things that can go wrong: the send did
+     not land, or the feed stopped answering. Never both at once, and never a
+     dialog: this is a phone in somebody's hand. */
+  #note { font-size: 13px; padding: 6px 2px 0; min-height: 1px; }
+  #note.bad { color: #b42318; }
+  #note.wait { color: #92400e; }
+</style>
+
+<header>سند &middot; Sanad<small id="who">…</small></header>
+<div id="chat"></div>
+<footer>
+  <div class="row">
+    <textarea id="t" placeholder="اكتب هنا / type here"></textarea>
+    <button id="send">إرسال</button>
+  </div>
+  <label class="file">
+    صورة تحليل أو رسالة صوتية / lab photo or voice note
+    <input type="file" id="f" accept="image/*,audio/*">
+  </label>
+  <div id="note" role="status" aria-live="polite"></div>
+</footer>
+
+<script>
+const LINK = location.pathname.split("/")[2];
+const base = "/p/" + LINK;
+let since = 0;
+const el = (id) => document.getElementById(id);
+
+function bubble(e) {
+  const div = document.createElement("div");
+  div.className = "b " + (e.kind === "patient_in" ? "me" : "them");
+  div.textContent = e.text;
+  el("chat").appendChild(div);
+  el("chat").scrollTop = el("chat").scrollHeight;
+}
+
+/* The one line under the box. `kind` is "" to clear it, "bad" for a send that
+   did not land, "wait" for a feed that stopped answering. */
+function note(kind, text) {
+  const n = el("note");
+  n.className = kind;
+  n.textContent = text || "";
+}
+
+/* codex item 18 / W2. This ran with no error handling at all, so every two
+   seconds of an outage threw an uncaught TypeError into the console and the
+   page said nothing. A failed poll now says so and the next good one clears
+   it; nothing is retried by hand, because the interval is already the retry. */
+async function poll() {
+  try {
+    const r = await fetch(base + "/feed?since=" + since);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    el("who").textContent = data.name;
+    for (const e of data.events) { bubble(e); since = Math.max(since, e.ts_ms); }
+    if (el("note").className === "wait") note("", "");
+    return true;
+  } catch (err) {
+    if (el("note").className !== "bad") {
+      note("wait", "جاري إعادة الاتصال… / reconnecting…");
+    }
+    return false;
+  }
+}
+
+/* codex item 18 / W1. The old version cleared the box on the way out of the
+   try, so a 500 or a dead network swallowed the message: the patient watched
+   his own words disappear and had no way to know they never arrived. The text
+   and the file are only cleared once the server has said ok. */
+async function send() {
+  const fd = new FormData();
+  fd.append("text", el("t").value);
+  if (el("f").files[0]) fd.append("file", el("f").files[0]);
+  if (!el("t").value.trim() && !el("f").files[0]) return;
+  el("send").disabled = true;
+  note("", "");
+  try {
+    const r = await fetch(base, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(r.status);
+    el("t").value = ""; el("f").value = "";
+    await poll();
+  } catch (err) {
+    note("bad", "الرسالة ماوصلتش. اضغط إرسال تاني. / Not sent. Press send to retry.");
+  } finally { el("send").disabled = false; }
+}
+
+el("send").onclick = send;
+poll();
+setInterval(poll, 2000);
+</script>
