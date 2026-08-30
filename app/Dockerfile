@@ -15,7 +15,7 @@ COPY . .
 
 # The sentinel phrase table and the output validator are rails, not documents:
 # if either regression suite breaks, the image never builds.
-RUN python -m unittest discover -s tests -t . -q
+RUN PYTHONPATH=. SANAD_TEST_MODE=1 python -m unittest discover -s tests -t . -q
 
 ENV PORT=8080
 # --forwarded-allow-ips=*: Cloud Run is the only ingress and always sets

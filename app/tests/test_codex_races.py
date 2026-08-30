@@ -317,6 +317,7 @@ class CodexRelayOrdering(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=SimpleNamespace(id="said")),
             ),
             patch.object(concierge.chaser, "note_patient_reply", AsyncMock()),
+            patch.object(concierge.chaser, "revive_unreachable", AsyncMock()),
             patch.object(
                 concierge.validator, "wants_treatment_change", return_value=True
             ),

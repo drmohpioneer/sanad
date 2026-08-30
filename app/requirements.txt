@@ -1,6 +1,14 @@
 # Resolved 2026-08-28 with `uv pip compile --python-version 3.12`.
 google-adk==2.8.0
 google-genai==2.20.0
+# The hermetic test boundary patches this exact SDK's defining credential seams.
+google-auth==2.57.0
+# The same boundary validates and patches grpcio's exact public channel aliases.
+grpcio==1.83.1
+# Direct Google API gRPC channel helpers are audited alongside grpcio.
+google-api-core==2.34.0
+# Shared Storage/Firestore credential factories are part of the audited guard.
+google-cloud-core==2.7.0
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 python-multipart==0.0.32

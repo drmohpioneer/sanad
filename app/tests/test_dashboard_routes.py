@@ -546,10 +546,14 @@ class FakeStore:
                 if r.doctor_id == doctor_id]
         return sorted(rows, key=lambda r: r.created_at, reverse=True)
 
+    async def get_settings(self) -> dict:
+        return {"run_id": "run1", "time_scale": 86400}
+
 
 NAMES = ("now", "new_id", "update_event", "save_report", "doctor_by_token",
          "list_events", "list_patients", "get_patient", "list_loops",
-         "list_link_tokens", "latest_link_token", "list_reports")
+         "list_link_tokens", "latest_link_token", "list_reports",
+         "get_settings")
 
 
 @unittest.skipIf(ROUTES_MISSING, ROUTES_MISSING)

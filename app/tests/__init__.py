@@ -23,6 +23,16 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from sanad_test_process import is_test_process
+
+
+# unittest discovery imports this package before any ``tests.test_*`` module.
+# The fallback remains inert when production code merely imports ``tests``.
+if is_test_process():
+    from sanad_test_guard import install as install_hermetic_guards
+
+    install_hermetic_guards("tests package fallback")
+
 
 class Borrowable(unittest.IsolatedAsyncioTestCase):
     """An async test case whose cleanups run even when it is driven by hand."""

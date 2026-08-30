@@ -171,8 +171,24 @@ Create the local environment and run the same test gate the Dockerfile runs:
 ```bash
 python3.12 -m venv .venv
 .venv/bin/pip install -r app/requirements.txt
-(cd app && ../.venv/bin/python -m unittest discover -s tests -t . -q)
+(cd app && PYTHONPATH=. SANAD_TEST_MODE=1 ../.venv/bin/python \
+  -m unittest discover -s tests -t . -q)
 ```
+
+Keep the same `PYTHONPATH=. SANAD_TEST_MODE=1` prefix for focused unittest or
+direct test-file runs. `PYTHONPATH` makes the early `sitecustomize` boundary
+available before a test can import the application. Test mode installs
+fail-fast guards for current-process Python socket/DNS calls, pinned grpcio
+sync/async channel factories (including copied public aliases), generated
+Firestore/Cloud Tasks/Cloud Storage gRPC transports, installed Firestore/Cloud
+Tasks REST transports, Google Operations REST/client constructors, audited
+Cloud and GenAI Base/GAOS client constructors, shared Cloud service-account
+factories, and the audited Google credential, metadata, mTLS, and private-key
+acquisition seams. Generic child processes remain available for Sanad's
+required ffmpeg work. The boundary does not claim to stop already-connected
+inherited sockets, arbitrary networking inside otherwise permitted child
+processes, or raw native syscalls outside the specifically guarded gRPC entry
+points.
 
 If Telegram is part of the deployment, create a bot with Telegram's official
 `@BotFather` using `/newbot`. The following reads the token without echoing it,
