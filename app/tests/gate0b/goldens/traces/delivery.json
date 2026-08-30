@@ -1,0 +1,662 @@
+[
+  {
+    "beat": "beat-01-contract",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 1,
+    "outcome": "persisted_event",
+    "receipt": "id-00000004",
+    "sequence": 1,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 1,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 2,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 2,
+    "outcome": "persisted_event",
+    "receipt": "id-00000008",
+    "sequence": 3,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 2,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 4,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 3,
+    "outcome": "persisted_event",
+    "receipt": "id-00000010",
+    "sequence": 5,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 3,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 6,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 4,
+    "outcome": "persisted_event",
+    "receipt": "id-00000012",
+    "sequence": 7,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 4,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 8,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 5,
+    "outcome": "persisted_event",
+    "receipt": "id-00000014",
+    "sequence": 9,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-01-contract",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 5,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 10,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 6,
+    "outcome": "persisted_event",
+    "receipt": "id-00000018",
+    "sequence": 11,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 6,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 12,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 7,
+    "outcome": "persisted_event",
+    "receipt": "id-00000022",
+    "sequence": 13,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 7,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 14,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 8,
+    "outcome": "persisted_event",
+    "receipt": "id-00000026",
+    "sequence": 15,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 8,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 16,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 9,
+    "outcome": "persisted_event",
+    "receipt": "id-00000030",
+    "sequence": 17,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 9,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 18,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 10,
+    "outcome": "persisted_event",
+    "receipt": "id-00000034",
+    "sequence": 19,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 10,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 20,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 11,
+    "outcome": "persisted_event",
+    "receipt": "id-00000038",
+    "sequence": 21,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 11,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 22,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 12,
+    "outcome": "persisted_event",
+    "receipt": "id-00000042",
+    "sequence": 23,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 12,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 24,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 13,
+    "outcome": "persisted_event",
+    "receipt": "id-00000046",
+    "sequence": 25,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 13,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 26,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 14,
+    "outcome": "persisted_event",
+    "receipt": "id-00000050",
+    "sequence": 27,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 14,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 28,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 15,
+    "outcome": "persisted_event",
+    "receipt": "id-00000052",
+    "sequence": 29,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 15,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 30,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 16,
+    "outcome": "persisted_event",
+    "receipt": "id-00000056",
+    "sequence": 31,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 16,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 32,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 17,
+    "outcome": "persisted_event",
+    "receipt": "id-00000060",
+    "sequence": 33,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 17,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 34,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 18,
+    "outcome": "persisted_event",
+    "receipt": "id-00000064",
+    "sequence": 35,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 18,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 36,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 19,
+    "outcome": "persisted_event",
+    "receipt": "id-00000066",
+    "sequence": 37,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-02-durable-future",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 19,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 38,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 20,
+    "outcome": "persisted_event",
+    "receipt": "id-00000073",
+    "sequence": 39,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 20,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 40,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 21,
+    "outcome": "persisted_event",
+    "receipt": "id-00000074",
+    "sequence": 41,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 21,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 42,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 22,
+    "outcome": "persisted_event",
+    "receipt": "id-00000076",
+    "sequence": 43,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 22,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 44,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 23,
+    "outcome": "persisted_event",
+    "receipt": "id-00000079",
+    "sequence": 45,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-03-cost-barrier",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 23,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 46,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-04-incomplete-evidence",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 24,
+    "outcome": "persisted_event",
+    "receipt": "id-00000085",
+    "sequence": 47,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-04-incomplete-evidence",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 24,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 48,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-04-incomplete-evidence",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 25,
+    "outcome": "persisted_event",
+    "receipt": "id-00000086",
+    "sequence": 49,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-04-incomplete-evidence",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 25,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 50,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-04-incomplete-evidence",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 26,
+    "outcome": "persisted_event",
+    "receipt": "id-00000087",
+    "sequence": 51,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-04-incomplete-evidence",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 26,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 52,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-05-complete-evidence",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 27,
+    "outcome": "persisted_event",
+    "receipt": "id-00000094",
+    "sequence": 53,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-05-complete-evidence",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 27,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 54,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-05-complete-evidence",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 28,
+    "outcome": "persisted_event",
+    "receipt": "id-00000095",
+    "sequence": 55,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-05-complete-evidence",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 28,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 56,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-06-critical-potassium",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 29,
+    "outcome": "persisted_event",
+    "receipt": "id-00000101",
+    "sequence": 57,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-06-critical-potassium",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 29,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 58,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-06-critical-potassium",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 30,
+    "outcome": "persisted_event",
+    "receipt": "id-00000102",
+    "sequence": 59,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-06-critical-potassium",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 30,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 60,
+    "target": "patient:d9f16292696d5ac286aac2e51329e17d"
+  },
+  {
+    "beat": "beat-07-contact-guard",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 31,
+    "outcome": "persisted_event",
+    "receipt": "id-00000108",
+    "sequence": 61,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-07-contact-guard",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 31,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 62,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-07-contact-guard",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 32,
+    "outcome": "persisted_event",
+    "receipt": "id-00000109",
+    "sequence": 63,
+    "target": "patient:bgid-00000-7"
+  },
+  {
+    "beat": "beat-07-contact-guard",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 32,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 64,
+    "target": "patient:bgid-00000-7"
+  },
+  {
+    "beat": "beat-08-doctor-review",
+    "channel": "web",
+    "detail": "WebAdapter receipt is a durable event id, not provider delivery",
+    "outbound_sequence": 33,
+    "outcome": "persisted_event",
+    "receipt": "id-00000112",
+    "sequence": 65,
+    "target": "doctor:web-00000001"
+  },
+  {
+    "beat": "beat-08-doctor-review",
+    "channel": "telegram",
+    "detail": "No provider endpoint exists. Legacy Fanout may still mark the channel receipt done after this None return.",
+    "outbound_sequence": 33,
+    "outcome": "skipped_disabled_unbound",
+    "receipt": null,
+    "sequence": 66,
+    "target": "doctor:web-00000001"
+  }
+]

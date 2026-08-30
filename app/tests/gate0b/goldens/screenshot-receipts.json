@@ -1,0 +1,1396 @@
+{
+  "capture_session_nonce": "441dd88f5048453a8b42dd079fdc8c5171f4b81e30e90bce09683ce1abedf665",
+  "dashboard_sha256": "7e19ff32de7a6bc36dd90013f2b13ed6ce8d3bb896697b1c50cc7f94946183be",
+  "failures": {},
+  "ready": {
+    "chrome-1440x1000-beat-01-contract": {
+      "attestation_tag": "b104146cfa0128fab7053cdcf24019b7",
+      "beat": "beat-01-contract",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "42c0c3af8c9c6fed7d541108f075b83b8495bc8802c897ae59a872a0fc83dd8d",
+      "target": "none",
+      "target_geometry": {
+        "bottom": -1,
+        "evidence_bottom": -1,
+        "evidence_left": -1,
+        "evidence_right": -1,
+        "evidence_top": -1,
+        "left": -1,
+        "occlusion_bottom": 64,
+        "right": -1,
+        "top": -1,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 196,
+          "left": 129,
+          "occlusion_bottom": 64,
+          "right": 1369,
+          "top": 164,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "patient-heading",
+        "anchor_text": "ahmed ali",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-02-durable-future": {
+      "attestation_tag": "2a4440b110c474e94c67c6de5328a12a",
+      "beat": "beat-02-durable-future",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "cdc5bd74ebb9e2f044c4419db750ac5426666540c57924c8c390a4c773bc7eb4",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 169,
+        "evidence_bottom": 152,
+        "evidence_left": 149,
+        "evidence_right": 240,
+        "evidence_top": 123,
+        "left": 71,
+        "occlusion_bottom": 64,
+        "right": 832,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 152,
+          "left": 149,
+          "occlusion_bottom": 64,
+          "right": 240,
+          "top": 123,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "unreachable",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-03-cost-barrier": {
+      "attestation_tag": "25b10de2c0bb8a75cfce616b99de4913",
+      "beat": "beat-03-cost-barrier",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "561fa4b80c4d15a3fcfb6c05fa3d7128c02e2312807e8fedabba728287d9d4d9",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 181,
+        "evidence_bottom": 128,
+        "evidence_left": 908,
+        "evidence_right": 1355,
+        "evidence_top": 106,
+        "left": 894,
+        "occlusion_bottom": 64,
+        "right": 1369,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 128,
+          "left": 908,
+          "occlusion_bottom": 64,
+          "right": 1355,
+          "top": 106,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "test doctor says: the hospital lab is free, go there.",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-04-incomplete-evidence": {
+      "attestation_tag": "749139d47c3dfb047049dc835bec9676",
+      "beat": "beat-04-incomplete-evidence",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "8f1404b111d144a8428264f8f5e0e8d1ad85d11329953d17f4725c7957980e77",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 203,
+        "evidence_bottom": 150,
+        "evidence_left": 908,
+        "evidence_right": 1355,
+        "evidence_top": 107,
+        "left": 894,
+        "occlusion_bottom": 64,
+        "right": 1369,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 150,
+          "left": 908,
+          "occlusion_bottom": 64,
+          "right": 1355,
+          "top": 107,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "i have your result but triglycerides, hdl is missing. send me the missing part when you have it.",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-05-complete-evidence": {
+      "attestation_tag": "db0ab9922944ba2d41e9636919d63709",
+      "beat": "beat-05-complete-evidence",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "33d39c3a4124787c064f71bff46766df147a0a5617d687429aa074398741a2c4",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 464,
+        "evidence_bottom": 152,
+        "evidence_left": 149,
+        "evidence_right": 273,
+        "evidence_top": 124,
+        "left": 71,
+        "occlusion_bottom": 64,
+        "right": 832,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 152,
+          "left": 149,
+          "occlusion_bottom": 64,
+          "right": 273,
+          "top": 124,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "needs your review",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-06-critical-potassium": {
+      "attestation_tag": "2bd133599515bc7963751959d15828ab",
+      "beat": "beat-06-critical-potassium",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "585dfdbd7c7acc56d8c96b9dc638806f91efb6676c75e4a3fdb4b2965db00109",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 438,
+        "evidence_bottom": 114,
+        "evidence_left": 85,
+        "evidence_right": 257,
+        "evidence_top": 93,
+        "left": 48,
+        "occlusion_bottom": 64,
+        "right": 1392,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "inbox",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 114,
+          "left": 85,
+          "occlusion_bottom": 64,
+          "right": 257,
+          "top": 93,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "critical lab · ahmed ali",
+        "nav_current": true,
+        "observed_view": "inbox",
+        "patient_heading_matches": true,
+        "patient_id": "",
+        "patient_name": "",
+        "state_view": "inbox",
+        "visible_views": [
+          "inbox"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-07-contact-guard": {
+      "attestation_tag": "8ddfcc24123c91bfd8fc6371e04a8e7f",
+      "beat": "beat-07-contact-guard",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "93e2a1afe759fb834cc41c088f94b3b973d2c03d74a7b89ef20c245af3f3689a",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 522,
+        "evidence_bottom": 113,
+        "evidence_left": 931,
+        "evidence_right": 1166,
+        "evidence_top": 93,
+        "left": 894,
+        "occlusion_bottom": 64,
+        "right": 1369,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 113,
+          "left": 931,
+          "occlusion_bottom": 64,
+          "right": 1166,
+          "top": 93,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "barrier needs you · amany roushdy",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "bgid-00000-7",
+        "patient_name": "Amany Roushdy",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-08-doctor-review": {
+      "attestation_tag": "a4fd9dadc37bfb0dcc1ee8bd3282f686",
+      "beat": "beat-08-doctor-review",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "662fcec8ba66a7d789494dd182e869f5f42e4eaed962d3f5579b92a62e89bd60",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 313,
+        "evidence_bottom": 114,
+        "evidence_left": 108,
+        "evidence_right": 180,
+        "evidence_top": 93,
+        "left": 71,
+        "occlusion_bottom": 64,
+        "right": 832,
+        "top": 76,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 114,
+          "left": 108,
+          "occlusion_bottom": 64,
+          "right": 180,
+          "top": 93,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "lipid panel",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-1440x1000-beat-09-end-of-day": {
+      "attestation_tag": "5fd7f1a94429a3864739b0fc6a45d713",
+      "beat": "beat-09-end-of-day",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 1000,
+        "cdp_visual_client_width": 1440,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 1000,
+        "inner_width": 1440,
+        "layout_client_height": 1000,
+        "layout_client_width": 1440,
+        "png_height": 1000,
+        "png_width": 1440,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "dpr": 1.0,
+      "height": 1000,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "332f317213fec81715a01bcfc4cbad1fe2cabdba2df74f293ea979799bfb9160",
+      "target": "none",
+      "target_geometry": {
+        "bottom": -1,
+        "evidence_bottom": -1,
+        "evidence_left": -1,
+        "evidence_right": -1,
+        "evidence_top": -1,
+        "left": -1,
+        "occlusion_bottom": 64,
+        "right": -1,
+        "top": -1,
+        "unobscured": true,
+        "visual_height": 1000,
+        "visual_width": 1440
+      },
+      "view": "board",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 132,
+          "left": 95,
+          "occlusion_bottom": 64,
+          "right": 204,
+          "top": 114,
+          "unobscured": true,
+          "visual_height": 1000,
+          "visual_width": 1440
+        },
+        "anchor_kind": "board-heading",
+        "anchor_text": "exception line",
+        "nav_current": true,
+        "observed_view": "board",
+        "patient_heading_matches": true,
+        "patient_id": "",
+        "patient_name": "",
+        "state_view": "board",
+        "visible_views": [
+          "board"
+        ]
+      },
+      "width": 1440
+    },
+    "chrome-375x812-beat-01-contract": {
+      "attestation_tag": "87436b329d02f2b6ebb15f1011bf18bb",
+      "beat": "beat-01-contract",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "b9d30b0ce8671b5b4a062390ad49da99c617494b6335c1fc7b5929ca0238ecaf",
+      "target": "none",
+      "target_geometry": {
+        "bottom": -1,
+        "evidence_bottom": -1,
+        "evidence_left": -1,
+        "evidence_right": -1,
+        "evidence_top": -1,
+        "left": -1,
+        "occlusion_bottom": 115,
+        "right": -1,
+        "top": -1,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 233,
+          "left": 93,
+          "occlusion_bottom": 115,
+          "right": 340,
+          "top": 201,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "patient-heading",
+        "anchor_text": "ahmed ali",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-02-durable-future": {
+      "attestation_tag": "8e72a5abac857ae284b8d79a2a3f2ec6",
+      "beat": "beat-02-durable-future",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "841e9415470f483f29953acc7a754e8b9a42c2502b55a0e9f2c037342af8e46b",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 220,
+        "evidence_bottom": 203,
+        "evidence_left": 113,
+        "evidence_right": 204,
+        "evidence_top": 175,
+        "left": 35,
+        "occlusion_bottom": 115,
+        "right": 340,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 203,
+          "left": 113,
+          "occlusion_bottom": 115,
+          "right": 204,
+          "top": 175,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "unreachable",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-03-cost-barrier": {
+      "attestation_tag": "a93d47fd6e28e0a91dcf6035eb530d6b",
+      "beat": "beat-03-cost-barrier",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "4563359c21dc8cb87cf136673e3f2dc5a33951a88a5ff2a4d861dcc19d3d2e2c",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 254,
+        "evidence_bottom": 201,
+        "evidence_left": 49,
+        "evidence_right": 326,
+        "evidence_top": 158,
+        "left": 35,
+        "occlusion_bottom": 115,
+        "right": 340,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 201,
+          "left": 49,
+          "occlusion_bottom": 115,
+          "right": 326,
+          "top": 158,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "test doctor says: the hospital lab is free, go there.",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-04-incomplete-evidence": {
+      "attestation_tag": "4a03eaa580782163f5bfa4ff19b04c4a",
+      "beat": "beat-04-incomplete-evidence",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "57169e3587d59be2826e18545b2dd3c12e302db7173595822328194eadc9a912",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 293,
+        "evidence_bottom": 222,
+        "evidence_left": 49,
+        "evidence_right": 326,
+        "evidence_top": 157,
+        "left": 35,
+        "occlusion_bottom": 115,
+        "right": 340,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 222,
+          "left": 49,
+          "occlusion_bottom": 115,
+          "right": 326,
+          "top": 157,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "i have your result but triglycerides, hdl is missing. send me the missing part when you have it.",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-05-complete-evidence": {
+      "attestation_tag": "649d25e311a12e724a15505da6b181ae",
+      "beat": "beat-05-complete-evidence",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "d7aedfa5ac90936cf9fc09b72171ea321d17449a7430fa6fbfb9695066e3eaa6",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 624,
+        "evidence_bottom": 203,
+        "evidence_left": 113,
+        "evidence_right": 237,
+        "evidence_top": 174,
+        "left": 35,
+        "occlusion_bottom": 115,
+        "right": 340,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 203,
+          "left": 113,
+          "occlusion_bottom": 115,
+          "right": 237,
+          "top": 174,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "needs your review",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-06-critical-potassium": {
+      "attestation_tag": "ce43f206dd3aecb2c394e877f9f6bfd9",
+      "beat": "beat-06-critical-potassium",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "2ca20a89e01e9db59fd6aeb759c4acdb3f314ce29f382ca9b831c4c02813af6e",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 615,
+        "evidence_bottom": 164,
+        "evidence_left": 53,
+        "evidence_right": 225,
+        "evidence_top": 144,
+        "left": 16,
+        "occlusion_bottom": 115,
+        "right": 359,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "inbox",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 164,
+          "left": 53,
+          "occlusion_bottom": 115,
+          "right": 225,
+          "top": 144,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "critical lab · ahmed ali",
+        "nav_current": true,
+        "observed_view": "inbox",
+        "patient_heading_matches": true,
+        "patient_id": "",
+        "patient_name": "",
+        "state_view": "inbox",
+        "visible_views": [
+          "inbox"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-07-contact-guard": {
+      "attestation_tag": "d9d60cf9394d2c641b7ed7d566c02475",
+      "beat": "beat-07-contact-guard",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "960658e2eeca5425039fbbd34416414ff9ea783bcee8c9a9c1254809ac9f20f6",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 701,
+        "evidence_bottom": 184,
+        "evidence_left": 72,
+        "evidence_right": 274,
+        "evidence_top": 144,
+        "left": 35,
+        "occlusion_bottom": 115,
+        "right": 340,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 184,
+          "left": 72,
+          "occlusion_bottom": 115,
+          "right": 274,
+          "top": 144,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "barrier needs you · amany roushdy",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "bgid-00000-7",
+        "patient_name": "Amany Roushdy",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-08-doctor-review": {
+      "attestation_tag": "59d73c5f02726f13ac46608b3d4ebf2b",
+      "beat": "beat-08-doctor-review",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "efa10f1335fd4c2680b2ad073fdbc79a34a94c2279b43d9d4d1d82e9737d9fbf",
+      "target": "visible",
+      "target_geometry": {
+        "bottom": 473,
+        "evidence_bottom": 164,
+        "evidence_left": 72,
+        "evidence_right": 144,
+        "evidence_top": 144,
+        "left": 35,
+        "occlusion_bottom": 115,
+        "right": 340,
+        "top": 127,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "patient",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 164,
+          "left": 72,
+          "occlusion_bottom": 115,
+          "right": 144,
+          "top": 144,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "selected-evidence",
+        "anchor_text": "lipid panel",
+        "nav_current": true,
+        "observed_view": "patient",
+        "patient_heading_matches": true,
+        "patient_id": "d9f16292696d5ac286aac2e51329e17d",
+        "patient_name": "Ahmed Ali",
+        "state_view": "patient",
+        "visible_views": [
+          "patient"
+        ]
+      },
+      "width": 375
+    },
+    "chrome-375x812-beat-09-end-of-day": {
+      "attestation_tag": "948b6e343c74f082c3eb47de92254c20",
+      "beat": "beat-09-end-of-day",
+      "capture_identity": {
+        "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+        "js_version": "15.1.206.23",
+        "product": "Chrome/151.0.7922.175",
+        "protocol_version": "1.3",
+        "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      },
+      "capture_metrics": {
+        "cdp_visual_client_height": 812,
+        "cdp_visual_client_width": 375,
+        "cdp_visual_scale": 1.0,
+        "device_pixel_ratio": 1.0,
+        "inner_height": 812,
+        "inner_width": 375,
+        "layout_client_height": 812,
+        "layout_client_width": 375,
+        "png_height": 812,
+        "png_width": 375,
+        "source": "Chrome DevTools Protocol",
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "dpr": 1.0,
+      "height": 812,
+      "images": {
+        "decoded": 1,
+        "expected": 1,
+        "failures": 0,
+        "observed": 1
+      },
+      "png_sha256": "25c0eed6c4f0dbb9b26958c0fc423d3c9ff75e980747094b2c09973ca818f14e",
+      "target": "none",
+      "target_geometry": {
+        "bottom": -1,
+        "evidence_bottom": -1,
+        "evidence_left": -1,
+        "evidence_right": -1,
+        "evidence_top": -1,
+        "left": -1,
+        "occlusion_bottom": 115,
+        "right": -1,
+        "top": -1,
+        "unobscured": true,
+        "visual_height": 812,
+        "visual_width": 375
+      },
+      "view": "board",
+      "view_proof": {
+        "anchor_ancestor_chain_visible": true,
+        "anchor_geometry": {
+          "bottom": 169,
+          "left": 59,
+          "occlusion_bottom": 115,
+          "right": 168,
+          "top": 151,
+          "unobscured": true,
+          "visual_height": 812,
+          "visual_width": 375
+        },
+        "anchor_kind": "board-heading",
+        "anchor_text": "exception line",
+        "nav_current": true,
+        "observed_view": "board",
+        "patient_heading_matches": true,
+        "patient_id": "",
+        "patient_name": "",
+        "state_view": "board",
+        "visible_views": [
+          "board"
+        ]
+      },
+      "width": 375
+    }
+  },
+  "replay_helper_sha256": "8aa5bd93a8f4e30985d2da3e3d78549f114fdd5bfa88e8d7db53b879495e3cd1",
+  "schema": "sanad-gate0b-browser-receipts/v3",
+  "synthetic": true
+}

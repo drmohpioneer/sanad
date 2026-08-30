@@ -1,0 +1,265 @@
+{
+  "browser": {
+    "capture_tool": "Chrome DevTools Protocol device emulation via tests.gate0b.replay",
+    "js_version": "15.1.206.23",
+    "locale": "en-US",
+    "machine": "arm64",
+    "platform": "macOS-15.5-arm64-arm-64bit",
+    "product": "Chrome/151.0.7922.175",
+    "protocol_version": "1.3",
+    "revision": "@02fcc75bd274240484d344e0ef73fd82953276bc",
+    "timezone": "Africa/Cairo",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "version": "Google Chrome 151.0.7922.175"
+  },
+  "contract": {
+    "color_scheme": "light",
+    "device_pixel_ratio": 1,
+    "fixed_date_source": "each fixture's captured_at",
+    "font_policy": "external fonts blocked; platform-local system fallback recorded above; pixels are not claimed portable across machines",
+    "network_policy": "dashboard CSP allows only same-origin reads; standalone Chrome also maps non-loopback DNS to NOTFOUND",
+    "readiness_policy": "each receipt binds the exact PNG SHA-256, Chrome/CDP identity, and fresh-session capture-ID attestation; callback occurs after all dashboard reads and images succeed, exactly one expected DOM view and patient identity are observed, and the selected evidence anchor plus its full ancestor chain are visibly unobscured",
+    "reduced_motion": true,
+    "viewports": [
+      "375x812",
+      "1440x1000"
+    ]
+  },
+  "dashboard": {
+    "path": "app/web/dashboard.html",
+    "runtime_bootstrap": "test-only response injection from app/tests/gate0b/replay.py",
+    "sha256": "7e19ff32de7a6bc36dd90013f2b13ed6ce8d3bb896697b1c50cc7f94946183be",
+    "source_file_modified_for_capture": false
+  },
+  "fixture_sha256": {
+    "beats/beat-01-contract.json": "dbe46884950f56f5d8fd10f8c68275c1aa901fcd038a3d1f18482724fc678e18",
+    "beats/beat-02-durable-future.json": "bae6ca99a7eb16c912b369cf42885bac6b7872960e3ebcce60ea07bc90aaaf47",
+    "beats/beat-03-cost-barrier.json": "8d3d9aaa28ca80b752ee8b2e04cc63f8964897a58fbda17d9c25ce7a4dad8e24",
+    "beats/beat-04-incomplete-evidence.json": "69dd692d58c79c62535e9151088ccb52f13a668d5aef347a75f5291d180d31fd",
+    "beats/beat-05-complete-evidence.json": "0d72a0e9519ba3b402e6079cce107feaf17499ff3d6a8620dccb3d3ecbe63bfb",
+    "beats/beat-06-critical-potassium.json": "5db306d2ebb9a85aa9baae55a2eddc1990e8b9f9066982de666de83f28ecc305",
+    "beats/beat-07-contact-guard.json": "1fb78eab612359aeb1c31a1828ef5b0a2c11f0cb282013cf765be60ddcaec1e5",
+    "beats/beat-08-doctor-review.json": "f3596d096549ca69d92c89305eca4eaf0fcd9efe37ea2f85076e6392540ee4d9",
+    "beats/beat-09-end-of-day.json": "9b6ab90d2317e05bff6e81adf46a2b8499e64723cfa17db569488108013585c0"
+  },
+  "readiness_receipts": {
+    "capture_session_nonce_sha256": "4208dd9919d8402a9ff7dd0b594aaedb6c65700b02630706697722e6e0133c3d",
+    "count": 18,
+    "path": "screenshot-receipts.json",
+    "sha256": "bfdd1cc3374e9f94cc8deff8369f522ab4bc46e00b84108acadc3f8f6e70aade"
+  },
+  "replay_helper_sha256": "8aa5bd93a8f4e30985d2da3e3d78549f114fdd5bfa88e8d7db53b879495e3cd1",
+  "schema": "sanad-gate0b-screenshot-provenance/v3",
+  "screenshots": {
+    "screenshots/1440x1000/beat-01-contract.png": {
+      "attestation_tag": "b104146cfa0128fab7053cdcf24019b7",
+      "capture_id": "chrome-1440x1000-beat-01-contract",
+      "height": 1000,
+      "readiness_receipt_sha256": "6e2d67208a73f7f86f345270afa979a958763c1497b6117c70e8e74e45cf683c",
+      "sha256": "42c0c3af8c9c6fed7d541108f075b83b8495bc8802c897ae59a872a0fc83dd8d",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-02-durable-future.png": {
+      "attestation_tag": "2a4440b110c474e94c67c6de5328a12a",
+      "capture_id": "chrome-1440x1000-beat-02-durable-future",
+      "height": 1000,
+      "readiness_receipt_sha256": "cfabf5e2b7af64738e50c43a7e102e3a0ffd05d1d27097bac48196dd79875150",
+      "sha256": "cdc5bd74ebb9e2f044c4419db750ac5426666540c57924c8c390a4c773bc7eb4",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-03-cost-barrier.png": {
+      "attestation_tag": "25b10de2c0bb8a75cfce616b99de4913",
+      "capture_id": "chrome-1440x1000-beat-03-cost-barrier",
+      "height": 1000,
+      "readiness_receipt_sha256": "fbb6c9faf2776f4badf7f116b0f3abd8bde6e024b8287127af8f82505b8b3281",
+      "sha256": "561fa4b80c4d15a3fcfb6c05fa3d7128c02e2312807e8fedabba728287d9d4d9",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-04-incomplete-evidence.png": {
+      "attestation_tag": "749139d47c3dfb047049dc835bec9676",
+      "capture_id": "chrome-1440x1000-beat-04-incomplete-evidence",
+      "height": 1000,
+      "readiness_receipt_sha256": "55bc62646f0194df8e6a552dc3558b70d413d368c294d34027d72ec314066ffa",
+      "sha256": "8f1404b111d144a8428264f8f5e0e8d1ad85d11329953d17f4725c7957980e77",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-05-complete-evidence.png": {
+      "attestation_tag": "db0ab9922944ba2d41e9636919d63709",
+      "capture_id": "chrome-1440x1000-beat-05-complete-evidence",
+      "height": 1000,
+      "readiness_receipt_sha256": "0832f2acae9b088fd3c3345163fe1f7b76a336d5c03a84ab729310cb91dd0b38",
+      "sha256": "33d39c3a4124787c064f71bff46766df147a0a5617d687429aa074398741a2c4",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-06-critical-potassium.png": {
+      "attestation_tag": "2bd133599515bc7963751959d15828ab",
+      "capture_id": "chrome-1440x1000-beat-06-critical-potassium",
+      "height": 1000,
+      "readiness_receipt_sha256": "780cfcaf1cc06f66da91863278edfad063a6ec4a592b37cb0c02628b8c358d53",
+      "sha256": "585dfdbd7c7acc56d8c96b9dc638806f91efb6676c75e4a3fdb4b2965db00109",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-07-contact-guard.png": {
+      "attestation_tag": "8ddfcc24123c91bfd8fc6371e04a8e7f",
+      "capture_id": "chrome-1440x1000-beat-07-contact-guard",
+      "height": 1000,
+      "readiness_receipt_sha256": "6a459fd288960191b06b87c1e44613b599a8835a0a1e82c08dd20e092673b838",
+      "sha256": "93e2a1afe759fb834cc41c088f94b3b973d2c03d74a7b89ef20c245af3f3689a",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-08-doctor-review.png": {
+      "attestation_tag": "a4fd9dadc37bfb0dcc1ee8bd3282f686",
+      "capture_id": "chrome-1440x1000-beat-08-doctor-review",
+      "height": 1000,
+      "readiness_receipt_sha256": "1f6a484e832232a7213a3a020c2cfcabe2cca4d7d27e1c81c72b1f786eca2d56",
+      "sha256": "662fcec8ba66a7d789494dd182e869f5f42e4eaed962d3f5579b92a62e89bd60",
+      "width": 1440
+    },
+    "screenshots/1440x1000/beat-09-end-of-day.png": {
+      "attestation_tag": "5fd7f1a94429a3864739b0fc6a45d713",
+      "capture_id": "chrome-1440x1000-beat-09-end-of-day",
+      "height": 1000,
+      "readiness_receipt_sha256": "a7ffe096ed7703ec17d990ef3d3f0b1ee637ad47dfd708be216e7a72b6b113a8",
+      "sha256": "332f317213fec81715a01bcfc4cbad1fe2cabdba2df74f293ea979799bfb9160",
+      "width": 1440
+    },
+    "screenshots/375x812/beat-01-contract.png": {
+      "attestation_tag": "87436b329d02f2b6ebb15f1011bf18bb",
+      "capture_id": "chrome-375x812-beat-01-contract",
+      "height": 812,
+      "readiness_receipt_sha256": "a597504660477a371d94caf2a7db448d7630d017cbb31c04f2737256e34ee32c",
+      "sha256": "b9d30b0ce8671b5b4a062390ad49da99c617494b6335c1fc7b5929ca0238ecaf",
+      "width": 375
+    },
+    "screenshots/375x812/beat-02-durable-future.png": {
+      "attestation_tag": "8e72a5abac857ae284b8d79a2a3f2ec6",
+      "capture_id": "chrome-375x812-beat-02-durable-future",
+      "height": 812,
+      "readiness_receipt_sha256": "cbddc9e212e4fab662eb1be613636878bd7ddabe841e0195e9bb7207ae33c8c1",
+      "sha256": "841e9415470f483f29953acc7a754e8b9a42c2502b55a0e9f2c037342af8e46b",
+      "width": 375
+    },
+    "screenshots/375x812/beat-03-cost-barrier.png": {
+      "attestation_tag": "a93d47fd6e28e0a91dcf6035eb530d6b",
+      "capture_id": "chrome-375x812-beat-03-cost-barrier",
+      "height": 812,
+      "readiness_receipt_sha256": "b7dd879ff16f6aa24f6f51f049b4d9fa23302475f2bf67872c672081c2b2e9eb",
+      "sha256": "4563359c21dc8cb87cf136673e3f2dc5a33951a88a5ff2a4d861dcc19d3d2e2c",
+      "width": 375
+    },
+    "screenshots/375x812/beat-04-incomplete-evidence.png": {
+      "attestation_tag": "4a03eaa580782163f5bfa4ff19b04c4a",
+      "capture_id": "chrome-375x812-beat-04-incomplete-evidence",
+      "height": 812,
+      "readiness_receipt_sha256": "04ee195bffaf10d2531bb43828c39e6df264122e9dad709761072eafa91f63f4",
+      "sha256": "57169e3587d59be2826e18545b2dd3c12e302db7173595822328194eadc9a912",
+      "width": 375
+    },
+    "screenshots/375x812/beat-05-complete-evidence.png": {
+      "attestation_tag": "649d25e311a12e724a15505da6b181ae",
+      "capture_id": "chrome-375x812-beat-05-complete-evidence",
+      "height": 812,
+      "readiness_receipt_sha256": "43f7dd9c3db2461ade1b0601830ca724edd8e8b8baed28a8b065147d394ba40f",
+      "sha256": "d7aedfa5ac90936cf9fc09b72171ea321d17449a7430fa6fbfb9695066e3eaa6",
+      "width": 375
+    },
+    "screenshots/375x812/beat-06-critical-potassium.png": {
+      "attestation_tag": "ce43f206dd3aecb2c394e877f9f6bfd9",
+      "capture_id": "chrome-375x812-beat-06-critical-potassium",
+      "height": 812,
+      "readiness_receipt_sha256": "3387e6ad829d1ac950a00458beb1be7c407d3d1d0be6617c4f5771a6557d7ea5",
+      "sha256": "2ca20a89e01e9db59fd6aeb759c4acdb3f314ce29f382ca9b831c4c02813af6e",
+      "width": 375
+    },
+    "screenshots/375x812/beat-07-contact-guard.png": {
+      "attestation_tag": "d9d60cf9394d2c641b7ed7d566c02475",
+      "capture_id": "chrome-375x812-beat-07-contact-guard",
+      "height": 812,
+      "readiness_receipt_sha256": "eec54eaa1a8bd3cf65b6ded84561d113398c343dbd4701bc853bd9615da7fc75",
+      "sha256": "960658e2eeca5425039fbbd34416414ff9ea783bcee8c9a9c1254809ac9f20f6",
+      "width": 375
+    },
+    "screenshots/375x812/beat-08-doctor-review.png": {
+      "attestation_tag": "59d73c5f02726f13ac46608b3d4ebf2b",
+      "capture_id": "chrome-375x812-beat-08-doctor-review",
+      "height": 812,
+      "readiness_receipt_sha256": "36176f552c50ad7e9583dbe92cdb922532a724548d3965f706b6b6533b83f52d",
+      "sha256": "efa10f1335fd4c2680b2ad073fdbc79a34a94c2279b43d9d4d1d82e9737d9fbf",
+      "width": 375
+    },
+    "screenshots/375x812/beat-09-end-of-day.png": {
+      "attestation_tag": "948b6e343c74f082c3eb47de92254c20",
+      "capture_id": "chrome-375x812-beat-09-end-of-day",
+      "height": 812,
+      "readiness_receipt_sha256": "308aa064678e84e738f8ca95231c15619d10d8c111021afc5ff08d166d3fbf3f",
+      "sha256": "25c0eed6c4f0dbb9b26958c0fc423d3c9ff75e980747094b2c09973ca818f14e",
+      "width": 375
+    }
+  },
+  "selections": {
+    "beat-01-contract": {
+      "note": "The confirmed four-loop care contract.",
+      "patient_name": "Ahmed Ali",
+      "scroll_selector": null,
+      "scroll_text": null,
+      "view": "patient"
+    },
+    "beat-02-durable-future": {
+      "note": "The future ladder exhausted without losing the loops.",
+      "patient_name": "Ahmed Ali",
+      "scroll_selector": ".ncard.white",
+      "scroll_text": "unreachable",
+      "view": "patient"
+    },
+    "beat-03-cost-barrier": {
+      "note": "The doctor's answer resumes the cost-blocked loop.",
+      "patient_name": "Ahmed Ali",
+      "scroll_selector": ".bubble",
+      "scroll_text": "hospital lab is free",
+      "view": "patient"
+    },
+    "beat-04-incomplete-evidence": {
+      "note": "Incomplete evidence stays open and asks only for what is missing.",
+      "patient_name": "Ahmed Ali",
+      "scroll_selector": ".bubble",
+      "scroll_text": "Triglycerides, HDL is missing",
+      "view": "patient"
+    },
+    "beat-05-complete-evidence": {
+      "note": "Complete evidence advances the loop to pending review.",
+      "patient_name": "Ahmed Ali",
+      "scroll_selector": ".ncard.red",
+      "scroll_text": "needs your review",
+      "view": "patient"
+    },
+    "beat-06-critical-potassium": {
+      "note": "The critical potassium result is held at the top of the inbox.",
+      "patient_name": null,
+      "scroll_selector": ".ncard.red",
+      "scroll_text": "CRITICAL LAB",
+      "view": "inbox"
+    },
+    "beat-07-contact-guard": {
+      "note": "The six-contact guard escalates without inventing another schedule.",
+      "patient_name": "Amany Roushdy",
+      "scroll_selector": ".ncard.yellow",
+      "scroll_text": "Barrier needs you",
+      "view": "patient"
+    },
+    "beat-08-doctor-review": {
+      "note": "Doctor review closes the evidence loop.",
+      "patient_name": "Ahmed Ali",
+      "scroll_selector": ".ncard.green",
+      "scroll_text": "Lipid panel",
+      "view": "patient"
+    },
+    "beat-09-end-of-day": {
+      "note": "The final away-board totals and attention count.",
+      "patient_name": null,
+      "scroll_selector": null,
+      "scroll_text": null,
+      "view": "board"
+    }
+  },
+  "synthetic": true
+}

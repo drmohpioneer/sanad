@@ -1,5 +1,9 @@
 .env
 *.json
+# Gate 0B's reviewed, synthetic characterization artifacts are intentionally
+# versioned; all other JSON remains ignored by the broad rule above.
+!tests/gate0b/goldens/*.json
+!tests/gate0b/goldens/**/*.json
 __pycache__/
 .venv/
 *.ogg

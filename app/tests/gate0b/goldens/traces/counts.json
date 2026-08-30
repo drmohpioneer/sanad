@@ -1,0 +1,66 @@
+{
+  "delivery_by_channel_and_outcome": {
+    "telegram:skipped_disabled_unbound": 33,
+    "web:persisted_event": 33
+  },
+  "http_by_category": {
+    "control_read": 2,
+    "scenario_control": 1,
+    "scenario_mutation": 10,
+    "scenario_observation": 1,
+    "setup": 4,
+    "snapshot_read": 116,
+    "task_callback": 12
+  },
+  "http_total": 146,
+  "logical_outbound_by_beat": {
+    "beat-01-contract": 5,
+    "beat-02-durable-future": 14,
+    "beat-03-cost-barrier": 4,
+    "beat-04-incomplete-evidence": 3,
+    "beat-05-complete-evidence": 2,
+    "beat-06-critical-potassium": 2,
+    "beat-07-contact-guard": 2,
+    "beat-08-doctor-review": 1
+  },
+  "logical_outbound_total": 33,
+  "models": {
+    "by_beat": {
+      "beat-01-contract": 2,
+      "beat-02-durable-future": 12,
+      "beat-03-cost-barrier": 4,
+      "beat-04-incomplete-evidence": 2,
+      "beat-05-complete-evidence": 1,
+      "beat-06-critical-potassium": 1,
+      "beat-07-contact-guard": 3
+    },
+    "by_boundary": {
+      "coordinator._choose": 15,
+      "extractor._ask": 3,
+      "identify.identify": 1,
+      "intents.model_vote": 1,
+      "registrar.propose": 1,
+      "sentinel.model_net": 2,
+      "validator._yes_no": 2
+    },
+    "total": 25
+  },
+  "scenario_trigger_totals": {
+    "logical_outbound_messages": 33,
+    "model_calls": 25,
+    "scenario_trigger_http_requests": 23,
+    "task_handlers_executed": 12,
+    "tasks_enqueued": 13,
+    "tasks_pending": 1
+  },
+  "tasks": {
+    "enqueued": 13,
+    "initial_ladder": 12,
+    "post_initial": 1,
+    "states": {
+      "completed": 12,
+      "pending": 1
+    },
+    "verified_dispatches": 12
+  }
+}
