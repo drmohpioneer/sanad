@@ -15,7 +15,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool, field_validator
+
+from . import provenance
 
 LoopType = Literal["TEST", "MONITOR", "MEDICATION", "VISIT", "TASK"]
 LoopState = Literal[
@@ -35,6 +37,9 @@ PhotoKind = Literal["lab_slip", "bp_monitor", "prescription", "other"]
 # --------------------------------------------------------------------------- #
 class Doctor(BaseModel):
     id: str
+    # Missing legacy provenance fails closed to synthetic. StrictBool refuses
+    # strings and integers that only look boolean.
+    synthetic: StrictBool = True
     name: str
     # Sanad serves any clinic specialty; the Concierge is told which one so its
     # general answers stay inside the doctor's field.
@@ -60,6 +65,7 @@ class Doctor(BaseModel):
 
 class Patient(BaseModel):
     id: str
+    synthetic: StrictBool = True
     doctor_id: str
     name: str
     phone: Optional[str] = None
@@ -95,9 +101,25 @@ class Patient(BaseModel):
     opt_out_at: Optional[datetime] = None
     created_at: datetime
 
+    @field_validator("results", mode="before")
+    @classmethod
+    def _explicit_result_provenance(cls, rows: Any) -> list[dict[str, Any]]:
+        if not isinstance(rows, (list, tuple)):
+            raise ValueError("patient results must be a list or tuple")
+        out: list[dict[str, Any]] = []
+        for raw in rows:
+            row = provenance.evidence(raw)
+            if "results" in row:
+                if not isinstance(row["results"], (list, tuple)):
+                    raise ValueError("nested patient results must be a list or tuple")
+                row["results"] = provenance.evidence_rows(row["results"])
+            out.append(row)
+        return out
+
 
 class Loop(BaseModel):
     id: str
+    synthetic: StrictBool = True
     patient_id: str
     doctor_id: str
     type: LoopType
@@ -161,6 +183,20 @@ class Loop(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("results", "readings", mode="before")
+    @classmethod
+    def _explicit_evidence_provenance(cls, rows: Any) -> list[dict[str, Any]]:
+        return provenance.evidence_rows(rows)
+
+    @field_validator("verified", mode="before")
+    @classmethod
+    def _explicit_verification_provenance(cls, row: Any) -> Any:
+        if row == {}:
+            return {}
+        if not isinstance(row, dict):
+            raise ValueError("verification evidence must be a dictionary")
+        return provenance.evidence(row)
+
 
 class Send(BaseModel):
     """One wake-up that was claimed. The idempotency key of the Chaser.
@@ -209,6 +245,7 @@ class Send(BaseModel):
 
 class Event(BaseModel):
     id: str
+    synthetic: StrictBool = True
     doctor_id: str
     patient_id: Optional[str] = None
     loop_id: Optional[str] = None
@@ -218,6 +255,32 @@ class Event(BaseModel):
     media: list[dict[str, Any]] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
     ts: datetime
+
+    @field_validator("media", mode="before")
+    @classmethod
+    def _explicit_media_provenance(cls, rows: Any) -> list[dict[str, Any]]:
+        return provenance.evidence_rows(rows)
+
+    @field_validator("meta", mode="before")
+    @classmethod
+    def _explicit_meta_evidence_provenance(cls, raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, dict):
+            raise ValueError("event metadata must be a dictionary")
+        meta = dict(raw)
+        if "results" in meta:
+            if not isinstance(meta["results"], (list, tuple)):
+                raise ValueError("event results must be a list or tuple")
+            meta["results"] = provenance.evidence_rows(meta["results"])
+        if meta.get("reading") is not None:
+            if not isinstance(meta["reading"], dict):
+                raise ValueError("event reading must be a dictionary")
+            meta["reading"] = provenance.evidence(meta["reading"])
+        if meta.get("verify") is not None:
+            if not isinstance(meta["verify"], dict):
+                raise ValueError("event verification must be a dictionary")
+            if meta["verify"]:
+                meta["verify"] = provenance.evidence(meta["verify"])
+        return meta
 
 
 class Report(BaseModel):
@@ -241,6 +304,9 @@ class Report(BaseModel):
 
 class PendingConfirm(BaseModel):
     id: str
+    # Internal carrier: the doctor may confirm hours after the originating
+    # dictation, so actor/mission provenance cannot live only in the request.
+    synthetic: StrictBool = True
     doctor_id: str
     proposed: dict[str, Any]
     expires_at: datetime

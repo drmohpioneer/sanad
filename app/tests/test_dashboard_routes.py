@@ -301,10 +301,11 @@ class TheSettingsShape(unittest.TestCase):
                                     policy_module.for_doctor(self.doctor(546)))
         self.assertEqual(
             set(shape),
-            {"name", "specialty", "language", "telegram_bound",
+            {"name", "synthetic", "specialty", "language", "telegram_bound",
              "telegram_chat_id_present", "policy"},
         )
         self.assertEqual(shape["name"], "Dr Mohamed")
+        self.assertIs(shape["synthetic"], True)
         self.assertEqual(shape["specialty"], "cardiology")
         self.assertEqual(shape["language"], "en")
         self.assertTrue(shape["telegram_bound"])
@@ -685,10 +686,11 @@ class TheRoutesAgainstAStore(unittest.IsolatedAsyncioTestCase):
         shape = await sanad_main.doctor_settings(self.doctor)
         self.assertEqual(
             set(shape),
-            {"name", "specialty", "language", "telegram_bound",
+            {"name", "synthetic", "specialty", "language", "telegram_bound",
              "telegram_chat_id_present", "policy"},
         )
         self.assertEqual(shape["name"], "Dr Mohamed")
+        self.assertIs(shape["synthetic"], True)
         self.assertEqual(shape["specialty"], "cardiology")
         self.assertEqual(shape["language"], "en")
         self.assertTrue(shape["telegram_bound"])

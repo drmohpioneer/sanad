@@ -14,6 +14,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from pydantic import StrictBool
+
 from . import (
     concierge, dispatch, events, gender, links, registrar, store, telegram,
     uploads,
@@ -57,12 +59,28 @@ async def _too_big_reply(chat_id: int, part: dict[str, Any]) -> None:
 
 
 async def handle_update(update: dict[str, Any], base_url: str) -> None:
+    """Route an internal/simulated update; it always fails safe to synthetic."""
+    await _handle_update(update, base_url, synthetic=True)
+
+
+async def handle_provider_update(
+    update: dict[str, Any], base_url: str, *, secret_token: Optional[str]
+) -> None:
+    """Route a provider update after independently verifying its secret."""
+    if not telegram.verify_secret(secret_token):
+        raise PermissionError("unverified Telegram provider update")
+    await _handle_update(update, base_url, synthetic=False)
+
+
+async def _handle_update(
+    update: dict[str, Any], base_url: str, *, synthetic: StrictBool
+) -> None:
     if "callback_query" in update:
         await _callback(update["callback_query"], base_url)
         return
     message = update.get("message") or update.get("edited_message")
     if message:
-        await _message(message, base_url)
+        await _message(message, base_url, synthetic=synthetic)
 
 
 async def _callback(query: dict[str, Any], base_url: str) -> None:
@@ -122,7 +140,9 @@ async def _callback(query: dict[str, Any], base_url: str) -> None:
     await telegram.answer_callback(query.get("id", ""), note)
 
 
-async def _message(message: dict[str, Any], base_url: str) -> None:
+async def _message(
+    message: dict[str, Any], base_url: str, *, synthetic: StrictBool = True
+) -> None:
     chat_id = (message.get("chat") or {}).get("id")
     if chat_id is None:
         return
@@ -155,7 +175,8 @@ async def _message(message: dict[str, Any], base_url: str) -> None:
     doctor = await store.doctor_by_telegram(chat_id)
     if doctor is not None:
         await dispatch.handle_inbound(InboundMessage(
-            channel="telegram", sender_ref=f"doctor:{doctor.web_token}",
+            channel="telegram", synthetic=synthetic,
+            sender_ref=f"doctor:{doctor.web_token}",
             text=text, audio_bytes=audio_bytes, image_bytes=image_bytes,
         ))
         return
@@ -163,7 +184,8 @@ async def _message(message: dict[str, Any], base_url: str) -> None:
     patient = await store.patient_by_telegram(chat_id)
     if patient is not None:
         await dispatch.handle_inbound(InboundMessage(
-            channel="telegram", sender_ref=f"patient:{patient.id}",
+            channel="telegram", synthetic=synthetic,
+            sender_ref=f"patient:{patient.id}",
             text=text, audio_bytes=audio_bytes, image_bytes=image_bytes,
         ))
         return

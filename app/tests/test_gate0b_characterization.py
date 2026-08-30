@@ -870,13 +870,17 @@ class ReplayMatchesCommittedGoldens(unittest.IsolatedAsyncioTestCase):
     async def test_full_route_replay_is_byte_stable_against_every_json_golden(self) -> None:
         # Importing here keeps the static integrity checks independent of the
         # application and avoids initializing it when only hashes are audited.
+        from tests.gate0b.artifacts import legacy_projection
         from tests.gate0b.scenario import GoldenJourney
 
         result = await GoldenJourney().run()
         payloads = result.artifact_payloads()
         self.assertEqual(JSON_ARTIFACTS, set(payloads))
         for relative in sorted(JSON_ARTIFACTS):
-            replay_hash = _canonical_sha(payloads[relative])
+            baseline = _read(relative)
+            replay_hash = _canonical_sha(
+                legacy_projection(payloads[relative], baseline)
+            )
             committed_hash = _sha(GOLDENS / relative)
             self.assertEqual(
                 committed_hash,

@@ -54,7 +54,8 @@ from google.genai import types
 
 from . import (
     bounded, chaser, coordinator, escalate, events, extractor, gender, intents,
-    lang, photos, report, sentinel, store, templates, validator, vitals,
+    lang, photos, provenance, report, sentinel, store, templates, validator,
+    vitals,
 )
 from .adapters import OutboundMessage, fanout
 from .models import ConciergeAnswer, Doctor, Loop, Patient, Relay, Send
@@ -342,17 +343,20 @@ def voice_unreadable_card(patient: Patient, why: str) -> dict:
 
 
 async def voice_unreadable(patient: Patient, doctor: Doctor, why: str,
-                           *, channel: str = "web") -> None:
+                           *, channel: str = "web",
+                           synthetic: bool = True) -> None:
     """The one exit for a voice note Sanad could not hear."""
     out = fanout()
     speak = await lang.for_patient(patient, doctor.id)
     who = gender.of_patient(patient)
+    synthetic = provenance.derived(patient.synthetic, synthetic)
 
     async def persist() -> None:
         await events.append_event(
             doctor.id, "system", f"voice note not transcribed: {why}",
             patient_id=patient.id, channel=channel,
             meta={"error": why, "decided_by": DECIDED_VOICE_UNREADABLE},
+            synthetic=synthetic,
         )
         await out.send(f"doctor:{doctor.web_token}", OutboundMessage(
             text=f"A voice note from {patient.name} could not be read.",
@@ -363,6 +367,7 @@ async def voice_unreadable(patient: Patient, doctor: Doctor, why: str,
     await escalate.told_or_fail_closed(
         persist, doctor_id=doctor.id, patient_id=patient.id,
         what="the unreadable voice note", channel=channel,
+        synthetic=synthetic,
     )
     await out.send(f"patient:{patient.id}", OutboundMessage(
         text=voice_unreadable_text(speak, who),
@@ -422,6 +427,7 @@ async def handle_patient_message(
     mime: str = "image/jpeg",
     voice: bool = False,
     gate: Optional[sentinel.Sentinel] = None,
+    synthetic: bool = True,
 ) -> None:
     """One patient message, start to finish. The gate order below is the spec.
 
@@ -433,6 +439,7 @@ async def handle_patient_message(
     out = fanout()
     to_patient, to_doctor = f"patient:{patient.id}", f"doctor:{doctor.web_token}"
     text = (text or "").strip()
+    evidence_synthetic = provenance.derived(patient.synthetic, synthetic)
 
     sent_a_photo = bool(image_bytes)
     # The id of this message is kept, because it is one half of a pair. Whatever
@@ -445,8 +452,12 @@ async def handle_patient_message(
         text,
         patient_id=patient.id,
         channel=channel,
-        media=[{"kind": "image", "inline_note": "photo received"}] if sent_a_photo else [],
+        media=[provenance.evidence(
+            {"kind": "image", "inline_note": "photo received"},
+            synthetic=evidence_synthetic,
+        )] if sent_a_photo else [],
         meta={"source": "voice" if voice else "text"},
+        synthetic=synthetic,
     )
     said_id = said.id
 
@@ -476,16 +487,20 @@ async def handle_patient_message(
     # sentence. Prose cannot parse as a bare reading and still reaches Sentinel.
     bp = vitals.judge_text(text) if text else None
     if bp is not None and bp.red:
-        loop = await record_reading(patient, text)
+        loop = await record_reading(patient, text, synthetic=synthetic)
         await extractor.escalate_bp(
             patient, doctor, bp,
-            {"value": f"{bp.systolic}/{bp.diastolic}", "source": "typed"},
+            provenance.evidence(
+                {"value": f"{bp.systolic}/{bp.diastolic}", "source": "typed"},
+                synthetic=evidence_synthetic,
+            ),
             speak=await lang.for_patient(patient, doctor.id),
             who=gender.of_patient(patient), channel=channel, loop=loop,
+            synthetic=evidence_synthetic,
         )
         return
     if bp is not None:
-        loop = await record_reading(patient, text)
+        loop = await record_reading(patient, text, synthetic=synthetic)
         line = (f"Recorded {bp.systolic}/{bp.diastolic}"
                 if loop is not None else
                 f"I read {bp.systolic}/{bp.diastolic}, but there is no open "
@@ -518,6 +533,7 @@ async def handle_patient_message(
                 patient_id=patient.id, channel=channel,
                 meta={"sentinel": gate.as_meta(), "quoted": text,
                       "decided_by": "code (core/sentinel.py fail-closed triage)"},
+                synthetic=evidence_synthetic,
             )
             relay = await open_relay(patient, doctor, text,
                                      TRIAGE_UNAVAILABLE_REASON)
@@ -529,6 +545,7 @@ async def handle_patient_message(
         landed = await escalate.told_or_fail_closed(
             persist, doctor_id=doctor.id, patient_id=patient.id,
             what="the triage outage relay", channel=channel,
+            synthetic=evidence_synthetic,
         )
         await out.send(to_patient, OutboundMessage(
             text=relay_line(doctor, text) if landed else escalate.fail_closed_text(
@@ -553,6 +570,7 @@ async def handle_patient_message(
                 doctor.id, "escalation", f"emergency: {gate.concept}",
                 patient_id=patient.id, channel=channel,
                 meta={"sentinel": gate.as_meta(), "quoted": text},
+                synthetic=evidence_synthetic,
             )
             await out.send(to_doctor, OutboundMessage(
                 text=f"Emergency from {patient.name}.", patient_id=patient.id,
@@ -562,6 +580,7 @@ async def handle_patient_message(
         landed = await escalate.told_or_fail_closed(
             persist, doctor_id=doctor.id, patient_id=patient.id,
             what="the emergency escalation", channel=channel,
+            synthetic=evidence_synthetic,
         )
         reply = (sentinel.emergency_text(speak, who) if landed
                  else escalate.fail_closed_text(speak, who, emergency=True))
@@ -629,7 +648,7 @@ async def handle_patient_message(
         await relay_to_doctor(
             patient, doctor, text,
             "third party is using the patient link; no clinical information disclosed",
-            channel=channel,
+            channel=channel, synthetic=synthetic,
         )
         return
 
@@ -640,9 +659,10 @@ async def handle_patient_message(
     if image_bytes:
         if change_reason:
             await relay_to_doctor(patient, doctor, text, change_reason,
-                                  channel=channel)
+                                  channel=channel, synthetic=synthetic)
         await extractor.handle_photo(
-            patient, doctor, image_bytes, mime, caption=text, channel=channel
+            patient, doctor, image_bytes, mime, caption=text, channel=channel,
+            synthetic=evidence_synthetic,
         )
         return
 
@@ -725,7 +745,7 @@ async def handle_patient_message(
         # The closing line is code's, not the model's, so it is never forgotten.
         result.reply = result.reply.rstrip() + "\n" + plan_overrides_line(text)
 
-    await record_reading(patient, text)
+    await record_reading(patient, text, synthetic=synthetic)
 
     audit = {
         "tier": tier,
@@ -759,6 +779,7 @@ async def handle_patient_message(
     landed = await escalate.told_or_fail_closed(
         persist, doctor_id=doctor.id, patient_id=patient.id,
         what=f"the relay: {result.relay_reason}", channel=channel,
+        synthetic=evidence_synthetic,
     )
     await out.send(to_patient, OutboundMessage(
         text=result.reply if landed else escalate.fail_closed_text(
@@ -787,7 +808,7 @@ async def open_relay(
 
 async def relay_to_doctor(
     patient: Patient, doctor: Doctor, question: str, reason: str,
-    *, channel: str = "web",
+    *, channel: str = "web", synthetic: bool = True,
 ) -> Optional[Relay]:
     """Hand one question to the doctor and tell the patient that is what happened.
 
@@ -799,12 +820,14 @@ async def relay_to_doctor(
     out = fanout()
     to_patient, to_doctor = f"patient:{patient.id}", f"doctor:{doctor.web_token}"
     made: dict[str, Relay] = {}
+    synthetic = provenance.derived(patient.synthetic, synthetic)
 
     async def persist() -> None:
         made["relay"] = await open_relay(patient, doctor, question, reason)
         await events.append_event(
             doctor.id, "system", f"relayed to {doctor.name}: {reason}",
             patient_id=patient.id, channel=channel, meta={"quoted": question},
+            synthetic=synthetic,
         )
         await out.send(to_doctor, OutboundMessage(
             text=f"{patient.name} needs your answer.", patient_id=patient.id,
@@ -814,6 +837,7 @@ async def relay_to_doctor(
     landed = await escalate.told_or_fail_closed(
         persist, doctor_id=doctor.id, patient_id=patient.id,
         what=f"the relay: {reason}", channel=channel,
+        synthetic=synthetic,
     )
     await out.send(to_patient, OutboundMessage(
         text=relay_line(doctor, question) if landed else escalate.fail_closed_text(
@@ -962,7 +986,9 @@ def is_reading(text: str) -> bool:
     return bool(BP_READING.match(text or "") or ONE_NUMBER.match(text or ""))
 
 
-async def record_reading(patient: Patient, text: str) -> Optional[Loop]:
+async def record_reading(
+    patient: Patient, text: str, *, synthetic: bool = True
+) -> Optional[Loop]:
     """Append one measurement to the patient's oldest open MONITOR loop.
 
     Which loops accept a reading is one rule, shared with the photo of a monitor
@@ -976,11 +1002,11 @@ async def record_reading(patient: Patient, text: str) -> Optional[Loop]:
     loop = photos.open_monitor_loop(await store.list_loops(patient.id))
     if loop is None:
         return None
-    row = {
+    row = provenance.evidence({
         "at": store.now().isoformat(timespec="minutes"),
         "value": text.strip(),
         "number": float(match.group(1).replace(",", ".")),
-    }
+    }, synthetic=provenance.derived(patient.synthetic, synthetic))
     # ArrayUnion, not read-append-write (codex item 13, wave B's handoff): a
     # patient who sends two readings in the same second keeps both, and a
     # message the phone delivered twice is still one row.

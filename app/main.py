@@ -218,6 +218,7 @@ async def seed(
     return {
         "created": created,
         "doctor_id": doctor.id,
+        "synthetic": doctor.synthetic,
         "name": doctor.name,
         "telegram_bound": doctor.telegram_chat_id is not None,
         "console_url": str(request.base_url).rstrip("/") + f"/c/{doctor.web_token}",
@@ -496,13 +497,16 @@ async def tasks_nudge(request: Request) -> dict:
 @app.post("/tg")
 async def telegram_webhook(request: Request) -> dict:
     """Every update is rejected unless it carries the secret we registered."""
-    if not telegram.verify_secret(
-        request.headers.get("x-telegram-bot-api-secret-token")
-    ):
+    secret_token = request.headers.get("x-telegram-bot-api-secret-token")
+    if not telegram.verify_secret(secret_token):
         raise HTTPException(404, "Not Found")
     update = await request.json()
     log.info("tg update=%s", update.get("update_id"))
-    await tg_router.handle_update(update, str(request.base_url))
+    # This is the only production boundary allowed to originate
+    # synthetic=False, and it sits after the provider secret check above.
+    await tg_router.handle_provider_update(
+        update, str(request.base_url), secret_token=secret_token
+    )
     return {"ok": True}
 
 
@@ -568,7 +572,8 @@ async def patient_feed(link_token: str, since: int = 0) -> dict:
     return {
         "name": patient.name,
         "events": [
-            {"kind": e.kind, "text": e.text, "ts_ms": events.ts_ms(e)}
+            {"kind": e.kind, "text": e.text, "synthetic": e.synthetic,
+             "ts_ms": events.ts_ms(e)}
             for e in rows
             if e.patient_id == patient.id and e.kind in ("patient_in", "agent_out")
         ],
@@ -632,6 +637,7 @@ async def patient_send(
     await dispatch.handle_inbound(
         InboundMessage(
             channel="web",
+            synthetic=True,
             sender_ref=f"patient:{patient.id}",
             text=text,
             audio_bytes=raw if is_audio else None,
@@ -694,6 +700,7 @@ async def board_view(doctor: Doctor = Depends(current_doctor)) -> dict:
         patients.append(
             {
                 "id": patient.id,
+                "synthetic": patient.synthetic,
                 "name": patient.name,
                 "diagnosis": patient.diagnosis,
                 "status": patient.status,
@@ -706,6 +713,7 @@ async def board_view(doctor: Doctor = Depends(current_doctor)) -> dict:
                 "loops": [
                     {
                         "id": l.id,
+                        "synthetic": l.synthetic,
                         "type": l.type,
                         "title": l.title,
                         "state": l.state,
@@ -726,7 +734,8 @@ async def board_view(doctor: Doctor = Depends(current_doctor)) -> dict:
         qr = {"url": f"/qr/{latest.id}.png",
               "patient": who.name if who else "",
               "page": f"/p/{latest.id}"}
-    return {"doctor": doctor.name, "patients": patients, "counts": counts, "qr": qr}
+    return {"doctor": doctor.name, "synthetic": doctor.synthetic,
+            "patients": patients, "counts": counts, "qr": qr}
 
 
 @app.get("/c/{token}/cards")
@@ -772,6 +781,7 @@ async def feed(since: int = 0, doctor: Doctor = Depends(current_doctor)) -> dict
         "events": [
             {
                 "id": e.id,
+                "synthetic": e.synthetic,
                 "kind": e.kind,
                 "patient_id": e.patient_id,
                 "text": e.text,
@@ -810,6 +820,7 @@ async def doctor_in(
     await dispatch.handle_inbound(
         InboundMessage(
             channel="web",
+            synthetic=True,
             sender_ref=f"doctor:{doctor.web_token}",
             text=text,
             audio_bytes=raw if is_audio else None,
@@ -844,6 +855,7 @@ async def patient_in(
     await dispatch.handle_inbound(
         InboundMessage(
             channel="web",
+            synthetic=True,
             sender_ref=f"patient:{patient.id}",
             text=text,
             audio_bytes=raw if is_audio else None,
@@ -876,7 +888,8 @@ async def patient_view(
         # configured, which is what the page had to guess from before.
         **views.reach(patient, tokens.get(patient.id)),
         "patient": {
-            "id": patient.id, "name": patient.name, "age": patient.age,
+            "id": patient.id, "synthetic": patient.synthetic,
+            "name": patient.name, "age": patient.age,
             "sex": patient.sex, "diagnosis": patient.diagnosis,
             "plan": patient.plan_text, "targets": patient.targets,
             "baseline": patient.baseline, "status": patient.status,
@@ -887,7 +900,8 @@ async def patient_view(
             "notes": patient.notes,
         },
         "loops": [
-            {"id": l.id, "type": l.type, "title": l.title, "state": l.state,
+            {"id": l.id, "synthetic": l.synthetic,
+             "type": l.type, "title": l.title, "state": l.state,
              "details": l.details, "attempts": l.attempts,
              "due_at": l.due_at.isoformat() if l.due_at else None,
              "results": l.results, "readings": l.readings,
@@ -914,6 +928,7 @@ async def patient_view(
         ],
         "timeline": [
             {"kind": e.kind, "text": e.text, "meta": e.meta,
+             "synthetic": e.synthetic,
              "ts_ms": events.ts_ms(e)}
             for e in history
         ],

@@ -222,6 +222,7 @@ def row(event: Any) -> dict[str, Any]:
     """One open card as the dashboard reads it."""
     return {
         "id": event.id,
+        "synthetic": getattr(event, "synthetic", True),
         "patient_id": event.patient_id,
         "kind": event.kind,
         "text": event.text,

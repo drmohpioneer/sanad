@@ -113,6 +113,7 @@ def settings_view(doctor: Any, pol: Any) -> dict[str, Any]:
     bound = getattr(doctor, "telegram_chat_id", None) is not None
     return {
         "name": doctor.name,
+        "synthetic": getattr(doctor, "synthetic", True),
         "specialty": getattr(doctor, "specialty", ""),
         "language": getattr(doctor, "lang", ""),
         "telegram_bound": bound,

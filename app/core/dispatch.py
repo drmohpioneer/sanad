@@ -86,6 +86,7 @@ async def handle_inbound(msg: InboundMessage) -> None:
                 await events.append_event(
                     doctor.id, "doctor_in", text, channel=msg.channel,
                     meta={"source": "card answer"},
+                    synthetic=msg.synthetic,
                 )
                 if doctor.awaiting_relay_id:
                     # doctor_reply clears the flag itself, as it did in S2.
@@ -104,6 +105,7 @@ async def handle_inbound(msg: InboundMessage) -> None:
             await events.append_event(
                 doctor.id, "doctor_in", text, channel=msg.channel,
                 meta={"source": "command"},
+                synthetic=msg.synthetic,
             )
             await out.send(
                 msg.sender_ref, OutboundMessage(text=await command(doctor, text))
@@ -115,6 +117,7 @@ async def handle_inbound(msg: InboundMessage) -> None:
         await registrar.handle_doctor(
             doctor, text, msg.audio_bytes, msg.image_bytes,
             mime=msg.mime or "image/jpeg", channel=msg.channel,
+            synthetic=msg.synthetic,
         )
         return
 
@@ -187,7 +190,8 @@ async def _handle_patient(patient, doctor, msg: InboundMessage) -> None:
             except Exception as exc:  # noqa: BLE001 - the card carries the error
                 await concierge.voice_unreadable(
                     patient, doctor, " ".join(str(exc).split())[:200] or
-                    exc.__class__.__name__, channel=msg.channel)
+                    exc.__class__.__name__, channel=msg.channel,
+                    synthetic=msg.synthetic)
                 return
             voice = True
             transcript = transcript or ""
@@ -204,7 +208,7 @@ async def _handle_patient(patient, doctor, msg: InboundMessage) -> None:
         await concierge.handle_patient_message(
             patient, doctor, text, channel=msg.channel,
             image_bytes=msg.image_bytes, mime=msg.mime or "image/jpeg", voice=voice,
-            gate=gate,
+            gate=gate, synthetic=msg.synthetic,
         )
     finally:
         if owner:

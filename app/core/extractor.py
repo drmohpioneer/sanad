@@ -46,7 +46,7 @@ from google.genai import types
 
 from . import (
     bounded, coordinator, escalate, events, gender, labs, lang, media, photos,
-    sentinel, settings, storage, store, timing, verify, vitals,
+    provenance, sentinel, settings, storage, store, timing, verify, vitals,
 )
 from .adapters import OutboundMessage, fanout
 from .models import Doctor, Event, Loop, Patient, PhotoReading
@@ -387,9 +387,10 @@ def unexpected_card(patient: Patient, image_path: str, why: str) -> dict:
 # --------------------------------------------------------------------------- #
 async def handle_photo(
     patient: Patient, doctor: Doctor, image: bytes, mime: str = "image/jpeg",
-    *, caption: str = "", channel: str = "web",
+    *, caption: str = "", channel: str = "web", synthetic: bool = True,
 ) -> None:
     """Claim identical bytes once per patient/day, then read and route them."""
+    synthetic = provenance.derived(patient.synthetic, synthetic)
     digest = hashlib.sha256(image).hexdigest()
     day_index = timing.day_index(store.now(), timing.REAL_DAY_SECONDS)
     owner = store.new_id()
@@ -401,6 +402,7 @@ async def handle_photo(
             patient_id=patient.id, channel=channel,
             meta={"duplicate_image": True, "digest": digest[:16],
                   "decided_by": "code (same image bytes, patient, Cairo day)"},
+            synthetic=synthetic,
         )
         await fanout().send(f"patient:{patient.id}", OutboundMessage(
             text=PATIENT_DUPLICATE[speak],
@@ -409,7 +411,8 @@ async def handle_photo(
         return
     try:
         await _handle_photo_claimed(
-            patient, doctor, image, mime, caption=caption, channel=channel)
+            patient, doctor, image, mime, caption=caption, channel=channel,
+            synthetic=synthetic)
     except Exception:
         await store.release_photo(patient.id, day_index, digest, owner)
         raise
@@ -418,7 +421,7 @@ async def handle_photo(
 
 async def _handle_photo_claimed(
     patient: Patient, doctor: Doctor, image: bytes, mime: str = "image/jpeg",
-    *, caption: str = "", channel: str = "web",
+    *, caption: str = "", channel: str = "web", synthetic: bool = True,
 ) -> None:
     """A newly claimed photo from a patient, read and routed once."""
     out = fanout()
@@ -440,6 +443,7 @@ async def _handle_photo_claimed(
         await _relay_unread(
             patient, doctor, image_path, speak, channel,
             note.get("error") or "This photo could not be read.", note,
+            synthetic=synthetic,
         )
         return
 
@@ -460,12 +464,13 @@ async def _handle_photo_claimed(
             await _relay_unread(
                 patient, doctor, image_path, speak, channel,
                 "This reads as a lab report but no values could be read off it.",
-                note,
+                note, synthetic=synthetic,
             )
             return
         await _handle_lab(
             patient, doctor, reading, note, image_path, speak, who, channel,
             test_loop if route == "attach_to_loop" else None, caption=caption,
+            synthetic=synthetic,
         )
         return
 
@@ -477,9 +482,10 @@ async def _handle_photo_claimed(
             await _relay_unread(
                 patient, doctor, image_path, speak, channel,
                 "This reads as a monitor screen but the numbers were not legible.",
-                note,
+                note, synthetic=synthetic,
             )
             return
+        row = provenance.evidence(row, synthetic=synthetic)
         loop = monitor_loop if route == "monitor_reading" else None
         if loop is not None:
             # ArrayUnion, not read-append-write (codex item 13, wave B's
@@ -497,15 +503,18 @@ async def _handle_photo_claimed(
         await events.append_event(
             doctor.id, "system", f"monitor reading from {patient.name}",
             patient_id=patient.id, loop_id=loop.id if loop else None, channel=channel,
-            media=[{"kind": "image", "path": image_path}],
+            media=[provenance.evidence(
+                {"kind": "image", "path": image_path}, synthetic=synthetic
+            )],
             meta={"reading": row, "route": route,
                   "decided_by": "code (core/photos.py routing table)",
                   "vitals": verdict.as_meta() if verdict else None},
+            synthetic=synthetic,
         )
         if verdict is not None and verdict.red:
             await escalate_bp(patient, doctor, verdict, row, speak=speak,
                               who=who, channel=channel, loop=loop,
-                              image_path=image_path)
+                              image_path=image_path, synthetic=synthetic)
             return
         told = PATIENT_READING if loop is not None else PATIENT_READING_UNFILED
         await out.send(to_patient, OutboundMessage(text=told[speak]))
@@ -518,7 +527,7 @@ async def _handle_photo_claimed(
     await _relay_unread(
         patient, doctor, image_path, speak, channel,
         f"Classified as {reading.kind}, so it was stored and passed on unread.",
-        note,
+        note, synthetic=synthetic,
     )
 
 
@@ -528,7 +537,7 @@ async def _handle_photo_claimed(
 async def escalate_bp(
     patient: Patient, doctor: Doctor, verdict: "vitals.Verdict", row: dict,
     *, speak: str, who: str, channel: str, loop: Optional[Loop] = None,
-    image_path: str = "",
+    image_path: str = "", synthetic: bool = True,
 ) -> None:
     """One red blood pressure, told to whoever needs to hear it.
 
@@ -544,6 +553,8 @@ async def escalate_bp(
     (core/vitals.py explains why the two differ).
     """
     out = fanout()
+    synthetic = provenance.derived(patient.synthetic, synthetic)
+    row = provenance.evidence(row, synthetic=synthetic)
     to_patient, to_doctor = f"patient:{patient.id}", f"doctor:{doctor.web_token}"
 
     where = (f"Added to {loop.title}." if loop is not None
@@ -567,6 +578,7 @@ async def escalate_bp(
             meta={"sentinel": verdict.as_meta(), "reading": row,
                   "told_patient": "emergency block" if verdict.emergency
                                   else "reading acknowledged"},
+            synthetic=synthetic,
         )
         await out.send(to_doctor, OutboundMessage(
             text=f"Critical blood pressure for {patient.name}.",
@@ -577,6 +589,7 @@ async def escalate_bp(
         persist, doctor_id=doctor.id, patient_id=patient.id,
         what="the blood pressure escalation",
         loop_id=loop.id if loop else None, channel=channel,
+        synthetic=synthetic,
     )
     if not landed:
         told = escalate.fail_closed_text(speak, who, emergency=True)
@@ -595,15 +608,18 @@ async def escalate_bp(
 
 async def _relay_unread(
     patient: Patient, doctor: Doctor, image_path: str, speak: str, channel: str,
-    why: str, note: dict,
+    why: str, note: dict, *, synthetic: bool = True,
 ) -> None:
     """The one exit for a photo Sanad will not act on: store it, hand it over."""
     out = fanout()
     await events.append_event(
         doctor.id, "system", "photo stored and relayed unread",
         patient_id=patient.id, channel=channel,
-        media=[{"kind": "image", "path": image_path}],
+        media=[provenance.evidence(
+            {"kind": "image", "path": image_path}, synthetic=synthetic
+        )],
         meta={"why": why, "note": note},
+        synthetic=synthetic,
     )
     await out.send(f"patient:{patient.id}",
                    OutboundMessage(text=PATIENT_UNEXPECTED[speak]))
@@ -665,7 +681,7 @@ async def recent_words(patient: Patient, doctor: Doctor, caption: str) -> list[s
 async def _handle_lab(
     patient: Patient, doctor: Doctor, reading: PhotoReading, note: dict,
     image_path: str, speak: str, who: str, channel: str, loop: Optional[Loop],
-    caption: str = "",
+    caption: str = "", synthetic: bool = True,
 ) -> None:
     """A lab slip, with or without an order behind it. Same reading, same table."""
     out = fanout()
@@ -693,9 +709,12 @@ async def _handle_lab(
     slip_concept = sentinel.code_net(slip_words)
 
     results = [
-        {"analyte": f.analyte, "value": f.printed, "unit": f.unit,
-         "ref_range": f.ref_range, "flag": f.flag, "level": f.level,
-         "target": f.target, "baseline": f.baseline, "line": f.line}
+        provenance.evidence(
+            {"analyte": f.analyte, "value": f.printed, "unit": f.unit,
+             "ref_range": f.ref_range, "flag": f.flag, "level": f.level,
+             "target": f.target, "baseline": f.baseline, "line": f.line},
+            synthetic=synthetic,
+        )
         for f in findings
     ]
 
@@ -724,9 +743,14 @@ async def _handle_lab(
                 doctor.id, "escalation",
                 f"identity check failed on a slip sent by {patient.name}",
                 patient_id=patient.id, loop_id=loop.id, channel=channel,
-                media=[{"kind": "image", "path": image_path}],
-                meta={"verify": verdict.as_meta(), "results": results,
+                media=[provenance.evidence(
+                    {"kind": "image", "path": image_path}, synthetic=synthetic
+                )],
+                meta={"verify": provenance.evidence(
+                          verdict.as_meta(), synthetic=synthetic),
+                      "results": results,
                       "decided_by": "code (core/verify.py identity check)"},
+                synthetic=synthetic,
             )
             # Completeness is about this patient's order. Once identity failed,
             # printing "3 of 4 requested analytes" beside an unattached slip is
@@ -748,7 +772,9 @@ async def _handle_lab(
         await store.append_result(loop.id, results)
         fields: dict[str, Any] = {
             "attempts": 0, "last_reply_at": store.now(),
-            "verified": verdict.as_meta(),
+            "verified": provenance.evidence(
+                verdict.as_meta(), synthetic=synthetic
+            ),
         }
         if verdict.satisfies:
             fields["state"] = "pending_review"
@@ -773,7 +799,9 @@ async def _handle_lab(
         f"lab slip read for {loop.title}" if loop is not None
         else f"lab slip read with no open test for {patient.name}",
         patient_id=patient.id, loop_id=loop.id if loop else None, channel=channel,
-        media=[{"kind": "image", "path": image_path}],
+        media=[provenance.evidence(
+            {"kind": "image", "path": image_path}, synthetic=synthetic
+        )],
         meta={
             "lab": reading.lab_name, "taken_on": reading.taken_on,
             "orientation": note, "results": results,
@@ -782,8 +810,11 @@ async def _handle_lab(
             "decided_by": "code (core/labs.py critical-value table)",
             "urgent_review": [f.analyte for f in urgent],
             "slip_text_sentinel": slip_concept or "",
-            "verify": verdict.as_meta() if verdict is not None else None,
+            "verify": (provenance.evidence(
+                verdict.as_meta(), synthetic=synthetic
+            ) if verdict is not None else None),
         },
+        synthetic=synthetic,
     )
 
     # Identity failure is a yellow verification problem, not a red clinical
@@ -820,6 +851,7 @@ async def _handle_lab(
                                    "concept": "critical lab value",
                                    "nets_run": ["code"]},
                       "results": results},
+                synthetic=synthetic,
             )
             await out.send(to_doctor, OutboundMessage(
                 text=f"Critical lab value for {patient.name}.",
@@ -830,6 +862,7 @@ async def _handle_lab(
             persist_critical, doctor_id=doctor.id, patient_id=patient.id,
             what="the critical lab escalation",
             loop_id=loop.id if loop else None, channel=channel,
+            synthetic=synthetic,
         )
         await out.send(to_patient, OutboundMessage(
             text=critical_text(speak, who) if landed
@@ -856,6 +889,7 @@ async def _handle_lab(
                                "nets_run": ["code"]},
                   "results": results,
                   "decided_by": "code (core/labs.py unit and flag rules)"},
+            synthetic=synthetic,
         )
 
     await out.send(to_patient, OutboundMessage(text=PATIENT_RECEIVED[speak]))
@@ -905,19 +939,25 @@ async def attach_results(doctor: Doctor, event_id: str) -> None:
     if event is None or patient is None:
         await out.send(to_doctor, OutboundMessage(text="That result is gone."))
         return
-    entry = {
+    results = provenance.evidence_rows(event.meta.get("results", []))
+    evidence_synthetic = provenance.derived(
+        event.synthetic,
+        *(row.get("synthetic") for row in results),
+    )
+    entry = provenance.evidence({
         "at": store.now().isoformat(timespec="minutes"),
         "lab": event.meta.get("lab", ""),
         "taken_on": event.meta.get("taken_on", ""),
         "image": event.meta.get("image_path", ""),
-        "results": event.meta.get("results", []),
-    }
+        "results": results,
+    }, synthetic=evidence_synthetic)
     await store.update_patient(
         patient.id, results=[*(patient.results or []), entry]
     )
     await events.append_event(
         doctor.id, "system", f"result attached to {patient.name}'s record",
         patient_id=patient.id, meta={"from_event": event_id},
+        synthetic=evidence_synthetic,
     )
     await out.send(to_doctor, OutboundMessage(
         text=f"Kept on {patient.name}'s record. No loop was opened."))
@@ -931,17 +971,26 @@ async def open_loop_for(doctor: Doctor, event_id: str) -> None:
     if event is None or patient is None:
         await out.send(to_doctor, OutboundMessage(text="That result is gone."))
         return
-    results = event.meta.get("results", [])
+    results = provenance.evidence_rows(event.meta.get("results", []))
+    evidence_synthetic = provenance.derived(
+        event.synthetic,
+        *(row.get("synthetic") for row in results),
+    )
+    mission_synthetic = provenance.derived(
+        patient.synthetic, evidence_synthetic
+    )
     named = ", ".join(str(r.get("analyte", "")) for r in results[:4] if r.get("analyte"))
     made = store.now()
     loop = await store.create_loop(Loop(
-        id=store.new_id(), patient_id=patient.id, doctor_id=doctor.id,
+        id=store.new_id(), synthetic=mission_synthetic,
+        patient_id=patient.id, doctor_id=doctor.id,
         type="TEST", title="Lab result", details={"test_name": named or "Lab result"},
         state="pending_review", results=results, created_at=made, updated_at=made,
     ))
     await events.append_event(
         doctor.id, "system", f"loop opened for {patient.name}'s lab result",
         patient_id=patient.id, loop_id=loop.id, meta={"from_event": event_id},
+        synthetic=mission_synthetic,
     )
     await out.send(to_doctor, OutboundMessage(
         text=f"Opened {loop.title} for {patient.name}, waiting for your review.",

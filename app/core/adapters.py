@@ -13,13 +13,17 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from . import events, store, telegram
 
 
 class InboundMessage(BaseModel):
     channel: Literal["web", "telegram"]
+    # False is privileged: only main.telegram_webhook may originate it after
+    # the provider webhook secret has verified. Missing/internal input is
+    # synthetic by default.
+    synthetic: StrictBool = True
     sender_ref: str  # "doctor:<web_token>" or "patient:<patient_id>"
     text: Optional[str] = None
     audio_bytes: Optional[bytes] = None

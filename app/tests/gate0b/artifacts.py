@@ -56,6 +56,66 @@ def digest(value: Any) -> str:
     return digest_bytes(dumps(value).encode("utf-8"))
 
 
+def legacy_projection(actual: Any, baseline: Any, path: str = "$") -> Any:
+    """Project Gate 0C's one additive field onto the frozen Gate 0B schema.
+
+    Gate 0B remains byte-for-byte immutable. Gate 0C is explicitly required to
+    add ``synthetic`` throughout persisted/API shapes, so replay compares the
+    old contract after removing only a new literal-boolean ``synthetic`` key at
+    positions where the committed baseline had no such key. Existing
+    ``meta.synthetic`` values remain in the comparison, and every other extra,
+    missing, reordered, or changed value still fails.
+    """
+    if isinstance(baseline, dict) and isinstance(actual, dict):
+        missing = set(baseline) - set(actual)
+        if missing:
+            raise AssertionError(f"Gate 0B projection missing keys at {path}: {missing}")
+        extra = set(actual) - set(baseline)
+        refused = extra - {"synthetic"}
+        if refused:
+            raise AssertionError(f"Gate 0B projection extra keys at {path}: {refused}")
+        if "synthetic" in extra and type(actual["synthetic"]) is not bool:
+            raise AssertionError(
+                f"Gate 0B projection found non-boolean synthetic at {path}"
+            )
+        # A Gate 0B beat seals the complete contemporary subtree. Validate the
+        # replay's own seal before computing the corresponding legacy seal;
+        # otherwise projection could accidentally conceal a corrupt replay
+        # checksum by replacing it with a freshly computed value.
+        for subtree, seal in (("api", "api_sha256"),
+                              ("state", "state_sha256")):
+            if subtree in baseline and seal in baseline:
+                actual_seal = actual.get(seal)
+                expected_seal = digest(actual.get(subtree))
+                if actual_seal != expected_seal:
+                    raise AssertionError(
+                        f"Gate 0B projection found invalid {seal} at {path}"
+                    )
+        projected = {
+            key: legacy_projection(actual[key], value, f"{path}.{key}")
+            for key, value in baseline.items()
+        }
+        # Beat fixtures seal their API and state subtrees. Recompute those two
+        # seals over the authorized legacy projection; the committed values
+        # still have to match exactly.
+        if "api" in projected and "api_sha256" in projected:
+            projected["api_sha256"] = digest(projected["api"])
+        if "state" in projected and "state_sha256" in projected:
+            projected["state_sha256"] = digest(projected["state"])
+        return projected
+    if isinstance(baseline, list) and isinstance(actual, list):
+        if len(actual) != len(baseline):
+            raise AssertionError(
+                f"Gate 0B projection list length moved at {path}: "
+                f"{len(actual)} != {len(baseline)}"
+            )
+        return [
+            legacy_projection(got, expected, f"{path}[{index}]")
+            for index, (got, expected) in enumerate(zip(actual, baseline))
+        ]
+    return actual
+
+
 def write_json(path: Path, value: Any) -> str:
     """Write one canonical JSON artifact and return its SHA-256."""
     raw = dumps(value).encode("utf-8")

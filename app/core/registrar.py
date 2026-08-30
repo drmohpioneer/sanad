@@ -26,7 +26,7 @@ from google.genai import types
 
 from . import (
     bounded, chaser, contract, duedates, events, extractor, gender, identify,
-    links, media, policy, sentinel, settings, storage, store, telegram,
+    links, media, policy, provenance, sentinel, settings, storage, store, telegram,
 )
 from .adapters import OutboundMessage, fanout
 from .models import (
@@ -490,7 +490,7 @@ def _as_loop(proposal: ProposedLoop, now: datetime) -> SimpleNamespace:
     proposal is read through the same fields core/contract.py reads.
     """
     return SimpleNamespace(
-        id="", type=proposal.type, title=proposal.title,
+        id="", synthetic=True, type=proposal.type, title=proposal.title,
         details=loop_details(proposal), state="open",
         due_at=(now + timedelta(days=proposal.due_in_days)
                 if proposal.due_in_days is not None else None),
@@ -766,9 +766,11 @@ async def handle_doctor(
     image_bytes: Optional[bytes] = None,
     mime: str = "image/jpeg",
     channel: str = "web",
+    synthetic: bool = True,
 ) -> None:
     """A dictation - typed, spoken or photographed -> a confirm card in the feed."""
     adapter, target = fanout(), f"doctor:{doctor.web_token}"
+    evidence_synthetic = provenance.derived(doctor.synthetic, synthetic)
 
     if image_bytes:
         run_id, _ = await settings.current()
@@ -781,8 +783,12 @@ async def handle_doctor(
             f"prescription photo: {text.strip()}" if (text or "").strip()
             else "prescription photo",
             channel=channel,
-            media=[{"kind": "image", "path": path}],
+            media=[provenance.evidence(
+                {"kind": "image", "path": path},
+                synthetic=evidence_synthetic,
+            )],
             meta={"source": "photo"},
+            synthetic=synthetic,
         )
         record = await propose_from_image(image_bytes, mime)
     elif audio_bytes:
@@ -804,14 +810,19 @@ async def handle_doctor(
             "doctor_in",
             text,
             channel=channel,
-            media=[{"kind": "audio", "inline_note": "voice note, transcribed"}],
+            media=[provenance.evidence(
+                {"kind": "audio", "inline_note": "voice note, transcribed"},
+                synthetic=evidence_synthetic,
+            )],
             meta={"source": "voice"},
+            synthetic=synthetic,
         )
         record = await propose(text) if text.strip() else None
     else:
         text = (text or "").strip()
         await events.append_event(
-            doctor.id, "doctor_in", text, channel=channel, meta={"source": "text"}
+            doctor.id, "doctor_in", text, channel=channel,
+            meta={"source": "text"}, synthetic=synthetic,
         )
         record = await propose(text) if text else None
 
@@ -922,6 +933,7 @@ async def handle_doctor(
 
     confirm = PendingConfirm(
         id=new_confirm_id(),
+        synthetic=evidence_synthetic,
         doctor_id=doctor.id,
         proposed=record.model_dump(),
         patient_id=outcome.patient_id or None,
@@ -1131,6 +1143,7 @@ async def _commit(doctor: Doctor, confirm: PendingConfirm,
             # Derived, not fresh: the same confirmation always makes the same
             # patient, so a retry is a rewrite and never a second person.
             id=store.derived_id(confirm_id, "patient"),
+            synthetic=provenance.derived(doctor.synthetic, confirm.synthetic),
             doctor_id=doctor.id,
             name=record.patient.name,
             phone=record.patient.phone,
@@ -1156,6 +1169,9 @@ async def _commit(doctor: Doctor, confirm: PendingConfirm,
         await store.create_loop(
             Loop(
                 id=store.derived_id(confirm_id, "loop", str(index)),
+                synthetic=provenance.derived(
+                    patient.synthetic, confirm.synthetic
+                ),
                 patient_id=patient.id,
                 doctor_id=doctor.id,
                 type=proposal.type,
@@ -1175,7 +1191,8 @@ async def _commit(doctor: Doctor, confirm: PendingConfirm,
 
     await store.delete_confirm(confirm_id)
     await events.append_event(
-        doctor.id, "system", "record committed", patient_id=patient.id
+        doctor.id, "system", "record committed", patient_id=patient.id,
+        synthetic=patient.synthetic,
     )
 
     # The patient onboards himself: one-time deep link now, QR of the same link.
@@ -1208,6 +1225,7 @@ async def _commit(doctor: Doctor, confirm: PendingConfirm,
         doctor.id, "system", f"{len(queued)} follow-up tasks scheduled",
         patient_id=patient.id,
         meta={"queued": queued, "queue_error": queue_error},
+        synthetic=patient.synthetic,
     )
 
     await adapter.send(
@@ -1325,6 +1343,9 @@ async def attach(doctor: Doctor, confirm: PendingConfirm,
                 # are: a retried addition adds the same loops and not a second
                 # copy of them (codex item 6).
                 id=store.derived_id(confirm.id, "loop", str(index)),
+                synthetic=provenance.derived(
+                    patient.synthetic, confirm.synthetic
+                ),
                 patient_id=patient.id,
                 doctor_id=doctor.id,
                 type=proposal.type,
@@ -1349,6 +1370,7 @@ async def attach(doctor: Doctor, confirm: PendingConfirm,
         meta={"added_loops": [loop.id for loop in made],
               "changed": sorted(fields), "changes": changes,
               "note": (confirm.note or "").strip()},
+        synthetic=provenance.derived(patient.synthetic, confirm.synthetic),
     )
 
     # Same rule as a new record: the queue may refuse and the record still
@@ -1366,6 +1388,7 @@ async def attach(doctor: Doctor, confirm: PendingConfirm,
         doctor.id, "system", f"{len(queued)} follow-up tasks scheduled",
         patient_id=patient.id,
         meta={"queued": queued, "queue_error": queue_error},
+        synthetic=provenance.derived(patient.synthetic, confirm.synthetic),
     )
 
     lines = [f"{len(made)} new care loops on {describe(patient)}."]

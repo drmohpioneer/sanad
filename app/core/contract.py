@@ -134,6 +134,7 @@ def render(loop: Any, pol: policy_module.Policy, doctor_name: str,
     """One open loop plus one policy -> the contract shape, as plain data."""
     return {
         "loop_id": getattr(loop, "id", ""),
+        "synthetic": getattr(loop, "synthetic", True),
         "type": getattr(loop, "type", ""),
         "title": getattr(loop, "title", ""),
         "objective": objective(loop, patient_name),

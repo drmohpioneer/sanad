@@ -22,6 +22,7 @@ from google.api_core import exceptions as gexc
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from . import provenance
 from .models import (
     Doctor,
     Event,
@@ -78,6 +79,12 @@ def _write(record: Any) -> dict[str, Any]:
     return body
 
 
+def _reject_synthetic_update(fields: dict[str, Any]) -> None:
+    """Provenance is immutable; generic patch helpers may not rewrite it."""
+    if "synthetic" in fields:
+        raise ValueError("synthetic provenance is immutable")
+
+
 # --------------------------------------------------------------------------- #
 # Doctors
 # --------------------------------------------------------------------------- #
@@ -86,6 +93,7 @@ async def create_doctor(
 ) -> Doctor:
     doc = Doctor(
         id=new_id(),
+        synthetic=True,
         name=name,
         specialty=specialty,
         lang=lang,
@@ -132,6 +140,7 @@ async def doctor_by_telegram(chat_id: int) -> Optional[Doctor]:
 
 
 async def update_doctor(doctor_id: str, **fields: Any) -> None:
+    _reject_synthetic_update(fields)
     await db().collection("doctors").document(doctor_id).update(fields)
 
 
@@ -193,6 +202,7 @@ async def patients_by_telegram(chat_id: int) -> list[Patient]:
 
 
 async def update_patient(patient_id: str, **fields: Any) -> None:
+    _reject_synthetic_update(fields)
     await db().collection("patients").document(patient_id).update(fields)
 
 
@@ -250,6 +260,7 @@ async def get_loop(loop_id: str) -> Optional[Loop]:
 
 
 async def update_loop(loop_id: str, **fields: Any) -> None:
+    _reject_synthetic_update(fields)
     fields.setdefault("updated_at", now())
     await db().collection("loops").document(loop_id).update(fields)
 
@@ -840,8 +851,9 @@ async def append_reading(loop_id: str, row: dict[str, Any]) -> None:
     ArrayUnion also makes a replayed message harmless: the same (day, slot,
     value) row added twice is one row.
     """
+    explicit = provenance.evidence(row)
     await db().collection("loops").document(loop_id).update({
-        "readings": firestore.ArrayUnion([row]),
+        "readings": firestore.ArrayUnion([explicit]),
         "updated_at": now(),
     })
 
@@ -860,6 +872,7 @@ async def append_result(
     batch = [rows] if isinstance(rows, dict) else list(rows)
     if not batch:
         return
+    batch = [provenance.evidence(row) for row in batch]
     await db().collection("loops").document(loop_id).update({
         "results": firestore.ArrayUnion(batch),
         "updated_at": now(),
@@ -1036,6 +1049,7 @@ async def update_event(event_id: str, **fields: Any) -> None:
     kind, the timestamp and the media of a stored event are still write-once,
     so the history a judge reads is unchanged by this.
     """
+    _reject_synthetic_update(fields)
     await db().collection("events").document(event_id).update(fields)
 
 

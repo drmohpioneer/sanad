@@ -94,6 +94,7 @@ async def told_or_fail_closed(
     what: str = "escalation",
     loop_id: Optional[str] = None,
     channel: str = "web",
+    synthetic: bool = True,
 ) -> bool:
     """Run the persistence. True means the patient may now be told.
 
@@ -123,6 +124,7 @@ async def told_or_fail_closed(
                 patient_id=patient_id, loop_id=loop_id, channel=channel,
                 meta={"error": FAIL_CLOSED, "what": what,
                       "decided_by": "code (core/escalate.py fail closed)"},
+                synthetic=synthetic,
             )
         except Exception:
             log.exception("could not write the error event either")

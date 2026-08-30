@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from . import monitoring
+from . import monitoring, provenance
 from .models import Event, Loop, Patient, Relay
 
 # The phone block. Not a real range, on purpose.
@@ -422,7 +422,7 @@ def records(doctor_id: str, now: datetime
         patient_id = _id(doctor_id, index)
         made = now - timedelta(minutes=len(PEOPLE) - index)
         patients.append(Patient(
-            id=patient_id, doctor_id=doctor_id, name=person.name,
+            id=patient_id, synthetic=True, doctor_id=doctor_id, name=person.name,
             phone=PHONE.format(index), age=person.age, sex=person.sex,
             diagnosis=person.diagnosis, plan_text=person.plan,
             channels={"web": True, "telegram_chat_id": None},
@@ -430,7 +430,8 @@ def records(doctor_id: str, now: datetime
         ))
         if person.said:
             events.append(Event(
-                id=_id(doctor_id, index, "said"), doctor_id=doctor_id,
+                id=_id(doctor_id, index, "said"), synthetic=True,
+                doctor_id=doctor_id,
                 patient_id=patient_id, kind="patient_in", channel="web",
                 text=person.said,
                 meta={"source": "text", "synthetic": True}, ts=made,
@@ -442,14 +443,18 @@ def records(doctor_id: str, now: datetime
             per_day = 2 if "twice" in str(contract.details.get("schedule") or "") \
                 else 1
             loops.append(Loop(
-                id=loop_id, patient_id=patient_id, doctor_id=doctor_id,
+                id=loop_id, synthetic=True, patient_id=patient_id,
+                doctor_id=doctor_id,
                 type=contract.type, title=contract.title,
                 details=dict(contract.details), state=contract.state,
                 due_at=(now + timedelta(days=contract.due_in_days)
                         if contract.due_in_days is not None else None),
                 attempts=min(contract.contacts, 3),
-                results=[dict(row) for row in contract.results],
-                readings=[_reading_row(started, dict(row), per_day)
+                results=[provenance.evidence(row, synthetic=True)
+                         for row in contract.results],
+                readings=[provenance.evidence(
+                              _reading_row(started, dict(row), per_day),
+                              synthetic=True)
                           for row in contract.readings],
                 contacts=contract.contacts,
                 barrier=contract.barrier, paused=contract.paused,
@@ -459,7 +464,8 @@ def records(doctor_id: str, now: datetime
             if contract.critical:
                 events.append(Event(
                     id=_id(doctor_id, index, number, "crit"),
-                    doctor_id=doctor_id, patient_id=patient_id, loop_id=loop_id,
+                    synthetic=True, doctor_id=doctor_id,
+                    patient_id=patient_id, loop_id=loop_id,
                     kind="escalation", channel="web",
                     text=f"critical result escalated: {contract.title}",
                     meta={"sentinel": {"fired": True, "net": "code",

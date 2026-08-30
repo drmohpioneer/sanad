@@ -21,9 +21,11 @@ async def append_event(
     channel: Channel = "web",
     media: Optional[list[dict[str, Any]]] = None,
     meta: Optional[dict[str, Any]] = None,
+    synthetic: bool = True,
 ) -> Event:
     event = Event(
         id=store.new_id(),
+        synthetic=synthetic,
         doctor_id=doctor_id,
         patient_id=patient_id,
         loop_id=loop_id,
