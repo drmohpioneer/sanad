@@ -253,7 +253,20 @@ class ProviderBoundary(unittest.IsolatedAsyncioTestCase):
         routed.assert_not_awaited()
 
     async def test_verified_telegram_doctor_and_patient_messages_are_false(self) -> None:
-        for role in ("doctor", "patient"):
+        from core.command_bus import ReplayClaim
+
+        class HermeticReplay:
+            async def claim(self, _command):
+                return ReplayClaim(state="CLAIMED")
+
+            async def complete(self, _command, _result):
+                return None
+
+            async def release(self, _command):
+                return None
+
+        transport = sanad_main.transport_runtime()
+        for update_id, role in enumerate(("doctor", "patient"), start=7):
             received: list[InboundMessage] = []
 
             async def handle(msg: InboundMessage) -> None:
@@ -268,9 +281,10 @@ class ProviderBoundary(unittest.IsolatedAsyncioTestCase):
                 patch.object(tg_router.store, "patient_by_telegram",
                              AsyncMock(return_value=found_patient)),
                 patch.object(tg_router.dispatch, "handle_inbound", handle),
+                patch.object(transport.bus, "_replay", HermeticReplay()),
             ):
                 await sanad_main.telegram_webhook(RequestStub({
-                    "update_id": 7,
+                    "update_id": update_id,
                     "message": {"chat": {"id": 77}, "text": "hello"},
                 }))
             with self.subTest(role=role):

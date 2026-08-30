@@ -30,8 +30,8 @@ import io
 from datetime import datetime, timedelta
 from typing import Optional
 
-from . import gender, lang, names, store, telegram, templates
-from .adapters import OutboundMessage, fanout
+from . import gender, lang, names, store, templates
+from .adapters import OutboundMessage, fanout, patient_deep_link
 from .models import Doctor, LinkToken, Patient, Send
 
 # How long a patient link opens anything. codex item 14: it opened a patient's
@@ -108,7 +108,7 @@ def qr_png(url: str) -> bytes:
 
 async def card_lines(token: LinkToken, base_url: str) -> list[str]:
     """The two lines the commit card shows the doctor."""
-    link = await telegram.deep_link(token.id)
+    link = await patient_deep_link(token.id)
     if not link:
         return ["Patient link: pending bot token (Telegram not configured yet)."]
     return [f"Patient link: {link}", f"QR: {base_url.rstrip('/')}/qr/{token.id}.png"]

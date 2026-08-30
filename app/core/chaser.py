@@ -363,6 +363,17 @@ async def force_due(doctor: Doctor, argument: str) -> str:
 SUPERSEDED = "superseded schedule"
 
 
+class RetryableNudgeError(RuntimeError):
+    """The Chaser durably proved this wake-up may enter its retry path.
+
+    Most exceptions are ambiguous and the outer CommandBus must keep their
+    replay claim in flight. This exception is narrower: either a failed send
+    receipt was persisted and its contact refunded, or all pre-send
+    reservations were rolled back. A provider retry is therefore part of the
+    existing Chaser state machine, not a duplicate execution.
+    """
+
+
 def receipt_key(loop_id: str, generation: int, kind: str, attempt: int) -> str:
     """The idempotency key of one wake-up: loop, generation, kind, attempt.
 
@@ -469,8 +480,13 @@ async def resend(patient: Patient, doctor: Doctor, loop: Loop, send: Send,
         error = " ".join(str(exc).split())[:200]
         await store.mark_send(send.id, "failed", error)
         await store.refund_contact(loop.id)
-        await delivery_failed(patient, doctor, loop, send.id, attempt, error)
-        raise
+        try:
+            await delivery_failed(patient, doctor, loop, send.id, attempt, error)
+        except Exception:  # the failed receipt still needs its one resend
+            log.exception("could not record the failed-delivery notice")
+        raise RetryableNudgeError(
+            "delivery failed after its retry receipt was recorded"
+        ) from exc
     await store.mark_send(send.id, "sent")
     return {"sent": True, "attempt": attempt, "resend": True,
             "loop": loop.id, "key": send.id}
@@ -694,7 +710,7 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
         carried = await coordinator.on_wake(loop, patient, doctor,
                                             receipt=send.id, facts=facts,
                                             reserved=True)
-    except Exception:
+    except Exception as exc:
         # Nothing was said, so the wake-up was not spent: give the contact, the
         # patient's day and the key back and let the retry have them.
         # `coordinator.run` swallows model failures itself, so reaching here
@@ -702,7 +718,9 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
         await store.refund_contact(loop.id)
         await store.refund_day(patient.id, day, loop.id)
         await store.release_send(send.id)
-        raise
+        raise RetryableNudgeError(
+            "the pre-send wake-up was rolled back for retry"
+        ) from exc
     if carried is not None:
         # The wake-up was spent by the agent, which did its own writing and its
         # own sending. The receipt is closed here so a retry of this task reads
@@ -802,8 +820,13 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
         error = " ".join(str(exc).split())[:200]
         await store.mark_send(send.id, "failed", error)
         await store.refund_contact(loop.id)
-        await delivery_failed(patient, doctor, loop, send.id, attempt, error)
-        raise
+        try:
+            await delivery_failed(patient, doctor, loop, send.id, attempt, error)
+        except Exception:  # the failed receipt still needs its one resend
+            log.exception("could not record the failed-delivery notice")
+        raise RetryableNudgeError(
+            "delivery failed after its retry receipt was recorded"
+        ) from exc
     await store.mark_send(send.id, "sent")
 
     if kind == "nudge" and counted >= LADDER_LENGTH:
@@ -886,8 +909,3 @@ async def revive_unreachable(patient: Patient, doctor: Doctor) -> list[Loop]:
         )
         revived.append(loop)
     return revived
-
-
-# The in-process fallback engine delivers straight to `fire`; Cloud Tasks reaches
-# the same function through /tasks/nudge. One handler, two ways in.
-tasks.register_local_handler(fire)

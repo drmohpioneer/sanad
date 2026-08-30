@@ -23,6 +23,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from . import provenance
+from .channel_contracts import OutboxRecord
 from .models import (
     Doctor,
     Event,
@@ -563,6 +564,157 @@ async def sends_for_patient(patient_id: str) -> list[Send]:
         .where(filter=FieldFilter("patient_id", "==", patient_id))
         .stream()
     ]
+
+
+# --------------------------------------------------------------------------- #
+# S23 outbound intent shadow ledger - observed only, never dispatched here
+# --------------------------------------------------------------------------- #
+async def create_outbound_intent(record: OutboxRecord) -> bool:
+    """Create one immutable shadow observation.
+
+    A stable legacy receipt produces a stable document id. Re-observing the
+    same content is therefore a harmless no-op; seeing different content at
+    that id is an idempotency conflict and fails closed. Unstable observations
+    are assigned fresh ids before they reach this boundary.
+
+    True means this call created the row. False means an identical row already
+    existed. Nothing in this function claims or delivers an intent.
+    """
+    ref = db().collection("outbound_intents").document(record.id)
+    try:
+        await ref.create(_write(record))
+        return True
+    except gexc.AlreadyExists:
+        snap = await ref.get()
+        row = snap.to_dict() or {} if snap.exists else {}
+        if str(row.get("content_hash") or "") == record.content_hash:
+            return False
+        raise ValueError(
+            f"outbound intent idempotency conflict: {record.id}"
+        ) from None
+
+
+async def list_outbound_intents(doctor_id: str) -> list[OutboxRecord]:
+    """Return a doctor's shadow observations in deterministic time order."""
+    rows = [
+        OutboxRecord(id=s.id, **s.to_dict())
+        async for s in db()
+        .collection("outbound_intents")
+        .where(filter=FieldFilter("doctor_id", "==", doctor_id))
+        .stream()
+    ]
+    return sorted(rows, key=lambda row: (row.created_at, row.id))
+
+
+# --------------------------------------------------------------------------- #
+# S23 command replay receipts - provider-neutral hashes and typed results only
+# --------------------------------------------------------------------------- #
+COMMAND_IN_FLIGHT = "IN_FLIGHT"
+COMMAND_COMPLETED = "COMPLETED"
+
+
+async def claim_command_receipt(
+    receipt_id: str, fingerprint: str, at: datetime
+) -> dict[str, Any]:
+    """Atomically create or inspect one command replay receipt.
+
+    ``receipt_id`` is already a deterministic UUID5 derived from the tenant,
+    command kind, and idempotency key. Only its opaque value and the command
+    fingerprint reach this boundary; no raw transport identity is persisted.
+    """
+    ref = db().collection("command_receipts").document(receipt_id)
+
+    @firestore.async_transactional
+    async def claim(transaction: Any) -> dict[str, Any]:
+        snap = await ref.get(transaction=transaction)
+        if not snap.exists:
+            transaction.set(
+                ref,
+                {
+                    "fingerprint": fingerprint,
+                    "state": COMMAND_IN_FLIGHT,
+                    "created_at": at,
+                    "updated_at": at,
+                },
+            )
+            return {"state": "CLAIMED"}
+
+        row = snap.to_dict() or {}
+        if row.get("fingerprint") != fingerprint:
+            return {"state": "MISMATCH"}
+        state = row.get("state")
+        if state == COMMAND_COMPLETED:
+            return {"state": COMMAND_COMPLETED, "result": row.get("result")}
+        if state == COMMAND_IN_FLIGHT:
+            return {"state": COMMAND_IN_FLIGHT}
+        raise ValueError(f"unknown command receipt state: {state!r}")
+
+    return await claim(db().transaction())
+
+
+async def get_command_receipt(receipt_id: str) -> Optional[dict[str, Any]]:
+    """Read one opaque replay receipt for diagnostics and hermetic parity."""
+    snap = await db().collection("command_receipts").document(receipt_id).get()
+    return (snap.to_dict() or {}) if snap.exists else None
+
+
+async def complete_command_receipt(
+    receipt_id: str,
+    fingerprint: str,
+    result: dict[str, Any],
+    at: datetime,
+) -> None:
+    """Atomically make a claimed receipt terminal with its typed result."""
+    ref = db().collection("command_receipts").document(receipt_id)
+
+    @firestore.async_transactional
+    async def complete(transaction: Any) -> None:
+        snap = await ref.get(transaction=transaction)
+        if not snap.exists:
+            raise ValueError("cannot complete a missing command receipt")
+        row = snap.to_dict() or {}
+        if row.get("fingerprint") != fingerprint:
+            raise ValueError("command receipt fingerprint mismatch")
+        state = row.get("state")
+        if state == COMMAND_COMPLETED:
+            if row.get("result") != result:
+                raise ValueError("command receipt completion result mismatch")
+            return
+        if state != COMMAND_IN_FLIGHT:
+            raise ValueError(f"unknown command receipt state: {state!r}")
+        transaction.update(
+            ref,
+            {
+                "state": COMMAND_COMPLETED,
+                "result": result,
+                "completed_at": at,
+                "updated_at": at,
+            },
+        )
+
+    await complete(db().transaction())
+
+
+async def release_command_receipt(receipt_id: str, fingerprint: str) -> None:
+    """Release only the matching nonterminal claim after a typed RETRYABLE."""
+    ref = db().collection("command_receipts").document(receipt_id)
+
+    @firestore.async_transactional
+    async def release(transaction: Any) -> None:
+        snap = await ref.get(transaction=transaction)
+        if not snap.exists:
+            return
+        row = snap.to_dict() or {}
+        if row.get("fingerprint") != fingerprint:
+            raise ValueError("command receipt fingerprint mismatch")
+        state = row.get("state")
+        if state == COMMAND_IN_FLIGHT:
+            transaction.delete(ref)
+            return
+        if state != COMMAND_COMPLETED:
+            raise ValueError(f"unknown command receipt state: {state!r}")
+
+    await release(db().transaction())
 
 
 async def release_send(send_id: str) -> None:

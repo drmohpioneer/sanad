@@ -54,6 +54,14 @@ class Doctor(BaseModel):
     # Same idea for the "Send a note" button on a lab-values card.
     awaiting_note_loop_id: Optional[str] = None
     awaiting_since: Optional[datetime] = None
+    # Which ingress lane opened the pending compose window. Old records have
+    # no value; dispatch treats those short-lived records as Telegram-originated
+    # because, before this field existed, only a Telegram callback opened one.
+    # Omit the inactive default from serialization so this additive seam does
+    # not change ordinary Doctor snapshots or the legacy wire contract.
+    awaiting_channel: Optional[Channel] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     # The doctor's own rules for the Care Coordinator: how long the reschedule
     # window is, how many contacts a loop may cost, when the quiet hours are,
     # whether a cost barrier may be discussed with the patient at all, and the

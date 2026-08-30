@@ -941,7 +941,10 @@ async def doctor_reply(doctor: Doctor, relay_id: str, text: str) -> None:
     await store.update_patient(patient.id,
                                plan_text=with_addendum(patient.plan_text, text, now))
     await store.close_relay(relay_id)
-    await store.update_doctor(doctor.id, awaiting_relay_id=None)
+    await store.update_doctor(
+        doctor.id, awaiting_relay_id=None, awaiting_note_loop_id=None,
+        awaiting_since=None, awaiting_channel=None,
+    )
     await events.append_event(
         doctor.id, "system", f"plan addendum for {patient.name}",
         patient_id=patient.id, meta={"addendum": line},

@@ -490,7 +490,10 @@ class GoldenJourney:
             response, _ = await self.request(
                 "task_callback", "POST", task.path,
                 json=task.payload,
-                headers={"Authorization": VIRTUAL_TASK_AUTHORIZATION},
+                headers={
+                    "Authorization": VIRTUAL_TASK_AUTHORIZATION,
+                    "X-CloudTasks-TaskName": task.name,
+                },
             )
             self.queue.complete(task, response.status_code)
         ahmed_loops = [

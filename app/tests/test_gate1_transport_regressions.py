@@ -315,7 +315,6 @@ class EventCursorDoesNotLoseBursts(unittest.IsolatedAsyncioTestCase):
 class ProviderRejectionIsNotDelivery(unittest.IsolatedAsyncioTestCase):
     """A Telegram response body is part of the transport outcome."""
 
-    @gate1_live_bug
     async def test_telegram_ok_false_is_not_marked_delivered(self) -> None:
         marked: list[str] = []
 
@@ -374,7 +373,6 @@ class ProviderRejectionIsNotDelivery(unittest.IsolatedAsyncioTestCase):
 class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
     """A phone-only compose mode must not reinterpret another ingress lane."""
 
-    @gate1_live_bug
     async def test_telegram_reply_mode_does_not_consume_a_web_dictation(self) -> None:
         doctor = a_doctor()
         relay = Relay(
@@ -451,11 +449,60 @@ class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
             "Yes, continue it until we review.",
         )
 
+    async def test_telegram_note_mode_does_not_consume_a_web_dictation(self) -> None:
+        doctor = a_doctor(
+            awaiting_note_loop_id="loop-1",
+            awaiting_since=NOW,
+            awaiting_channel="telegram",
+        )
+        note_to_patient = AsyncMock()
+        registrar_inbound = AsyncMock()
+
+        async def update_doctor(doctor_id: str, **fields: object) -> None:
+            self.assertEqual(doctor_id, doctor.id)
+            for key, value in fields.items():
+                setattr(doctor, key, value)
+
+        with (
+            patch.object(
+                dispatch.store,
+                "doctor_by_token",
+                AsyncMock(return_value=doctor),
+            ),
+            patch.object(dispatch.store, "update_doctor", update_doctor),
+            patch.object(dispatch.store, "now", return_value=NOW),
+            patch.object(dispatch.events, "append_event", AsyncMock()),
+            patch.object(dispatch.concierge, "note_to_patient", note_to_patient),
+            patch.object(dispatch.registrar, "handle_doctor", registrar_inbound),
+        ):
+            await dispatch.handle_inbound(
+                InboundMessage(
+                    channel="web",
+                    sender_ref=f"doctor:{doctor.web_token}",
+                    text="New patient Noura, 51, due for HbA1c.",
+                )
+            )
+            await dispatch.handle_inbound(
+                InboundMessage(
+                    channel="telegram",
+                    sender_ref=f"doctor:{doctor.web_token}",
+                    text="Please repeat the fasting panel next week.",
+                )
+            )
+
+        registrar_inbound.assert_awaited_once()
+        self.assertEqual("web", registrar_inbound.await_args.kwargs["channel"])
+        note_to_patient.assert_awaited_once_with(
+            doctor,
+            "loop-1",
+            "Please repeat the fasting panel next week.",
+        )
+        self.assertIsNone(doctor.awaiting_channel)
+
 
 class TelegramCallbacksUseActionIdempotency(unittest.IsolatedAsyncioTestCase):
     """Every surface must claim the action before doing domain work."""
 
-    @gate1_live_bug
     async def test_two_callbacks_for_one_action_carry_it_out_once(self) -> None:
         doctor = a_doctor()
         commit = AsyncMock()
@@ -497,6 +544,56 @@ class TelegramCallbacksUseActionIdempotency(unittest.IsolatedAsyncioTestCase):
             1,
             "Telegram callbacks bypassed the action claim and ran one action twice",
         )
+
+    async def test_failed_callback_releases_the_action_for_a_retry(self) -> None:
+        doctor = a_doctor()
+        claimed: set[tuple[str, str]] = set()
+        released: list[tuple[str, str]] = []
+        attempts = 0
+
+        async def claim_action(doctor_id: str, action_id: str) -> bool:
+            key = doctor_id, action_id
+            if key in claimed:
+                return False
+            claimed.add(key)
+            return True
+
+        async def release_action(doctor_id: str, action_id: str) -> None:
+            key = doctor_id, action_id
+            released.append(key)
+            claimed.remove(key)
+
+        async def commit(*_args: object) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary registrar failure")
+
+        query = {
+            "id": "callback-confirm",
+            "data": "confirm:confirm-1",
+            "message": {"chat": {"id": 7700}},
+        }
+        answer_callback = AsyncMock()
+        with (
+            patch.object(
+                tg_router.store,
+                "doctor_by_telegram",
+                AsyncMock(return_value=doctor),
+            ),
+            patch.object(tg_router.store, "claim_action", claim_action),
+            patch.object(tg_router.store, "release_action", release_action),
+            patch.object(tg_router.registrar, "commit", commit),
+            patch.object(tg_router.telegram, "answer_callback", answer_callback),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "temporary registrar failure"):
+                await tg_router._callback(query, "https://sanad.example/")
+            await tg_router._callback(query, "https://sanad.example/")
+
+        self.assertEqual(2, attempts)
+        self.assertEqual(released, [(doctor.id, "confirm:confirm-1")])
+        self.assertIn((doctor.id, "confirm:confirm-1"), claimed)
+        answer_callback.assert_awaited_once_with("callback-confirm", "confirmed")
 
 
 if __name__ == "__main__":

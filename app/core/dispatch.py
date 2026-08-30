@@ -76,7 +76,11 @@ async def handle_inbound(msg: InboundMessage) -> None:
         # He tapped a button that consumes his next message: "Answer" on a
         # relay card, or "Send a note" on a lab-values card. It lasts ten
         # minutes and /cancel calls it off (S2 review, carry-over 2).
+        # Missing awaiting_channel is a pre-migration Telegram window: no other
+        # lane could open one before that field existed.
+        pending_channel = doctor.awaiting_channel or "telegram"
         if (doctor.awaiting_relay_id or doctor.awaiting_note_loop_id) \
+                and msg.channel == pending_channel \
                 and text and not msg.audio_bytes and not msg.image_bytes:
             if text.lower().startswith(CANCEL_COMMAND):
                 await clear_pending(doctor)
@@ -269,5 +273,5 @@ async def answer_window_open(doctor: Doctor) -> bool:
 async def clear_pending(doctor: Doctor) -> None:
     await store.update_doctor(
         doctor.id, awaiting_relay_id=None, awaiting_note_loop_id=None,
-        awaiting_since=None,
+        awaiting_since=None, awaiting_channel=None,
     )

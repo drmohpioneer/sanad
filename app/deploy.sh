@@ -23,6 +23,17 @@ BUCKET=${PROJECT}-labs
 # a rehearsal never needs a redeploy; these are only the defaults.
 RUN_ID=${DEMO_RUN_ID:-dev}
 TIME_SCALE=${TIME_SCALE:-86400}
+LEGACY_RUNTIME=${LEGACY_RUNTIME:-true}
+OUTBOX_MODE=${OUTBOX_MODE:-off}
+
+if [ "$LEGACY_RUNTIME" != "true" ]; then
+  echo "Gate 2 requires LEGACY_RUNTIME=true; the replacement runtime is not active." >&2
+  exit 1
+fi
+if [ "$OUTBOX_MODE" != "off" ] && [ "$OUTBOX_MODE" != "shadow" ]; then
+  echo "OUTBOX_MODE must be off or shadow." >&2
+  exit 1
+fi
 
 # 1. Runtime service account (create once, ignore "already exists").
 if ! gcloud iam service-accounts describe "$SA" --project "$PROJECT" >/dev/null 2>&1; then
@@ -150,7 +161,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --service-account "$SA" \
   --allow-unauthenticated \
-  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=global,SERVICE_URL=${URL},SANAD_SA=${SA},TASKS_QUEUE=${QUEUE},TASKS_REGION=${REGION},LABS_BUCKET=${BUCKET},CHASER_ENGINE=${CHASER_ENGINE:-cloudtasks},DEMO_RUN_ID=${RUN_ID},TIME_SCALE=${TIME_SCALE} \
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=global,SERVICE_URL=${URL},SANAD_SA=${SA},TASKS_QUEUE=${QUEUE},TASKS_REGION=${REGION},LABS_BUCKET=${BUCKET},CHASER_ENGINE=${CHASER_ENGINE:-cloudtasks},DEMO_RUN_ID=${RUN_ID},TIME_SCALE=${TIME_SCALE},LEGACY_RUNTIME=${LEGACY_RUNTIME},OUTBOX_MODE=${OUTBOX_MODE} \
   --set-secrets "$SECRETS" \
   --memory 1Gi \
   --cpu 1 \

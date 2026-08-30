@@ -17,10 +17,15 @@ from typing import Any, Optional
 from pydantic import StrictBool
 
 from . import (
-    concierge, dispatch, events, gender, links, registrar, store, telegram,
-    uploads,
+    cards, concierge, dispatch, events, gender, links, registrar, store,
+    telegram, uploads,
 )
-from .adapters import InboundMessage, OutboundMessage, fanout
+from .adapters import (
+    InboundMessage,
+    OutboundMessage,
+    fanout,
+    send_card as send_edge_card,
+)
 from .models import PendingStart
 
 log = logging.getLogger("sanad.tg_router")
@@ -40,6 +45,23 @@ INTRO = (
 )
 
 
+# These callbacks finish their domain work at the tap itself. `reply` only
+# opens a compose window (and must be tappable again after cancel/expiry),
+# `note` is a repeatable side action, and `openpatient` is only navigation.
+# The value is also the unchanged acknowledgement for an already-finished tap.
+_RETIRING_CALLBACK_NOTES = {
+    "confirm": "confirmed",
+    "cancel": "cancelled",
+    "existing": "which record",
+    "newpatient": "new patient",
+    "reviewed": "closed",
+}
+
+
+class RetryableCallbackError(RuntimeError):
+    """A retiring callback failed only after its action claim was released."""
+
+
 def _too_big(part: dict[str, Any]) -> bool:
     """Telegram's own stated size against core/uploads.MAX_BYTES."""
     return int(part.get("file_size") or 0) > uploads.MAX_BYTES
@@ -52,7 +74,7 @@ async def _too_big_reply(chat_id: int, part: dict[str, Any]) -> None:
     a patient record is in hand: both, one after the other, because a chat that
     has sent nothing but an oversized file has told us nothing else.
     """
-    await telegram.send_card(
+    await send_edge_card(
         chat_id,
         uploads.refusal_text("ar", "u", too_large=True) + "\n"
         + uploads.refusal_text("en", "u", too_large=True))
@@ -90,53 +112,80 @@ async def _callback(query: dict[str, Any], base_url: str) -> None:
     note = "not your board"
     if doctor is not None:
         verb, _, ident = data.partition(":")
-        if verb == "confirm":
-            await registrar.commit(doctor, ident, base_url)
-            note = "confirmed"
-        elif verb == "cancel":
-            await registrar.cancel(doctor, ident)
-            note = "cancelled"
-        elif verb == "existing":
-            # S9: the same three ids the console sends, so a doctor who picks
-            # the record on his phone gets the same confirm card he would have
-            # got in the browser.
-            patient_id, _, confirm_id = ident.partition(":")
-            await registrar.choose_existing(doctor, patient_id, confirm_id)
-            note = "which record"
-        elif verb == "newpatient":
-            await registrar.choose_new(doctor, ident)
-            note = "new patient"
-        elif verb == "openpatient":
-            note = "open it on the board"
-        elif verb in ("reviewed", "note"):
-            # The lab-values card carries the same action ids on both surfaces.
-            if verb == "reviewed":
-                await concierge.mark_reviewed(doctor, ident)
-                note = "closed"
-            else:
+        retiring = verb in _RETIRING_CALLBACK_NOTES and cards.retires(data)
+        claimed = False
+        if retiring:
+            claimed = await store.claim_action(doctor.id, data)
+            if not claimed:
+                # The work already happened on this or another surface. Keep
+                # the callback acknowledgement byte-for-byte the same while
+                # doing none of the domain work again.
+                await telegram.answer_callback(
+                    query.get("id", ""), _RETIRING_CALLBACK_NOTES[verb]
+                )
+                return
+        try:
+            if verb == "confirm":
+                await registrar.commit(doctor, ident, base_url)
+                note = "confirmed"
+            elif verb == "cancel":
+                await registrar.cancel(doctor, ident)
+                note = "cancelled"
+            elif verb == "existing":
+                # S9: the same three ids the console sends, so a doctor who picks
+                # the record on his phone gets the same confirm card he would have
+                # got in the browser.
+                patient_id, _, confirm_id = ident.partition(":")
+                await registrar.choose_existing(doctor, patient_id, confirm_id)
+                note = "which record"
+            elif verb == "newpatient":
+                await registrar.choose_new(doctor, ident)
+                note = "new patient"
+            elif verb == "openpatient":
+                note = "open it on the board"
+            elif verb in ("reviewed", "note"):
+                # The lab-values card carries the same action ids on both surfaces.
+                if verb == "reviewed":
+                    await concierge.mark_reviewed(doctor, ident)
+                    note = "closed"
+                else:
+                    await store.update_doctor(
+                        doctor.id, awaiting_relay_id=None,
+                        awaiting_note_loop_id=ident, awaiting_since=store.now(),
+                        awaiting_channel="telegram",
+                    )
+                    await send_edge_card(
+                        chat_id, "Send your note as the next message. You have ten "
+                        "minutes, and /cancel stops it.",
+                        target_ref=f"doctor:{doctor.web_token}",
+                    )
+                    note = "send your note"
+            elif verb == "reply":
+                # Firestore holds which card he is answering; the process holds nothing.
                 await store.update_doctor(
-                    doctor.id, awaiting_relay_id=None,
-                    awaiting_note_loop_id=ident, awaiting_since=store.now(),
+                    doctor.id, awaiting_relay_id=ident,
+                    awaiting_note_loop_id=None, awaiting_since=store.now(),
+                    awaiting_channel="telegram",
                 )
-                await telegram.send_card(
-                    chat_id, "Send your note as the next message. You have ten "
-                    "minutes, and /cancel stops it."
+                await send_edge_card(
+                    chat_id, "Answering the patient: send your answer as the next "
+                    "message and it goes to the patient and into the plan. You "
+                    "have ten "
+                    "minutes, and /cancel stops it.",
+                    target_ref=f"doctor:{doctor.web_token}",
                 )
-                note = "send your note"
-        elif verb == "reply":
-            # Firestore holds which card he is answering; the process holds nothing.
-            await store.update_doctor(
-                doctor.id, awaiting_relay_id=ident, awaiting_since=store.now()
-            )
-            await telegram.send_card(
-                chat_id, "Answering the patient: send your answer as the next "
-                "message and it goes to the patient and into the plan. You "
-                "have ten "
-                "minutes, and /cancel stops it."
-            )
-            note = "waiting for your answer"
-        else:
-            note = "unknown button"
+                note = "waiting for your answer"
+            else:
+                note = "unknown button"
+        except Exception as exc:
+            # A failed domain operation is retryable. As on the web action
+            # route, only successful work permanently owns the action key.
+            if claimed:
+                await store.release_action(doctor.id, data)
+                raise RetryableCallbackError(
+                    str(exc) or "the retiring callback action claim was released"
+                ) from exc
+            raise
     await telegram.answer_callback(query.get("id", ""), note)
 
 
@@ -191,7 +240,7 @@ async def _message(
         return
 
     await _remember_start(chat_id, message)
-    await telegram.send_card(chat_id, INTRO)
+    await send_edge_card(chat_id, INTRO)
 
 
 async def _start(chat_id: int, token_id: str, message: dict[str, Any]) -> None:
@@ -209,7 +258,11 @@ async def _start(chat_id: int, token_id: str, message: dict[str, Any]) -> None:
     """
     owner = await store.doctor_by_telegram(chat_id) if token_id else None
     if owner is not None:
-        await telegram.send_card(chat_id, DOCTOR_TAPPED_LINK)
+        await send_edge_card(
+            chat_id,
+            DOCTOR_TAPPED_LINK,
+            target_ref=f"doctor:{owner.web_token}",
+        )
         await events.append_event(
             owner.id, "system",
             "a patient link was tapped in your own Telegram chat, so nothing "
@@ -222,13 +275,13 @@ async def _start(chat_id: int, token_id: str, message: dict[str, Any]) -> None:
     token = await links.consume(token_id) if token_id else None
     if token is None:
         await _remember_start(chat_id, message)
-        await telegram.send_card(chat_id, INTRO)
+        await send_edge_card(chat_id, INTRO)
         return
 
     patient = await store.get_patient(token.patient_id)
     doctor = await store.doctor_by_id(token.doctor_id)
     if patient is None or doctor is None:
-        await telegram.send_card(chat_id, INTRO)
+        await send_edge_card(chat_id, INTRO)
         return
 
     channels = dict(patient.channels or {})

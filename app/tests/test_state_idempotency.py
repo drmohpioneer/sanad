@@ -533,12 +533,43 @@ class AFailedSendIsKeptAndRetriedOnce(ChaserHarness):
 
     async def test_the_receipt_is_kept_as_failed_with_the_error_on_it(self) -> None:
         self.db.fail_on = "patient:"
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(chaser.RetryableNudgeError):
             await chaser.fire(self.payload())
 
         receipt = self.db.sends["l:0:nudge:1"]
         self.assertEqual(receipt.state, "failed")
         self.assertIn("refused", receipt.error)
+
+    async def test_a_broken_failure_notice_cannot_mask_the_durable_resend(
+        self,
+    ) -> None:
+        self.db.fail_on = "patient:"
+
+        async def notice_failed(*_args, **_kwargs) -> None:
+            raise RuntimeError("doctor notice store is down")
+
+        with (
+            patch.object(chaser, "delivery_failed", notice_failed),
+            self.assertRaises(chaser.RetryableNudgeError),
+        ):
+            await chaser.fire(self.payload())
+
+        self.assertEqual("failed", self.db.sends["l:0:nudge:1"].state)
+        self.assertEqual(0, self.loop.contacts)
+
+    async def test_a_fully_rolled_back_pre_send_failure_is_retryable(self) -> None:
+        async def wake_failed(*_args, **_kwargs):
+            raise RuntimeError("queue failed before the coordinator spoke")
+
+        with (
+            patch.object(coordinator, "on_wake", wake_failed),
+            self.assertRaises(chaser.RetryableNudgeError),
+        ):
+            await chaser.fire(self.payload())
+
+        self.assertNotIn("l:0:nudge:1", self.db.sends)
+        self.assertEqual(0, self.loop.contacts)
+        self.assertEqual({}, self.db.contacts)
 
     async def test_the_doctor_sees_that_it_was_not_delivered(self) -> None:
         self.db.fail_on = "patient:"
@@ -880,14 +911,16 @@ class ConfirmIsIdempotent(unittest.IsolatedAsyncioTestCase):
         async def deep_link(token_id):
             return f"https://t.me/SanadHealthBot?start={token_id}"
 
+        async def no_photo(*args, **kwargs):
+            return False
+
         self.patches = [
             patch.object(registrar, "fanout", lambda: Fanout(db)),
             patch.object(events_module, "append_event", append_event),
             patch.object(settings, "current", current),
             patch.object(tasks, "enqueue", enqueue),
-            patch.object(links.telegram, "deep_link", deep_link),
-            patch.object(links.telegram, "enabled", lambda: False),
-            patch.object(registrar.telegram, "enabled", lambda: False),
+            patch.object(links, "patient_deep_link", deep_link),
+            patch.object(registrar, "send_photo", no_photo),
             patch.object(store_module, "now", lambda: NOW),
         ]
         for name in ("get_confirm", "claim_confirm", "release_confirm",

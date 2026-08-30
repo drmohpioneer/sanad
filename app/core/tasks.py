@@ -42,9 +42,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
+import uuid
 from typing import Any, Awaitable, Callable, Optional
 
 log = logging.getLogger("sanad.tasks")
@@ -64,13 +66,18 @@ SERVICE_URL = os.environ.get("SERVICE_URL", "").rstrip("/")
 SERVICE_ACCOUNT = os.environ.get("SANAD_SA", "")
 ENGINE = os.environ.get("CHASER_ENGINE", "cloudtasks").strip().lower()
 
-# Set by core/chaser.py at import time. The in-process fallback calls it
-# directly; Cloud Tasks reaches it through /tasks/nudge in main.py.
-_local_handler: Optional[Callable[[dict[str, Any]], Awaitable[Any]]] = None
+# Registered by the application composition root.  The in-process fallback
+# enters the same Cloud Tasks adapter as the HTTP route, and the generated task
+# name is its provider identity for durable replay.
+_local_handler: Optional[
+    Callable[[dict[str, Any], str], Awaitable[Any]]
+] = None
 _pending: set[asyncio.Task] = set()
 
 
-def register_local_handler(fn: Callable[[dict[str, Any]], Awaitable[Any]]) -> None:
+def register_local_handler(
+    fn: Callable[[dict[str, Any], str], Awaitable[Any]],
+) -> None:
     """Where the fallback engine delivers. Cloud Tasks never uses this."""
     global _local_handler
     _local_handler = fn
@@ -153,22 +160,27 @@ async def verify_caller(authorization: Optional[str]) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # In-process fallback
 # --------------------------------------------------------------------------- #
-async def _sleep_then_run(payload: dict[str, Any], delay_seconds: float) -> None:
+async def _sleep_then_run(
+    payload: dict[str, Any], delay_seconds: float, task_name: str
+) -> None:
     await asyncio.sleep(max(0.0, delay_seconds))
     if _local_handler is None:
         log.error("fallback scheduler has no handler registered")
         return
     try:
-        await _local_handler(payload)
+        await _local_handler(payload, task_name)
     except Exception:  # a lost nudge must not take the process with it
-        log.exception("fallback nudge failed payload=%s", payload)
+        log.exception("fallback nudge failed task=%s", task_name)
 
 
 def _schedule_locally(payload: dict[str, Any], delay_seconds: float) -> str:
-    task = asyncio.create_task(_sleep_then_run(payload, delay_seconds))
+    task_name = f"inprocess/{uuid.uuid4().hex}"
+    task = asyncio.create_task(
+        _sleep_then_run(payload, delay_seconds, task_name)
+    )
     _pending.add(task)
     task.add_done_callback(_pending.discard)
-    return f"inprocess/{id(task):x}"
+    return task_name
 
 
 # --------------------------------------------------------------------------- #
@@ -236,5 +248,6 @@ async def enqueue(path: str, payload: dict[str, Any], delay_seconds: float) -> s
     if not configured():
         raise RuntimeError("SERVICE_URL and SANAD_SA must be set to enqueue tasks")
     name = await asyncio.to_thread(_create_task, path, body, delay)
-    log.info("task queued name=%s delay=%.1fs payload=%s", name, delay, body)
+    task_ref = hashlib.sha256(name.encode("utf-8")).hexdigest()
+    log.info("task queued ref=%s delay=%.1fs payload=%s", task_ref, delay, body)
     return name

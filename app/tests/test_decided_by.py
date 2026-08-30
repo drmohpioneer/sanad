@@ -146,6 +146,12 @@ def card_sends() -> list[tuple[str, int, list[str]]]:
     """
     out: list[tuple[str, int, list[str]]] = []
     for name, tree in _trees().items():
+        # The channel seam bridges an already-decided direct edge card into a
+        # shadow OutboundIntent. It is not a second product decision or a card
+        # event, so counting its generic constructor would double-count every
+        # caller and demand a label from transport code.
+        if name == "adapters.py":
+            continue
         constants = _constants(tree)
         functions = [n for n in ast.walk(tree)
                      if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]

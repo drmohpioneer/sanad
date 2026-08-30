@@ -26,9 +26,9 @@ from google.genai import types
 
 from . import (
     bounded, chaser, contract, duedates, events, extractor, gender, identify,
-    links, media, policy, provenance, sentinel, settings, storage, store, telegram,
+    links, media, policy, provenance, sentinel, settings, storage, store,
 )
-from .adapters import OutboundMessage, fanout
+from .adapters import OutboundMessage, fanout, send_photo
 from .models import (
     DETAIL_FIELDS,
     Doctor,
@@ -1276,14 +1276,16 @@ async def _commit(doctor: Doctor, confirm: PendingConfirm,
                 },
             ),
         )
-    if doctor.telegram_chat_id and telegram.enabled():
-        link = await telegram.deep_link(token.id)
+    if doctor.telegram_chat_id:
+        link = await links.patient_deep_link(token.id)
         if link:
-            await telegram.send_photo(
+            await send_photo(
                 doctor.telegram_chat_id, links.qr_png(link),
                 caption=f"{patient.name}: forward this to "
                         f"{gender.object_pronoun(gender.of_patient(patient))}, "
                         f"or send {link}",
+                target_ref=f"doctor:{doctor.web_token}",
+                patient_id=patient.id,
             )
 
 

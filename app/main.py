@@ -25,6 +25,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -45,10 +46,12 @@ from core import (
     gender,
     lang,
     links,
+    live_transport,
     media,
     monitoring,
     policy,
     registrar,
+    runtime,
     settings,
     storage,
     store,
@@ -60,8 +63,15 @@ from core import (
     uploads,
     views,
 )
-from core.adapters import InboundMessage, OutboundMessage, fanout
+from core.adapters import (
+    InboundMessage,
+    OutboundMessage,
+    fanout,
+    send_card as send_edge_card,
+)
+from core.channel_contracts import ActorRef, Command, CommandResult, CommandStatus
 from core.models import Doctor, Patient
+from core.transport_runtime import CommandSpec, TransportRuntime, legacy_result
 
 MODEL = media.MODEL
 WEB = os.path.join(os.path.dirname(__file__), "web")
@@ -88,6 +98,123 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("sanad")
 
 
+_TRANSPORT: Optional[TransportRuntime] = None
+
+
+async def _message_command(command: Command) -> CommandResult:
+    envelope = command.envelope
+    inbound = envelope.transient_payload if envelope is not None else None
+    if not isinstance(inbound, InboundMessage):
+        return CommandResult.rejected("invalid_message_bridge")
+    await dispatch.handle_inbound(inbound)
+    return legacy_result({"ok": True})
+
+
+async def _action_command(command: Command) -> CommandResult:
+    envelope = command.envelope
+    invocation = envelope.transient_payload if envelope is not None else None
+    if (
+        not isinstance(invocation, tuple)
+        or len(invocation) != 3
+        or not isinstance(invocation[0], ActionIn)
+        or not isinstance(invocation[2], Doctor)
+    ):
+        return CommandResult.rejected("invalid_action_bridge")
+    body, request, doctor = invocation
+    return legacy_result(await _legacy_action(body, request, doctor))
+
+
+async def _telegram_command(command: Command) -> CommandResult:
+    envelope = command.envelope
+    invocation = envelope.transient_payload if envelope is not None else None
+    if not isinstance(invocation, live_transport.TelegramInvocation):
+        return CommandResult.rejected("invalid_telegram_bridge")
+    try:
+        await tg_router.handle_provider_update(
+            dict(invocation.update),
+            invocation.base_url,
+            secret_token=invocation.secret_token,
+        )
+    except tg_router.RetryableCallbackError:
+        # The retiring action claim is known to be released. Releasing the
+        # outer provider receipt lets Telegram redeliver this same update.
+        return CommandResult.retryable(
+            "legacy_callback_retry",
+            "the callback action claim was released for retry",
+        )
+    return legacy_result({"ok": True})
+
+
+async def _nudge_command(command: Command) -> CommandResult:
+    envelope = command.envelope
+    payload = envelope.transient_payload if envelope is not None else None
+    if not isinstance(payload, dict):
+        return CommandResult.rejected("invalid_task_bridge")
+    # The sweep is part of the claimed command. It can no longer run before a
+    # replay decision and thereby turn a duplicate task into a second mutation.
+    try:
+        freed = await store.reclaim_stale()
+        if any(freed.values()):
+            log.info("reclaimed stale claims: %s", freed)
+    except Exception:  # noqa: BLE001 - the nudge is what this command is for
+        log.warning("the stale-claim sweep could not run", exc_info=True)
+    try:
+        result = await chaser.fire(payload)
+    except chaser.RetryableNudgeError:
+        # The Chaser has already persisted a failed-send receipt (or rolled
+        # every pre-send reservation back). Releasing the outer command claim
+        # is what lets Cloud Tasks re-enter that explicit legacy retry path.
+        return CommandResult.retryable(
+            "legacy_nudge_retry",
+            "the Chaser recorded a retry-safe failure",
+        )
+    durable_result = live_transport.durable_task_result(result)
+    log.info("nudge result=%s", durable_result)
+    return legacy_result(
+        result,
+        durable_body=durable_result,
+    )
+
+
+def transport_runtime() -> TransportRuntime:
+    """The one registry and CommandBus shared by every live ingress route."""
+    global _TRANSPORT
+    if _TRANSPORT is None:
+        _TRANSPORT = live_transport.build(
+            {
+                live_transport.MESSAGE: _message_command,
+                live_transport.ACTION: _action_command,
+                live_transport.TELEGRAM_UPDATE: _telegram_command,
+                live_transport.NUDGE: _nudge_command,
+            }
+        )
+    return _TRANSPORT
+
+
+async def _local_nudge(payload: dict, task_name: str) -> dict:
+    """The in-process fallback enters the same task adapter and command bus."""
+    identity = live_transport.task_identity(payload, task_name)
+    outcome = await transport_runtime().execute(
+        "cloud_tasks",
+        payload,
+        live_transport.TaskContext(
+            task_name=task_name,
+            verified_provider=False,
+        ),
+        CommandSpec(
+            id=uuid.uuid4().hex,
+            idempotency_key=identity,
+            kind=live_transport.NUDGE,
+            payload={"ingress_sha256": live_transport.ingress_digest(payload)},
+        ),
+    )
+    if outcome.result.status == CommandStatus.CONFLICT:
+        return {"sent": False, "reason": outcome.result.code}
+    if outcome.result.status == CommandStatus.RETRYABLE:
+        raise chaser.RetryableNudgeError(outcome.result.detail)
+    return outcome.legacy_response()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """One check when the container comes up, and nothing else.
@@ -103,6 +230,9 @@ async def lifespan(_: FastAPI):
     would be a worse failure than the one it is looking for, so a Firestore
     that is not answering yet costs a log line and the instance still serves.
     """
+    runtime.validate_gate2()
+    transport_runtime()
+    tasks.register_local_handler(_local_nudge)
     try:
         await tg_router.wrong_bindings()
     except Exception:  # noqa: BLE001 - the service starts either way
@@ -430,7 +560,11 @@ async def bind_doctor(chat_id: Optional[int] = None,
         await store.update_doctor(doctor.id, telegram_chat_id=None)
         return {"ok": True, "doctor_id": doctor.id, "chat_id": None}
     await store.update_doctor(doctor.id, telegram_chat_id=chat_id)
-    await telegram.send_card(chat_id, f"Bound. This phone is now {doctor.name}'s.")
+    await send_edge_card(
+        chat_id,
+        f"Bound. This phone is now {doctor.name}'s.",
+        target_ref=f"doctor:{doctor.web_token}",
+    )
     return {"ok": True, "doctor_id": doctor.id, "chat_id": chat_id}
 
 
@@ -471,24 +605,30 @@ async def tasks_nudge(request: Request) -> dict:
     except Exception as exc:  # noqa: BLE001 - every failure is the same 403
         log.warning("rejected /tasks/nudge: %s", exc)
         raise HTTPException(403, "Forbidden")
-    # codex re-audit 4. A wake-up is the one moment Sanad is already awake and
-    # already looking at this data, so it is where the stranded claims of dead
-    # instances are swept: a send row still "claimed" five minutes later, a
-    # confirm still "committing". Best effort by design, and it runs before the
-    # nudge rather than instead of it: a sweep that threw would turn a reminder
-    # into a 503 and a Cloud Tasks retry, which is a worse failure than the one
-    # it is clearing.
-    try:
-        freed = await store.reclaim_stale()
-        if any(freed.values()):
-            log.info("reclaimed stale claims: %s", freed)
-    except Exception:  # noqa: BLE001 - the nudge is what this request is for
-        log.warning("the stale-claim sweep could not run", exc_info=True)
-
     payload = await request.json()
-    result = await chaser.fire(payload)
-    log.info("nudge result=%s", result)
-    return result
+    task_name = request.headers.get("x-cloudtasks-taskname") or ""
+    if not task_name.strip():
+        raise HTTPException(403, "Forbidden")
+    identity = live_transport.task_identity(payload, task_name)
+    outcome = await transport_runtime().execute(
+        "cloud_tasks",
+        payload,
+        live_transport.TaskContext(task_name=task_name),
+        CommandSpec(
+            id=uuid.uuid4().hex,
+            idempotency_key=identity,
+            kind=live_transport.NUDGE,
+            payload={"ingress_sha256": live_transport.ingress_digest(payload)},
+        ),
+    )
+    if outcome.result.status == CommandStatus.CONFLICT:
+        return {"sent": False, "reason": outcome.result.code}
+    if outcome.result.status == CommandStatus.RETRYABLE:
+        # A non-2xx response asks Cloud Tasks to retry the same task name. The
+        # command claim was released by CommandBus, while the Chaser's own
+        # failed receipt constrains the retry to its one resend.
+        raise HTTPException(503, "Retryable task failure")
+    return outcome.legacy_response()
 
 
 # --------------------------------------------------------------------------- #
@@ -502,11 +642,31 @@ async def telegram_webhook(request: Request) -> dict:
         raise HTTPException(404, "Not Found")
     update = await request.json()
     log.info("tg update=%s", update.get("update_id"))
-    # This is the only production boundary allowed to originate
-    # synthetic=False, and it sits after the provider secret check above.
-    await tg_router.handle_provider_update(
-        update, str(request.base_url), secret_token=secret_token
+    update_id = str(update.get("update_id") or "").strip()
+    if not update_id:
+        raise HTTPException(400, "Telegram update_id is required")
+    outcome = await transport_runtime().execute(
+        "telegram",
+        update,
+        live_transport.TelegramContext(
+            base_url=str(request.base_url),
+            secret_token=secret_token or "",
+        ),
+        CommandSpec(
+            id=uuid.uuid4().hex,
+            idempotency_key=f"sanad-bot:{update_id}",
+            kind=live_transport.TELEGRAM_UPDATE,
+            payload={"ingress_sha256": live_transport.ingress_digest(update)},
+        ),
     )
+    # A provider replay that is already running is acknowledged, never invoked
+    # through a second domain path. Completed replays carry this same body.
+    if outcome.result.status == CommandStatus.CONFLICT:
+        return {"ok": True}
+    if outcome.result.status == CommandStatus.RETRYABLE:
+        # Telegram retries the same update_id on non-2xx. The bus has already
+        # released its outer receipt, and the callback action claim is free.
+        raise HTTPException(503, "Retryable Telegram callback failure")
     return {"ok": True}
 
 
@@ -614,6 +774,39 @@ async def refuse_upload(patient: Patient, why: uploads.Rejected) -> dict:
     return {"ok": False, "refused": why.reason}
 
 
+async def _web_message(
+    inbound: InboundMessage,
+    *,
+    tenant_id: str,
+    actor: ActorRef,
+    principal: ActorRef,
+    endpoint_id: str,
+    thread_id: str,
+    identity_method: str,
+) -> dict:
+    """Normalize one admitted browser message and execute the shared bus."""
+    command_id = uuid.uuid4().hex
+    outcome = await transport_runtime().execute(
+        "web",
+        inbound,
+        live_transport.WebContext(
+            provider_message_id=command_id,
+            tenant_id=tenant_id,
+            actor=actor,
+            principal=principal,
+            endpoint_id=endpoint_id,
+            thread_id=thread_id,
+            identity_method=identity_method,
+        ),
+        CommandSpec(
+            id=command_id,
+            idempotency_key=command_id,
+            kind=live_transport.MESSAGE,
+        ),
+    )
+    return outcome.legacy_response()
+
+
 @app.post("/p/{link_token}")
 async def patient_send(
     link_token: str, text: str = Form(""), file: Optional[UploadFile] = File(None)
@@ -634,7 +827,7 @@ async def patient_send(
             return await refuse_upload(patient, why)
     is_audio = lane == uploads.AUDIO
     log.info("patient_page patient_id=%s attachment=%s", patient.id, mime)
-    await dispatch.handle_inbound(
+    return await _web_message(
         InboundMessage(
             channel="web",
             synthetic=True,
@@ -643,9 +836,14 @@ async def patient_send(
             audio_bytes=raw if is_audio else None,
             image_bytes=None if is_audio else raw,
             mime=mime,
-        )
+        ),
+        tenant_id=patient.doctor_id,
+        actor=ActorRef(kind="patient", id=patient.id),
+        principal=ActorRef(kind="patient", id=patient.id),
+        endpoint_id=f"web:patient:{patient.id}",
+        thread_id=f"patient:{patient.id}",
+        identity_method="patient_link",
     )
-    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- #
@@ -817,7 +1015,7 @@ async def doctor_in(
                               "note, under 10 MB."}
     is_audio = lane == uploads.AUDIO
     log.info("doctor_in doctor_id=%s attachment=%s", doctor.id, mime)
-    await dispatch.handle_inbound(
+    return await _web_message(
         InboundMessage(
             channel="web",
             synthetic=True,
@@ -826,9 +1024,14 @@ async def doctor_in(
             audio_bytes=raw if is_audio else None,
             image_bytes=None if is_audio else raw,
             mime=mime,
-        )
+        ),
+        tenant_id=doctor.id,
+        actor=ActorRef(kind="doctor", id=doctor.id),
+        principal=ActorRef(kind="doctor", id=doctor.id),
+        endpoint_id=f"web:doctor:{doctor.id}",
+        thread_id=f"doctor:{doctor.id}",
+        identity_method="doctor_console_token",
     )
-    return {"ok": True}
 
 
 @app.post("/c/{token}/patient/{patient_id}")
@@ -852,7 +1055,7 @@ async def patient_in(
             return await refuse_upload(patient, why)
     is_audio = lane == uploads.AUDIO
     log.info("patient_in patient_id=%s attachment=%s", patient.id, mime)
-    await dispatch.handle_inbound(
+    return await _web_message(
         InboundMessage(
             channel="web",
             synthetic=True,
@@ -861,9 +1064,14 @@ async def patient_in(
             audio_bytes=raw if is_audio else None,
             image_bytes=None if is_audio else raw,
             mime=mime,
-        )
+        ),
+        tenant_id=doctor.id,
+        actor=ActorRef(kind="patient", id=patient.id),
+        principal=ActorRef(kind="doctor", id=doctor.id),
+        endpoint_id=f"web:doctor:{doctor.id}",
+        thread_id=f"patient:{patient.id}",
+        identity_method="doctor_console_simulation",
     )
-    return {"ok": True}
 
 
 @app.get("/c/{token}/patient/{patient_id}")
@@ -982,6 +1190,38 @@ class ActionIn(BaseModel):
 @app.post("/c/{token}/action")
 async def action(
     body: ActionIn, request: Request, doctor: Doctor = Depends(current_doctor)
+) -> dict:
+    command_id = uuid.uuid4().hex
+    outcome = await transport_runtime().execute(
+        "web",
+        InboundMessage(
+            channel="web",
+            synthetic=True,
+            sender_ref=f"doctor:{doctor.web_token}",
+            text=body.action_id,
+        ),
+        live_transport.WebContext(
+            provider_message_id=command_id,
+            tenant_id=doctor.id,
+            actor=ActorRef(kind="doctor", id=doctor.id),
+            principal=ActorRef(kind="doctor", id=doctor.id),
+            endpoint_id=f"web:doctor:{doctor.id}",
+            thread_id=f"doctor:{doctor.id}",
+            identity_method="doctor_console_token",
+            transient_payload=(body, request, doctor),
+        ),
+        CommandSpec(
+            id=command_id,
+            idempotency_key=body.action_id,
+            kind=live_transport.ACTION,
+            payload={"action_id": body.action_id, "text": body.text},
+        ),
+    )
+    return outcome.legacy_response()
+
+
+async def _legacy_action(
+    body: ActionIn, request: Request, doctor: Doctor
 ) -> dict:
     verb, _, ident = body.action_id.partition(":")
     log.info("action doctor_id=%s verb=%s id=%s", doctor.id, verb, ident)

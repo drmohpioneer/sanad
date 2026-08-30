@@ -143,6 +143,7 @@ class MemoryStore:
         self.patient_turns: dict[str, dict[str, Any]] = {}
         self.photo_receipts: dict[str, dict[str, Any]] = {}
         self.confirm_claims: dict[str, dict[str, Any]] = {}
+        self.command_receipts: dict[str, dict[str, Any]] = {}
         self.settings: dict[str, Any] = {}
 
         # Neutral instrumentation holders.  Scenario adapters own their schemas.
@@ -900,6 +901,82 @@ class MemoryStore:
         async with self._lock:
             self.card_actions.pop(f"{doctor_id}:{action_id}", None)
 
+    async def claim_command_receipt(
+        self, receipt_id: str, fingerprint: str, at: datetime
+    ) -> dict[str, Any]:
+        async with self._lock:
+            row = self.command_receipts.get(receipt_id)
+            if row is None:
+                self.command_receipts[receipt_id] = {
+                    "fingerprint": fingerprint,
+                    "state": "IN_FLIGHT",
+                    "created_at": at,
+                    "updated_at": at,
+                }
+                return {"state": "CLAIMED"}
+            if row.get("fingerprint") != fingerprint:
+                return {"state": "MISMATCH"}
+            state = row.get("state")
+            if state == "COMPLETED":
+                return {
+                    "state": "COMPLETED",
+                    "result": _clone(row.get("result")),
+                }
+            if state == "IN_FLIGHT":
+                return {"state": "IN_FLIGHT"}
+            raise ValueError(f"unknown command receipt state: {state!r}")
+
+    async def get_command_receipt(
+        self, receipt_id: str
+    ) -> Optional[dict[str, Any]]:
+        async with self._lock:
+            row = self.command_receipts.get(receipt_id)
+            return _clone(row) if row is not None else None
+
+    async def complete_command_receipt(
+        self,
+        receipt_id: str,
+        fingerprint: str,
+        result: dict[str, Any],
+        at: datetime,
+    ) -> None:
+        async with self._lock:
+            row = self.command_receipts.get(receipt_id)
+            if row is None:
+                raise ValueError("cannot complete a missing command receipt")
+            if row.get("fingerprint") != fingerprint:
+                raise ValueError("command receipt fingerprint mismatch")
+            state = row.get("state")
+            if state == "COMPLETED":
+                if row.get("result") != result:
+                    raise ValueError("command receipt completion result mismatch")
+                return
+            if state != "IN_FLIGHT":
+                raise ValueError(f"unknown command receipt state: {state!r}")
+            self.command_receipts[receipt_id] = {
+                **row,
+                "state": "COMPLETED",
+                "result": _clone(result),
+                "completed_at": at,
+                "updated_at": at,
+            }
+
+    async def release_command_receipt(
+        self, receipt_id: str, fingerprint: str
+    ) -> None:
+        async with self._lock:
+            row = self.command_receipts.get(receipt_id)
+            if row is None:
+                return
+            if row.get("fingerprint") != fingerprint:
+                raise ValueError("command receipt fingerprint mismatch")
+            state = row.get("state")
+            if state == "IN_FLIGHT":
+                del self.command_receipts[receipt_id]
+                return
+            if state != "COMPLETED":
+                raise ValueError(f"unknown command receipt state: {state!r}")
+
     async def reclaim_stale(
         self, at: Optional[datetime] = None
     ) -> dict[str, int]:
@@ -1222,6 +1299,10 @@ _FUNCTION_NAMES = (
     "claim_card_action",
     "claim_action",
     "release_action",
+    "claim_command_receipt",
+    "get_command_receipt",
+    "complete_command_receipt",
+    "release_command_receipt",
     "reclaim_stale",
     "release_card_action",
     "save_report",
