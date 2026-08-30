@@ -245,6 +245,8 @@ but 3 weeks is the rehearsed path and there is no reason to spend the buffer.
 All three due dates are in this sentence, which is what makes it the twelve
 follow-up tasks section 4 counts, and since S17 they are read out of it in code
 whenever the model returns none, so the feed line is twelve and not nine.
+Read the card before you tap Confirm: it must carry four contracts (medication, lipid panel, blood pressure monitoring, visit). On about one dictation in five the model proposes only two; if the card shows fewer than four, tap Cancel and dictate the same sentence again. Also leave at least two minutes between the queue purge (section 1, step 1) and this Confirm: a purge inside that window holds the whole reminder ladder for about a minute and a half (measured on rev 27).
+
 Confirm, then scan the QR with the patient phone. Before the patient has written,
 the welcome defaults to English. Once the patient writes, later proactive text
 uses the language of the latest patient message.

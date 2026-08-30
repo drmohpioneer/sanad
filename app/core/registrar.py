@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -239,6 +240,124 @@ def _other_patient_warning_lines(record: ProposedRecord) -> list[str]:
             "Dictate that patient's instructions separately."
         )
     return lines
+
+
+# --------------------------------------------------------------------------- #
+# The missing-contract rail (S18 item 2, S17 live defect 1)
+# --------------------------------------------------------------------------- #
+# Measured live: one beat-1 run in five came back with two contracts instead of
+# four. The blood-pressure monitoring and the follow-up visit were in the plan
+# sentence the patient reads and in no obligation Sanad carries, and the card
+# gave the doctor nothing to notice that with. `core/duedates.py` cannot help
+# here: it fills a date on a loop the model proposed, and this is a loop the
+# model never proposed at all.
+#
+# So the card says so, in the same shape as the two-patient warning above: a red
+# line naming the doctor's own words and the type that is missing. Nothing is
+# created, nothing is corrected, and no loop is ever added in code. The only
+# thing this can do is make the doctor read his card before he taps Confirm, and
+# the remedy it offers is the one the runbook already gives him: cancel and
+# dictate again.
+#
+# The words are matched the way the Coordinator matches a patient's reply
+# (core/coordinator.LOOP_WORDS): an English word between spaces, so "test"
+# inside "latest" is not the word test, and an Arabic word as a substring,
+# because Arabic writes "the" onto the front of it and "التحليل" is "تحليل".
+# Round 2, measured on the finished rail rather than guessed. Three of the
+# words the first list carried are also how a doctor says a DOSE FREQUENCY or a
+# BASELINE, so the rail printed a red line on ordinary medication dictations:
+# "Start atorvastatin 40 mg daily", "take bisoprolol twice a day" and
+# "Weight 95 kg, start metformin" each produced a MONITOR warning about a loop
+# nobody had ordered. A rail that fires when nothing is wrong is a rail the
+# doctor learns to tap past, so bare "daily" and bare "weight" are gone from
+# the list below and the two frequency phrases moved to the table after it.
+MISSING_CONTRACT_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("MONITOR", (
+        "blood pressure", "pressure", "sugar", "glucose", "measure",
+        "readings", "ضغط", "سكر", "وزن", "قيس", "قياس")),
+    ("VISIT", (
+        "come back", "follow up", "see you", "visit", "appointment",
+        "تعالى", "تعالي", "ارجع", "موعد", "كشف")),
+    ("TEST", (
+        "test", "panel", "lab", "analysis", "تحليل", "تحاليل", "اشعة")),
+)
+
+# How often, which is a monitoring order only when it is said about something
+# measurable. "twice a day" next to a metric is the doctor's own phrasing of
+# the blood-pressure order and belongs on the card; "twice a day" next to a
+# drug name is a dose. So these count only when one of the words above occurs
+# in the SAME clause, and they can never make a type fire on their own: a
+# metric already does that, and all these add is the doctor's second phrase to
+# a line that was going to print anyway.
+MISSING_CONTRACT_FREQUENCY: dict[str, tuple[str, ...]] = {
+    "MONITOR": ("twice a day", "daily"),
+}
+
+# A clause ends where he pauses. The split happens before folding, because
+# `sentinel.normalize` turns every one of these into a space and the whole
+# point is to know that "40 mg daily" and "blood pressure" were two different
+# breaths.
+CLAUSE_BREAK = re.compile(r"[.,;:!?\n\u060c\u061b]+")
+
+
+def _said_in(dictation: str, word: str) -> bool:
+    """Is this word in the doctor's own sentence, folded as the Sentinel folds."""
+    wanted = sentinel.normalize(word).strip()
+    if not wanted:
+        return False
+    if wanted.isascii():
+        return f" {wanted} " in dictation
+    return wanted in dictation
+
+
+def _clauses(dictation: str) -> list[str]:
+    """His sentence, cut at the pauses, each part folded and space-padded."""
+    return [sentinel.normalize(part)
+            for part in CLAUSE_BREAK.split(dictation or "") if part.strip()]
+
+
+# At most three phrases are printed, because the line is a prompt to re-read the
+# card and not a transcript. A shorter phrase already contained in a longer one
+# is dropped, so "blood pressure" does not print next to "pressure".
+MISSING_CONTRACT_PHRASES = 3
+
+
+def missing_contracts(record: ProposedRecord,
+                      dictation: str) -> list[tuple[str, list[str]]]:
+    """Loop types the dictation asks for and the proposal does not carry.
+
+    Returns (type, the doctor's own matched phrases). An empty list is the
+    ordinary case: everything he said became a contract.
+    """
+    said = sentinel.normalize(dictation)
+    clauses = _clauses(dictation)
+    have = {loop.type for loop in record.loops}
+    out: list[tuple[str, list[str]]] = []
+    for kind, words in MISSING_CONTRACT_WORDS:
+        if kind in have:
+            continue
+        hit = [word for word in words if _said_in(said, word)]
+        if hit:
+            hit += [
+                often for often in MISSING_CONTRACT_FREQUENCY.get(kind, ())
+                if any(_said_in(clause, often)
+                       and any(_said_in(clause, word) for word in words)
+                       for clause in clauses)
+            ]
+        kept = [word for word in hit
+                if not any(other != word and word in other for other in hit)]
+        if kept:
+            out.append((kind, kept[:MISSING_CONTRACT_PHRASES]))
+    return out
+
+
+def _missing_contract_lines(record: ProposedRecord, dictation: str) -> list[str]:
+    return [
+        f"🔴 Possible missing contract: the dictation mentions {', '.join(kept)} "
+        f"but no {kind} was proposed. Cancel and dictate again if it should "
+        "be there."
+        for kind, kept in missing_contracts(record, dictation)
+    ]
 
 # codex item 16. The model's output was trusted for everything the two checks
 # below did not name, so a negative due date, an empty plan, an age of 400 and a
@@ -481,7 +600,8 @@ def record_updates(record: ProposedRecord, patient: Any,
 def confirm_card(record: ProposedRecord, confirm_id: str,
                  doctor_name: str = "your doctor",
                  pol: Optional[policy.Policy] = None,
-                 existing: Any = None, why: str = "", note: str = "") -> dict:
+                 existing: Any = None, why: str = "", note: str = "",
+                 said: str = "") -> dict:
     """What the doctor taps. Every loop is shown as the contract it becomes.
 
     The contract wording here and the contract on the patient's page are the
@@ -526,6 +646,13 @@ def confirm_card(record: ProposedRecord, confirm_id: str,
     # checked against the original dictation by `checked_other_patients`; no
     # model-written instruction is trusted or stored.
     lines += _other_patient_warning_lines(record)
+
+    # S18 item 2. The other way one dictation can lose half of itself: the
+    # model proposes fewer obligations than the doctor asked for, and the
+    # missing one lives in the plan sentence where nothing chases it. Measured
+    # live on one beat-1 run in five. No loop is added here; the doctor is told
+    # what his own words mentioned and what the card does not carry.
+    lines += _missing_contract_lines(record, said)
 
     # codex re-audit 2. The identification note is stored on the record as a
     # dated note the moment he taps Confirm, and until now he never saw it: it
@@ -799,6 +926,7 @@ async def handle_doctor(
         proposed=record.model_dump(),
         patient_id=outcome.patient_id or None,
         note=note,
+        said=said,
         expires_at=store.now() + CONFIRM_TTL,
     )
     await store.save_confirm(confirm)
@@ -904,7 +1032,7 @@ async def send_confirm(doctor: Doctor, confirm: PendingConfirm,
             card=confirm_card(record, confirm.id, doctor.name,
                               policy.for_doctor(doctor), existing=existing,
                               why=outcome.why if outcome is not None else "",
-                              note=confirm.note),
+                              note=confirm.note, said=confirm.said),
         ),
     )
 

@@ -340,6 +340,12 @@ class TheOrdinaryRelayIsPersistedFirst(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.object(store_module, "new_id", lambda: "r1"))
         self.enterContext(patch.object(concierge.chaser, "note_patient_reply",
                                        nothing))
+        # S18 item 1 added a second store read on the way in: a reply revives
+        # every unreachable loop. This case has no board behind it, so it is
+        # stubbed exactly as the attempt reset above is. What is under test
+        # here is the order of the relay writes, not the loops.
+        self.enterContext(patch.object(concierge.chaser, "revive_unreachable",
+                                       nothing))
         self.enterContext(patch.object(concierge, "record_reading", nothing))
         self.enterContext(patch.object(concierge.validator,
                                        "wants_treatment_change",

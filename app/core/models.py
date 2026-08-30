@@ -261,6 +261,14 @@ class PendingConfirm(BaseModel):
     # A relationship or description the identification read out of the
     # dictation, stored on the patient as a dated note at confirm time.
     note: str = ""
+    # The doctor's own dictation, kept only until the tap (S18 item 2). The
+    # confirm card has rails that read his words rather than the proposal:
+    # the missing-contract warning asks whether he said something the model
+    # did not turn into an obligation. The card is rebuilt from this row on
+    # three different paths (the identification chose, he tapped a name, he
+    # tapped "This is a new patient"), so the sentence has to travel with the
+    # proposal or two of those three would print a card without the rail.
+    said: str = ""
 
 
 class LinkToken(BaseModel):

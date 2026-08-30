@@ -847,6 +847,47 @@ async def note_patient_reply(patient: Patient) -> None:
             await store.update_loop(loop.id, last_reply_at=now)
 
 
+# The state half of the same rule (S18 item 1, S17 live defect 1 of the reply
+# lane). `note_patient_reply` above resets the ladder on loops that are still
+# live; it cannot touch a loop the ladder already gave up on, and "unreachable"
+# is outside coordinator.LIVE_STATES. So a patient who answered on the fourth
+# day had his message routed to whatever else was still open: the measured case
+# is a cost barrier about a lipid panel that landed on "Start Atorvastatin",
+# because the lipid loop had gone unreachable an hour earlier.
+#
+# A patient who writes is reachable. The loop goes back to "waiting_patient",
+# the attempts go back to zero and the generation goes up with them, exactly as
+# a reply on a live loop does, so nothing queued against the finished ladder can
+# fire against the new one. Only "unreachable" is touched: a loop the doctor
+# closed (done) or is reviewing (pending_review) is his, and no patient message
+# reopens it. This does not restart the ladder by itself; the Coordinator's
+# ordinary schedule_next_contact does that under the usual guards.
+async def revive_unreachable(patient: Patient, doctor: Doctor) -> list[Loop]:
+    """A reply brings every unreachable loop of this patient back into contact.
+
+    Returns the loops that were revived, in their state before the write, so a
+    caller can say what changed. The feed line is written once per revival: a
+    second message finds the loop already live and writes nothing.
+    """
+    now = store.now()
+    revived: list[Loop] = []
+    for loop in await store.list_loops(patient.id):
+        if loop.state != "unreachable":
+            continue
+        await store.bump_generation(loop.id)
+        await store.update_loop(loop.id, state="waiting_patient",
+                                last_reply_at=now)
+        await events.append_event(
+            doctor.id, "system",
+            f"{loop.title} back in contact: the patient wrote",
+            patient_id=patient.id, loop_id=loop.id,
+            meta={"decided_by": "code (core/chaser.py, a reply revives an "
+                                "unreachable loop)"},
+        )
+        revived.append(loop)
+    return revived
+
+
 # The in-process fallback engine delivers straight to `fire`; Cloud Tasks reaches
 # the same function through /tasks/nudge. One handler, two ways in.
 tasks.register_local_handler(fire)

@@ -453,6 +453,15 @@ async def handle_patient_message(
     # Any reply, of any kind, clears the Chaser's attempt counter: a patient who
     # is answering can never be called unreachable.
     await chaser.note_patient_reply(patient)
+    # S18 item 1. The other half of that sentence, for a loop the ladder had
+    # already given up on before he wrote. An "unreachable" loop is outside
+    # coordinator.LIVE_STATES, so until now it was invisible to the routing a
+    # few lines below and to the Coordinator behind it: the reply landed on
+    # whichever other obligation was still open. It runs here, before every
+    # gate, because it changes no text and answers nobody: it only puts the
+    # obligation the patient is probably writing about back where routing can
+    # see it. Nothing is restarted by this write.
+    await chaser.revive_unreachable(patient, doctor)
 
     # Gate 1a - the blood-pressure table, on a message that is nothing but a
     # reading. It runs before the Sentinel for one reason, found by sending a
