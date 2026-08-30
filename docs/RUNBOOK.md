@@ -242,6 +242,9 @@ at them.
 
 "3 weeks," not the canonical seed's "a month": the 720-hour hop is proven live,
 but 3 weeks is the rehearsed path and there is no reason to spend the buffer.
+All three due dates are in this sentence, which is what makes it the twelve
+follow-up tasks section 4 counts, and since S17 they are read out of it in code
+whenever the model returns none, so the feed line is twelve and not nine.
 Confirm, then scan the QR with the patient phone. Before the patient has written,
 the welcome defaults to English. Once the patient writes, later proactive text
 uses the language of the latest patient message.
@@ -311,12 +314,13 @@ I did the glucose test
 ```
 
 The code administrative pattern attempts to schedule the next evidence contact.
-Her glucose loop already has six contacts, so the feed's audit line is:
+Her glucose loop already has six contacts, so the feed writes the Coordinator's audit line with the guard inside it (measured live on rev 26):
 
 ```
-refused by code (core/policy.py): 6 contacts already on this loop and the
-policy limit is 6
+coordinator: schedule_next_contact refused · reason: the patient says he has done it, so the evidence is what is left · guard: 6 contacts already on this loop and the policy limit is 6 · administrative intent: did_test, matched by code pattern · decided_by: model choice, guards in code (core/policy.py)
 ```
+
+Read the guard clause off the screen: "6 contacts already on this loop and the policy limit is 6". The shorter "refused by code (core/policy.py): ..." line belongs to the reminder path (section 3b), not to this beat.
 
 This is a natural patient interaction and does not depend on the filming hour.
 

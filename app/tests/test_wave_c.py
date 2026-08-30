@@ -813,10 +813,16 @@ class WhatTheRegistrarWillNotTakeOnTrust(unittest.TestCase):
         self.assertLess(missing_at, safety_at)
 
     def test_a_card_with_nothing_missing_says_nothing(self) -> None:
+        """S17 gave this loop its due date, because a deadline is now missable.
+
+        A TEST loop with no `due_in_days` is a loop with a missing deadline
+        since S17, and the block says so, so "nothing missing" has to mean the
+        date as well. The absence itself is proved in tests/test_due_dates.py.
+        """
         from core import registrar
 
         card = registrar.confirm_card(
-            self.record(loops=[self.loop()]), "c1", "Dr Mohamed")
+            self.record(loops=[self.loop(due_in_days=14)]), "c1", "Dr Mohamed")
         self.assertNotIn("Not dictated", " ".join(card["lines"]))
 
 

@@ -24,8 +24,8 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from . import (
-    bounded, chaser, contract, events, extractor, gender, identify, links,
-    media, policy, sentinel, settings, storage, store, telegram,
+    bounded, chaser, contract, duedates, events, extractor, gender, identify,
+    links, media, policy, sentinel, settings, storage, store, telegram,
 )
 from .adapters import OutboundMessage, fanout
 from .models import (
@@ -311,6 +311,12 @@ def validate(record: ProposedRecord, *,
 DOSE_MISSING = "dose missing: not dictated, and nothing was filled in"
 SCHEDULE_MISSING = "how often was not dictated"
 DURATION_MISSING = "for how long was not dictated"
+# S17. A deadline nobody set is the one absence the card used to hide: the loop
+# was simply printed without one and the doctor had to notice the missing words.
+# It is said out loud now, in the same block and the same voice as the others,
+# and it is only ever printed after core/duedates.py has failed to read a date
+# out of the doctor's own sentence.
+DUE_MISSING = "Due date: not dictated, not filled in by Sanad"
 
 
 def flags(record: ProposedRecord) -> list[str]:
@@ -339,6 +345,8 @@ def flags(record: ProposedRecord) -> list[str]:
                 said.append(f"{where}: {SCHEDULE_MISSING}")
             if loop.days is None:
                 said.append(f"{where}: {DURATION_MISSING}")
+        if loop.type in duedates.FALLBACK_TYPES and loop.due_in_days is None:
+            said.append(f"{where}: {DUE_MISSING}")
     return said
 
 
@@ -711,6 +719,14 @@ async def handle_doctor(
             card=lookup_card(record.patient.name, rows, outcome),
         ))
         return
+    # S17. The due date the model dropped, read back out of the doctor's own
+    # sentence in code. This runs before the first validation step and therefore
+    # before the card is built, so what the doctor confirms already carries the
+    # deadline he dictated, the ladder is queued for it, and the two checks
+    # below (a date in the past, a date past a year) apply to a derived date
+    # exactly as they apply to the model's own. Nothing is invented: a loop
+    # whose deadline cannot be read stays without one and the card says so.
+    record, _ = duedates.fill(record, said, cap=MAX_DUE_DAYS)
     problems = validate(record)
     if problems and not identify.asks_lookup(said):
         await adapter.send(
