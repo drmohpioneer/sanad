@@ -130,6 +130,20 @@ HIGH_FLAGS: tuple[str, ...] = (
 )
 LOW_FLAGS: tuple[str, ...] = ("l", "ll", "low", "منخفض", "قليل")
 
+# S15 defect 2, found live and reproduced. The flag column is transcribed, and a
+# transcription drops characters: three renders of the same beta hCG slip came
+# back as "POSITIVE" once and "POSITIV" twice, and the truncated one fell out of
+# the exact-membership list above and took the escalation with it. So a flag
+# that is the BEGINNING of one of these words is read as that word, from this
+# many characters on and no fewer. Five, because a three-letter head is a
+# different word as often as it is a truncation, and because the words that are
+# short enough to be swallowed that way ("h", "low", "pos") are already printed
+# flags in their own right in the tables above: "pos" is high because the table
+# says so, not because it starts "positive", and "posi", "hig" and "cri" decide
+# nothing at all. The rule reads the tables, so it adds no word to them and
+# nothing here is a new decision the doctor has not already seen frozen.
+FLAG_PREFIX_MIN = 5
+
 # The flags that mean "this row is out of range" no matter what the table can or
 # cannot do with it. A row the parser could not read, or an analyte the table
 # has never heard of, carrying one of these, is not filed quietly: it goes to
@@ -718,19 +732,30 @@ def parse_range(text: str | None) -> tuple[Optional[float], Optional[float]]:
     return (None, None)
 
 
+def _flag_says(token: str, words: tuple[str, ...]) -> bool:
+    """Is this folded flag token one of these words, whole or truncated?
+
+    Whole first: the flag IS the word, or the flag starts with the word and a
+    space ("H (high)"). Then the truncation rule above, which is the other
+    direction: the flag is the start of the word, and long enough to be sure of
+    it. Nothing else is read.
+    """
+    if not token:
+        return False
+    if any(token == word or token.startswith(word + " ") for word in words):
+        return True
+    return len(token) >= FLAG_PREFIX_MIN and any(
+        word.startswith(token) for word in words
+    )
+
+
 def flag_is_high(flag: str | None) -> bool:
     """True when the lab itself printed a high/positive marker."""
-    token = _key(flag or "")
-    return bool(token) and any(
-        token == word or token.startswith(word + " ") for word in HIGH_FLAGS
-    )
+    return _flag_says(_key(flag or ""), HIGH_FLAGS)
 
 
 def flag_is_low(flag: str | None) -> bool:
-    token = _key(flag or "")
-    return bool(token) and any(
-        token == word or token.startswith(word + " ") for word in LOW_FLAGS
-    )
+    return _flag_says(_key(flag or ""), LOW_FLAGS)
 
 
 def flag_in(flag: str | None, words: tuple[str, ...]) -> bool:

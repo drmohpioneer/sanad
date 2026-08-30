@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from core import intents, sentinel, timing, validator
@@ -22,6 +23,11 @@ from core import intents, sentinel, timing, validator
 from tests import Borrowable
 
 NOW = datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc)  # a Saturday in Cairo
+RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "RUNBOOK.md"
+# The image's build context is app/ alone, so docs/ is not copied into it and
+# the rail below skips there and runs everywhere the document can be edited.
+HAS_RUNBOOK = unittest.skipUnless(
+    RUNBOOK.exists(), "docs/RUNBOOK.md is outside the image")
 
 # Each intent, said the way a patient says it: Egyptian Arabic, English, and
 # where it is natural, Franco-Arabic.
@@ -90,6 +96,81 @@ class TheSixAreRecognised(unittest.TestCase):
             "did_test", "lost_prescription", "reschedule_visit",
             "where_to_send", "medicine_unavailable", "forgot_measure"})
         self.assertEqual(set(intents.PATTERNS), set(intents.INTENTS))
+
+
+class TheTestNamedInTheMiddle(unittest.TestCase):
+    """S15 defect 1. "I did the glucose test" is the sentence, not "the test".
+
+    Found live twice from a real patient box: the substring list carried "i did
+    the test" and the patient named the test in the middle of it, so net one
+    matched nothing, the add-only vote may not name a state-changing intent,
+    and the whole administrative tier stood down. The refusal beat never
+    happened. core/intents.PATTERN_RES is the fix and this is its boundary.
+    """
+
+    def test_the_test_can_be_named_in_the_middle(self) -> None:
+        for message in ("I did the glucose test", "I did the lipid test",
+                        "did the blood test", "I did my glucose test",
+                        "I did the glucose tolerance test",
+                        "I did the glucose test yesterday",
+                        "عملت تحليل السكر", "عملت تحليل الدهون",
+                        "3amalt ta7lil el sokar", "3amalt ta7alil el dam"):
+            with self.subTest(message=message):
+                self.assertEqual(intents.match(message), intents.DID_TEST)
+
+    def test_a_refusal_and_a_promise_are_still_not_a_done_test(self) -> None:
+        """The article is required, which is what keeps every negation out."""
+        for message in ("I did not do the test", "I didn't do the test",
+                        "I did not do the glucose test",
+                        "I will do the glucose test tomorrow",
+                        "I have not done the glucose test",
+                        "هعمل تحليل السكر بكرة"):
+            with self.subTest(message=message):
+                self.assertEqual(intents.match(message), "")
+
+    def test_the_expression_cannot_reach_across_a_sentence(self) -> None:
+        """At most three words in the gap, and a test done TO him is not a done
+        test, so neither of these is an administrative chore."""
+        for message in ("I did the shopping and my wife had a test",
+                        "did the doctor test me for diabetes"):
+            with self.subTest(message=message):
+                self.assertEqual(intents.match(message), "")
+
+    def test_the_reading_can_be_named_in_the_middle_too(self) -> None:
+        for message in ("I forgot to measure my pressure",
+                        "I forgot to check my blood pressure",
+                        "I forgot to take my morning blood pressure",
+                        "I forgot to record my sugar"):
+            with self.subTest(message=message):
+                self.assertEqual(intents.match(message), intents.FORGOT_MEASURE)
+
+    def test_a_forgotten_anything_else_is_not_a_forgotten_reading(self) -> None:
+        for message in ("I forgot to take my medicine",
+                        "I forgot to book the appointment",
+                        "I did not forget to measure my pressure"):
+            with self.subTest(message=message):
+                self.assertNotEqual(intents.match(message),
+                                    intents.FORGOT_MEASURE)
+
+    def test_every_expression_belongs_to_an_intent_that_exists(self) -> None:
+        self.assertLessEqual(set(intents.PATTERN_RES), set(intents.INTENTS))
+
+    @HAS_RUNBOOK
+    def test_the_runbook_beat_7_sentence_is_the_one_the_code_matches(self) -> None:
+        """The rail: the document and the pattern list cannot drift apart.
+
+        The sentence is read out of docs/RUNBOOK.md 1b beat 7, not typed here,
+        so rewording the beat without teaching the matcher fails this test
+        instead of failing on camera.
+        """
+        text = RUNBOOK.read_text(encoding="utf-8")
+        after = text.split("**Beat 7, the refusal:**", 1)
+        self.assertEqual(len(after), 2, "beat 7 is not in the runbook")
+        said = after[1].split("```", 2)[1].strip()
+        self.assertEqual(said, "I did the glucose test")
+        self.assertEqual(intents.match(said), intents.DID_TEST)
+        self.assertEqual(intents.action_for(
+            intents.DID_TEST, None, said, NOW)[0], "schedule_next_contact")
 
 
 class TheGatesInFrontOfItStillDecide(unittest.TestCase):

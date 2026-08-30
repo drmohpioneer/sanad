@@ -831,6 +831,14 @@ FROZEN_LOW_FLAGS = (
     'قليل',
 )
 
+# S16, from S15 defect 2. The tables above are read a second way: a flag that is
+# the beginning of one of their words, and this many characters long or longer,
+# is that word ("POSITIV" is "positive"). The number decides escalations, so it
+# is frozen beside the words it reads. Lowering it to 3 would make "pos" a
+# truncation of "positive" rather than the printed flag it already is, and would
+# let "cri", "hig" and "det" through with it.
+FROZEN_FLAG_PREFIX_MIN = 5
+
 FROZEN_URGENT_FLAGS = (
     'h',
     'hh',
@@ -954,6 +962,9 @@ class TheFrozenWordTables(unittest.TestCase):
     def test_the_alias_table_is_exactly_the_frozen_copy(self) -> None:
         self.assertEqual(dict(labs.ALIASES), FROZEN_ALIASES)
 
+    def test_the_truncation_length_is_the_frozen_one(self) -> None:
+        self.assertEqual(labs.FLAG_PREFIX_MIN, FROZEN_FLAG_PREFIX_MIN)
+
 
 class TheBoundaryOfEveryFlagWord(unittest.TestCase):
     """A flag word is a threshold made of letters, so it gets a boundary too.
@@ -989,6 +1000,82 @@ class TheBoundaryOfEveryFlagWord(unittest.TestCase):
 
     def test_a_flag_still_never_overrules_a_number_the_table_owns(self) -> None:
         for flag in labs.HIGH_FLAGS + labs.LOW_FLAGS:
+            with self.subTest(flag=flag):
+                self.assertEqual(labs.judge("K", 4.2, flag=flag), "normal")
+
+
+class AFlagWithACharacterMissing(unittest.TestCase):
+    """S15 defect 2, found live and reproduced three times on one slip.
+
+    The flag column is transcribed by a model. Two of three renders of the same
+    beta hCG slip printed "POSITIV", one character short, and the exact list
+    dropped them: the card came back as an ordinary yellow lab result reading
+    "cannot judge, pending doctor review" and the ectopic escalation never
+    happened. labs.FLAG_PREFIX_MIN is the fix and this is its boundary.
+    """
+
+    def test_a_truncated_positive_is_still_positive(self) -> None:
+        for flag in ("POSITIV", "POSIT", "positiv", "posit"):
+            with self.subTest(flag=flag):
+                self.assertTrue(labs.flag_is_high(flag))
+
+    def test_four_characters_are_not_enough_to_be_sure(self) -> None:
+        for flag in ("POSI", "posi", "elev", "crit", "reac", "dete", "abno"):
+            with self.subTest(flag=flag):
+                self.assertFalse(labs.flag_is_high(flag))
+
+    def test_pos_is_high_because_the_table_says_so_not_by_truncation(self) -> None:
+        """The one exception the brief's own example asks about.
+
+        "pos" is three characters, so the truncation rule above cannot reach
+        it. It is high anyway, because a lab that prints "POS" in its flag
+        column has printed a flag, and "pos" has been a frozen word in
+        HIGH_FLAGS since S5. Removing it to make this assertion False would
+        turn a printed "POS" on a troponin or a pregnancy test back into
+        "cannot judge", which is the very failure this file is fixing.
+        """
+        self.assertIn("pos", labs.HIGH_FLAGS)
+        self.assertTrue(labs.flag_is_high("POS"))
+        self.assertFalse(labs.flag_is_high("PO"))
+
+    def test_a_truncated_low_is_still_low(self) -> None:
+        self.assertTrue(labs.flag_is_low("منخفض"))
+        self.assertFalse(labs.flag_is_low("lo"))
+        self.assertFalse(labs.flag_is_low("منخف"))
+
+    def test_a_word_that_merely_shares_letters_is_still_not_a_flag(self) -> None:
+        for flag in ("normal", "negative", "not detected", "pending", "sample",
+                     "see comment", "hemolysed", "posterior", "possible"):
+            with self.subTest(flag=flag):
+                self.assertFalse(labs.flag_is_high(flag))
+                self.assertFalse(labs.flag_is_low(flag))
+
+    def test_the_truncated_flag_carries_the_escalation_it_lost(self) -> None:
+        """The live case, end to end: the row the lab owns the cutoff for."""
+        self.assertEqual(labs.judge("Troponin", None, flag="POSITIV"), "critical")
+        self.assertEqual(labs.judge("Pregnancy test", None, flag="POSITIV"),
+                         "urgent_review")
+
+    def test_the_pregnancy_rule_still_needs_both_factors(self) -> None:
+        """The truncation restores the first half of the rule and nothing else.
+
+        A positive test alone is a doctor card. It becomes the emergency only
+        when the patient's own words in the same conversation report abdominal
+        pain, and a stated absence of pain still holds it back.
+        """
+        self.assertEqual(labs.judge("Pregnancy test", None, flag="POSITIV"),
+                         "urgent_review")
+        self.assertEqual(
+            labs.judge("Pregnancy test", None, flag="POSITIV",
+                       context="بطني بتوجعني"), "critical")
+        self.assertEqual(
+            labs.judge("Pregnancy test", None, flag="POSITIV",
+                       context="مفيش أي وجع في بطني"), "urgent_review")
+        self.assertEqual(labs.judge("Pregnancy test", None, flag="POSI",
+                                    context="بطني بتوجعني"), "cannot_judge")
+
+    def test_a_truncation_still_never_overrules_a_number_the_table_owns(self) -> None:
+        for flag in ("POSITIV", "منخفض", "abnorm"):
             with self.subTest(flag=flag):
                 self.assertEqual(labs.judge("K", 4.2, flag=flag), "normal")
 

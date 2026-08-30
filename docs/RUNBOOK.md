@@ -224,9 +224,12 @@ at them.
 4. Section 1, item 16 check: if you set a policy value for testing, confirm
    `POST /admin/reset` cleared it back to `core/policy.py`'s defaults before
    you record, from `GET /c/<token>/settings`.
-5. Beat 2: set `time_scale=3` before Confirm. The blood-pressure reminders
-   start about 3 seconds after Confirm and the lipid ladder's first rung
-   lands about 36 seconds after it; the lipid rung is the one to point at.
+5. Beat 2: set `time_scale=3` before Confirm. Measured live on revision 25:
+   the first blood-pressure reminder is on screen about 6 seconds after
+   Confirm and the six of them run to about 22 seconds; the lipid ladder's
+   first rung lands about 39 seconds after Confirm and is the one to point at;
+   its unreachable card follows at about 55 seconds and the visit reminders
+   run from about 61 to about 76 seconds.
    Let it go unanswered and show the feed line for it, the real ladder rung.
    Never `/force_due` this beat on camera. Set `time_scale=86400` again right
    after beat 2, before beat 3.
@@ -440,9 +443,12 @@ created:
 
 ```bash
 curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=3"   # a day is 3 seconds
-# dictate Ahmed Ali, tap Confirm: the blood-pressure reminders land at 3, 6,
-# 9, 12, 15 and 18 seconds; the lipid ladder's first rung lands at 36 seconds,
-# the one to point at. Let it go unanswered, show the feed line for it.
+# dictate Ahmed Ali, tap Confirm: measured live on revision 25, the six
+# blood-pressure reminders land about 6, 9, 12, 16, 19 and 22 seconds after
+# Confirm; the lipid ladder's first rung lands about 39 seconds after Confirm,
+# the one to point at. Let it go unanswered, show the feed line for it. Its
+# unreachable card follows at about 55 seconds, and the visit reminders run
+# from about 61 to about 76 seconds.
 curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=86400"  # back to real time, before beat 3
 ```
 
@@ -451,8 +457,8 @@ unforced, is the whole point of beat 2. Changing the scale after Confirm does
 not touch already-created Cloud Tasks, which is why the order above is fixed.
 The full Beat 1 dictation creates twelve tasks total across its four loops
 (three lipid, six blood pressure, three visit); the blood-pressure reminders
-arrive first, then the lipid rung at 36 seconds, so this window is not a clean
-lipid-only ladder.
+arrive first, then the lipid rung at about 39 seconds, so this window is not a
+clean lipid-only ladder.
 
 To rehearse all three nudges plus the unreachable card separately from the
 video, off camera, run the same two commands around a dictation with a dated

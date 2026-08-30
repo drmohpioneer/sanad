@@ -42,6 +42,7 @@ everything here that touches Firestore.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -118,6 +119,7 @@ PATTERNS: dict[str, tuple[str, ...]] = {
         "التحليل اتعمل", "التحليل خلص", "سحبت الدم", "سحبت عينه",
         "عملت الاشعه", "عملت التحاليل",
         "3amalt el ta7lil", "3amalt el ta7alil", "khalast el ta7lil",
+        "3amalt ta7lil", "3amalt ta7alil",
         "i did the test", "i did the lab", "i did the blood test",
         "i have done the test", "i had the test done", "the test is done",
         "done the test", "i did the tests", "i did the analysis",
@@ -129,6 +131,39 @@ PATTERNS: dict[str, tuple[str, ...]] = {
         "can i come", "can i come on", "reschedule", "change my appointment",
         "move my appointment", "another day instead", "a different day instead",
         "instead of the appointment",
+    ),
+}
+
+# Net one and a half: the same sentence with the object named in the middle.
+#
+# S15 defect 1, found live twice. A patient does not say "I did the test", he
+# says "I did the glucose test", and that is also the sentence docs/RUNBOOK.md
+# beat 7 is scripted with. A substring list cannot express "did the <name of
+# the test> test" without a literal per test name, so one anchored regular
+# expression stands beside the list for the two intents that have that shape.
+# It is still code, it still runs on the folded text from core/sentinel, and it
+# is narrow in three deliberate ways:
+#
+#   the article is required, so "I did not do the test" and "I will do the
+#   test" cannot reach it;
+#   at most three words may sit in the gap, so it cannot span a sentence and
+#   pick up a "test" that belongs to something else;
+#   the object word is a closed list, so "I forgot to take my medicine" is not
+#   a forgotten reading, and a test done TO someone ("did the doctor test me")
+#   is refused by the pronoun after it.
+#
+# Arabic and Franco-Arabic need no expression: "عملت تحليل" is already a
+# substring of "عملت تحليل السكر", and the two Franco forms without the article
+# are two more literals in the list above.
+PATTERN_RES: dict[str, tuple[re.Pattern[str], ...]] = {
+    DID_TEST: (
+        re.compile(r" did (?:the|my) (?:[a-z]+ ){0,3}(?:test|tests|analysis) "
+                   r"(?!(?:me|him|her|us|them|you) )"),
+    ),
+    FORGOT_MEASURE: (
+        re.compile(r" forgot to (?:measure|take|check|record|do) (?:the|my) "
+                   r"(?:[a-z]+ ){0,3}"
+                   r"(?:pressure|reading|readings|sugar|glucose|weight) "),
     ),
 }
 
@@ -205,6 +240,10 @@ def match(text: str) -> str:
     "التحليل" find "تحليل", "أقيس" find "اقيس" and "Msh" find "mesh". A pattern
     is matched as a substring, because Egyptian Arabic writes the definite
     article onto the front of the word it defines.
+
+    Each intent's substring list is tried first and its expressions in
+    PATTERN_RES after it, so the precedence in INTENTS is unchanged: the first
+    intent that hits, by either net, wins.
     """
     folded = sentinel.normalize(text)
     if not folded.strip():
@@ -213,6 +252,9 @@ def match(text: str) -> str:
         for pattern in PATTERNS[intent]:
             wanted = sentinel.normalize(pattern).strip()
             if wanted and wanted in folded:
+                return intent
+        for expression in PATTERN_RES.get(intent, ()):
+            if expression.search(folded):
                 return intent
     return ""
 
