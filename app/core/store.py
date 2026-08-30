@@ -196,6 +196,24 @@ async def update_patient(patient_id: str, **fields: Any) -> None:
     await db().collection("patients").document(patient_id).update(fields)
 
 
+async def claim_opt_out(patient_id: str) -> bool:
+    """Persist proactive-message consent once. True only for the first caller."""
+    ref = db().collection("patients").document(patient_id)
+
+    @firestore.async_transactional
+    async def claim(transaction: Any) -> bool:
+        snap = await ref.get(transaction=transaction)
+        if not snap.exists:
+            return False
+        row = snap.to_dict() or {}
+        if row.get("proactive_paused"):
+            return False
+        transaction.update(ref, {"proactive_paused": True, "opt_out_at": now()})
+        return True
+
+    return await claim(db().transaction())
+
+
 # --------------------------------------------------------------------------- #
 # A doctor's chat bound as a patient (S12 item 2)
 # --------------------------------------------------------------------------- #
@@ -277,6 +295,9 @@ MAX_RESENDS = 1
 # capped at twenty five seconds, so a claim older than five minutes belongs to
 # nobody. The owner id is not a lock, it is what the audit line names.
 CLAIM_LEASE = timedelta(minutes=5)
+# A whole patient turn can include transcription, triage, extraction and a
+# generated answer. It must never outlive this lease while still running.
+PATIENT_TURN_LEASE = CLAIM_LEASE
 
 
 def _claimed_at(row: dict[str, Any]) -> Optional[datetime]:
@@ -313,6 +334,129 @@ def claim_expired(row: dict[str, Any], at: Optional[datetime] = None) -> bool:
     if taken is None:
         return False
     return ((at or now()) - taken) > CLAIM_LEASE
+
+
+def _lease_expired(
+    row: dict[str, Any], lease: timedelta, at: Optional[datetime] = None
+) -> bool:
+    taken = _claimed_at(row)
+    return bool(taken is not None and ((at or now()) - taken) > lease)
+
+
+# --------------------------------------------------------------------------- #
+# One expensive inbound patient turn at a time
+# --------------------------------------------------------------------------- #
+async def claim_patient_turn(patient_id: str, owner: str) -> bool:
+    """Take a short, cross-instance lease before any patient model call.
+
+    A process-local asyncio.Lock would serialize one Cloud Run instance and let
+    two other instances spend the same patient's turn concurrently. This
+    deterministic Firestore row is the lock. A dead request is reclaimable
+    after five minutes, long enough for a bounded patient turn to finish.
+    """
+    ref = db().collection("patient_turns").document(patient_id)
+    body = {"patient_id": patient_id, "state": CLAIMED,
+            "claimed_at": now(), "claimed_by": owner}
+    try:
+        await ref.create(body)
+        return True
+    except gexc.AlreadyExists:
+        pass
+
+    @firestore.async_transactional
+    async def claim(transaction: Any) -> bool:
+        snap = await ref.get(transaction=transaction)
+        row = snap.to_dict() or {}
+        if not _lease_expired(row, PATIENT_TURN_LEASE):
+            return False
+        transaction.update(ref, {"state": CLAIMED, "claimed_at": now(),
+                                 "claimed_by": owner, "reclaimed": True})
+        return True
+
+    return await claim(db().transaction())
+
+
+async def release_patient_turn(patient_id: str, owner: str) -> None:
+    """Release only the lease this request owns; never another instance's."""
+    ref = db().collection("patient_turns").document(patient_id)
+
+    @firestore.async_transactional
+    async def release(transaction: Any) -> None:
+        snap = await ref.get(transaction=transaction)
+        row = snap.to_dict() or {}
+        if snap.exists and row.get("claimed_by") == owner:
+            transaction.delete(ref)
+
+    await release(db().transaction())
+
+
+# --------------------------------------------------------------------------- #
+# One copy of the same inbound photo per patient per Cairo day
+# --------------------------------------------------------------------------- #
+def photo_claim_id(patient_id: str, day_index: int, digest: str) -> str:
+    return derived_id("photo", patient_id, str(day_index), digest)
+
+
+async def claim_photo(
+    patient_id: str, day_index: int, digest: str, owner: str
+) -> bool:
+    """Claim image bytes once; completed claims make later copies duplicates."""
+    ident = photo_claim_id(patient_id, day_index, digest)
+    ref = db().collection("photo_receipts").document(ident)
+    body = {"patient_id": patient_id, "day_index": day_index,
+            "digest": digest, "state": CLAIMED,
+            "claimed_at": now(), "claimed_by": owner}
+    try:
+        await ref.create(body)
+        return True
+    except gexc.AlreadyExists:
+        pass
+
+    @firestore.async_transactional
+    async def claim(transaction: Any) -> bool:
+        snap = await ref.get(transaction=transaction)
+        row = snap.to_dict() or {}
+        if row.get("state") != CLAIMED or not claim_expired(row):
+            return False
+        transaction.update(ref, {"claimed_at": now(), "claimed_by": owner,
+                                 "reclaimed": True})
+        return True
+
+    return await claim(db().transaction())
+
+
+async def complete_photo(
+    patient_id: str, day_index: int, digest: str, owner: str
+) -> None:
+    """Mark a successfully handled image so a replay never runs the model."""
+    ref = db().collection("photo_receipts").document(
+        photo_claim_id(patient_id, day_index, digest))
+
+    @firestore.async_transactional
+    async def complete(transaction: Any) -> None:
+        snap = await ref.get(transaction=transaction)
+        row = snap.to_dict() or {}
+        if snap.exists and row.get("claimed_by") == owner:
+            transaction.update(ref, {"state": "complete", "completed_at": now()})
+
+    await complete(db().transaction())
+
+
+async def release_photo(
+    patient_id: str, day_index: int, digest: str, owner: str
+) -> None:
+    """Give back a photo claim only when its processing raised."""
+    ref = db().collection("photo_receipts").document(
+        photo_claim_id(patient_id, day_index, digest))
+
+    @firestore.async_transactional
+    async def release(transaction: Any) -> None:
+        snap = await ref.get(transaction=transaction)
+        row = snap.to_dict() or {}
+        if snap.exists and row.get("claimed_by") == owner:
+            transaction.delete(ref)
+
+    await release(db().transaction())
 
 
 async def claim_send(send: Send, owner: str = "") -> str:
@@ -392,6 +536,12 @@ async def mark_send(send_id: str, state: str, error: str = "") -> None:
     await db().collection("sends").document(send_id).update(
         {"state": state, "error": error}
     )
+
+
+async def send_state(send_id: str) -> str:
+    """The durable outcome of one outbound receipt, or empty if absent."""
+    snap = await db().collection("sends").document(send_id).get()
+    return str((snap.to_dict() or {}).get("state") or "") if snap.exists else ""
 
 
 async def sends_for_patient(patient_id: str) -> list[Send]:
@@ -1276,6 +1426,18 @@ async def wipe_doctor(doctor_id: str) -> dict[str, int]:
     Mohamed was in the middle of binding on his own phone. It now clears only
     the row whose chat is already this doctor's, and otherwise clears none.
     """
+    # These two receipt collections are keyed by patient rather than doctor.
+    # Capture ownership before RESET_COLLECTIONS removes the patient rows, then
+    # remove their leases/receipts as part of the same board reset.
+    patient_ids = [
+        snap.id
+        async for snap in (
+            db().collection("patients")
+            .where(filter=FieldFilter("doctor_id", "==", doctor_id))
+            .stream()
+        )
+    ]
+
     deleted: dict[str, int] = {}
     for name in RESET_COLLECTIONS:
         count = 0
@@ -1288,6 +1450,22 @@ async def wipe_doctor(doctor_id: str) -> dict[str, int]:
             await snap.reference.delete()
             count += 1
         deleted[name] = count
+
+    deleted["patient_turns"] = 0
+    deleted["photo_receipts"] = 0
+    for patient_id in patient_ids:
+        turn = db().collection("patient_turns").document(patient_id)
+        snap = await turn.get()
+        if snap.exists:
+            await turn.delete()
+            deleted["patient_turns"] += 1
+        async for receipt in (
+            db().collection("photo_receipts")
+            .where(filter=FieldFilter("patient_id", "==", patient_id))
+            .stream()
+        ):
+            await receipt.reference.delete()
+            deleted["photo_receipts"] += 1
 
     doctor = await doctor_by_id(doctor_id)
     chat_id = doctor.telegram_chat_id if doctor is not None else None

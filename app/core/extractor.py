@@ -35,6 +35,7 @@ and asked once more - once, never in a loop.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import logging
@@ -45,7 +46,7 @@ from google.genai import types
 
 from . import (
     bounded, coordinator, escalate, events, gender, labs, lang, media, photos,
-    sentinel, settings, storage, store, verify, vitals,
+    sentinel, settings, storage, store, timing, verify, vitals,
 )
 from .adapters import OutboundMessage, fanout
 from .models import Doctor, Event, Loop, Patient, PhotoReading
@@ -123,6 +124,10 @@ PATIENT_CRITICAL = {
 PATIENT_UNEXPECTED = {
     "ar": "وصلتني الصورة وبعتها لدكتورك.",
     "en": "I have received your photo and passed it to your doctor.",
+}
+PATIENT_DUPLICATE = {
+    "ar": "وصلتني الصورة دي قبل كده النهارده. ماعملتش نتيجة أو كارت تاني.",
+    "en": "I already received this image today. I did not create another result or card.",
 }
 
 # --------------------------------------------------------------------------- #
@@ -333,6 +338,26 @@ def unexpected_result_card(
     }
 
 
+def identity_mismatch_card(
+    patient: Patient, reading: PhotoReading, findings: list[labs.Finding],
+    image_path: str, critical: bool, event_id: str, why: str,
+    urgent: bool = False,
+) -> dict:
+    """Show the values without pretending no test existed or allowing attach."""
+    return {
+        "title": _lab_title(patient, critical, urgent,
+                            f"🟡 Identity mismatch · {patient.name}"),
+        "severity": "red" if critical or urgent else "yellow",
+        "lines": [
+            "This slip was NOT attached to any obligation.",
+            f"Identity check failed: {why or 'the printed name does not match the record'}.",
+            "Ordered-test completeness was not applied after identity failed.",
+            *_value_lines(reading, findings, image_path, critical, urgent),
+        ],
+        "actions": [{"id": f"seen:{event_id}", "label": "Seen"}],
+    }
+
+
 def reading_card(
     patient: Patient, loop: Optional[Loop], row: dict, image_path: str
 ) -> dict:
@@ -364,7 +389,38 @@ async def handle_photo(
     patient: Patient, doctor: Doctor, image: bytes, mime: str = "image/jpeg",
     *, caption: str = "", channel: str = "web",
 ) -> None:
-    """A photo from a patient. Read first, then routed by core/photos.py."""
+    """Claim identical bytes once per patient/day, then read and route them."""
+    digest = hashlib.sha256(image).hexdigest()
+    day_index = timing.day_index(store.now(), timing.REAL_DAY_SECONDS)
+    owner = store.new_id()
+    if not await store.claim_photo(patient.id, day_index, digest, owner):
+        speak = lang.of(caption) if caption else await lang.for_patient(
+            patient, doctor.id)
+        await events.append_event(
+            doctor.id, "system", f"duplicate photo ignored for {patient.name}",
+            patient_id=patient.id, channel=channel,
+            meta={"duplicate_image": True, "digest": digest[:16],
+                  "decided_by": "code (same image bytes, patient, Cairo day)"},
+        )
+        await fanout().send(f"patient:{patient.id}", OutboundMessage(
+            text=PATIENT_DUPLICATE[speak],
+            meta={"audit": {"tier": "duplicate", "generated": "code template"}},
+        ))
+        return
+    try:
+        await _handle_photo_claimed(
+            patient, doctor, image, mime, caption=caption, channel=channel)
+    except Exception:
+        await store.release_photo(patient.id, day_index, digest, owner)
+        raise
+    await store.complete_photo(patient.id, day_index, digest, owner)
+
+
+async def _handle_photo_claimed(
+    patient: Patient, doctor: Doctor, image: bytes, mime: str = "image/jpeg",
+    *, caption: str = "", channel: str = "web",
+) -> None:
+    """A newly claimed photo from a patient, read and routed once."""
     out = fanout()
     to_patient, to_doctor = f"patient:{patient.id}", f"doctor:{doctor.web_token}"
     speak = lang.of(caption) if caption else await lang.for_patient(patient, doctor.id)
@@ -672,8 +728,10 @@ async def _handle_lab(
                 meta={"verify": verdict.as_meta(), "results": results,
                       "decided_by": "code (core/verify.py identity check)"},
             )
-            identity_lines = ["This slip was NOT attached to any obligation.",
-                              *verdict.lines()]
+            # Completeness is about this patient's order. Once identity failed,
+            # printing "3 of 4 requested analytes" beside an unattached slip is
+            # a contradictory story, so those lines are deliberately omitted.
+            identity_lines = []
             loop = None
         else:
             identity_lines = verdict.lines()
@@ -728,16 +786,21 @@ async def _handle_lab(
         },
     )
 
-    # An identity that could not be matched is urgent by itself: the values are
-    # in front of the doctor and nothing was filed against a patient.
-    flagged = bool(urgent) or slip_concept is not None or bool(
-        verdict is not None and verdict.identity_failed
-    )
-    card = (values_card(patient, loop, reading, findings, image_path,
-                        bool(critical), flagged)
-            if loop is not None else
-            unexpected_result_card(patient, reading, findings, image_path,
-                                   bool(critical), event.id, flagged))
+    # Identity failure is a yellow verification problem, not a red clinical
+    # verdict. Actual critical/urgent values and sentinel words remain red even
+    # when the name does not match, so uncertainty never hides a dangerous row.
+    identity_failed = bool(verdict is not None and verdict.identity_failed)
+    flagged = bool(urgent) or slip_concept is not None
+    if identity_failed:
+        card = identity_mismatch_card(
+            patient, reading, findings, image_path, bool(critical), event.id,
+            verdict.identity_why if verdict is not None else "", flagged)
+    elif loop is not None:
+        card = values_card(patient, loop, reading, findings, image_path,
+                           bool(critical), flagged)
+    else:
+        card = unexpected_result_card(patient, reading, findings, image_path,
+                                      bool(critical), event.id, flagged)
     if identity_lines:
         card["lines"] = [*identity_lines, *card["lines"]]
 
@@ -800,7 +863,9 @@ async def _handle_lab(
     headline = (f"{patient.name} sent {possessive} {loop.title} result."
                 if loop is not None
                 else f"{patient.name} sent a result nothing was ordered for.")
-    if flagged:
+    if identity_failed and not flagged:
+        headline = f"{patient.name} sent a result with an identity mismatch."
+    elif flagged:
         headline = f"{patient.name} sent a result that needs your eyes."
     await out.send(to_doctor, OutboundMessage(
         text=headline, card=card, patient_id=patient.id,
@@ -824,7 +889,10 @@ async def _handle_lab(
 # --------------------------------------------------------------------------- #
 async def _stored_result(doctor: Doctor, event_id: str) -> Optional[Event]:
     event = await store.get_event(event_id)
-    if event is None or event.doctor_id != doctor.id or not event.meta.get("results"):
+    verification = (event.meta.get("verify") or {}) if event is not None else {}
+    if (event is None or event.doctor_id != doctor.id
+            or not event.meta.get("results")
+            or verification.get("identity") in ("mismatch", "cannot_compare")):
         return None
     return event
 

@@ -76,7 +76,8 @@ def _lipids(ldl: str = "150") -> tuple[dict[str, Any], ...]:
         {"analyte": "LDL", "value": ldl, "unit": "mg/dL", "level": "above_target",
          "line": f"LDL {ldl} mg/dL, above target"},
         {"analyte": "Total cholesterol", "value": "230", "unit": "mg/dL",
-         "level": "normal", "line": "Total cholesterol 230 mg/dL, in range"},
+         "level": "normal",
+         "line": "Total cholesterol 230 mg/dL, no printed range to compare"},
     )
 
 
@@ -103,8 +104,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Nabila Sorour", sex="female", age=61, specialty="cardiology",
         diagnosis="hypertension, on two agents", speak="ar",
-        plan="خدي الدوا كل يوم الصبح وقيسي الضغط الصبح وبالليل.",
-        said="قست الضغط النهاردة الصبح",
+        plan="Take the medicine every morning and measure blood pressure morning and night.",
+        said="I measured my blood pressure this morning",
         contracts=(
             Contract(type="MONITOR", title="Blood pressure monitoring",
                      details={"metric": "BP", "schedule": "twice a day",
@@ -140,8 +141,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Salwa Abdelhamid", sex="female", age=47, specialty="endocrinology",
         diagnosis="type 2 diabetes", speak="ar",
-        plan="اعملي تحليل السكر التراكمي خلال أسبوعين وابعتيلي النتيجة.",
-        said="المعمل مقفول عندنا في المنطقة",
+        plan="Do the HbA1c test within two weeks and send me the result.",
+        said="The lab in my area is closed",
         contracts=(
             Contract(type="TEST", title="HbA1c",
                      details={"test_name": "glycated haemoglobin"},
@@ -151,13 +152,13 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Refaat Zaghloul", sex="male", age=66, specialty="endocrinology",
         diagnosis="type 2 diabetes with neuropathy", speak="ar",
-        plan="التحليل مهم عشان نتأكد إن العلاج شغال.",
-        said="مش هعمل التحليل عشان غالي",
+        plan="The test is important so we can confirm the treatment is working.",
+        said="I will not do the test because it is too expensive",
         contracts=(
             Contract(type="TEST", title="Lipid panel",
                      details={"test_name": "Lipid panel"}, due_in_days=3,
                      barrier="cost", paused=True, contacts=2,
-                     relay="مش هعمل التحليل عشان غالي"),
+                     relay="I will not do the test because it is too expensive"),
             Contract(type="MEDICATION", title="Start metformin",
                      details={"drug": "metformin", "dose": "500 twice a day",
                               "action": "start"}, state="open"),
@@ -180,8 +181,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Mostafa Ghoneim", sex="male", age=71, specialty="nephrology",
         diagnosis="chronic kidney disease, on a potassium binder", speak="ar",
-        plan="التحليل ده مهم جداً ولازم يتعمل في ميعاده.",
-        said="النتيجة وصلتك؟",
+        plan="This test is important and must be done on time.",
+        said="Did you receive the result?",
         contracts=(
             Contract(type="TEST", title="Electrolytes",
                      details={"test_name": "electrolytes"}, due_in_days=-2,
@@ -195,8 +196,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Amany Roushdy", sex="female", age=29, specialty="obstetrics",
         diagnosis="first pregnancy, twenty six weeks", speak="ar",
-        plan="اعملي تحليل السكر بتاع الحمل الأسبوع الجاي.",
-        said="ممكن أجي الاتنين بدل الأربع؟",
+        plan="Do the pregnancy glucose test next week.",
+        said="Can I come Monday instead of Wednesday?",
         contracts=(
             Contract(type="VISIT", title="Antenatal visit", due_in_days=5,
                      state="open", contacts=1),
@@ -215,14 +216,14 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Gehan Mounir", sex="female", age=33, specialty="obstetrics",
         diagnosis="second pregnancy, anaemia", speak="ar",
-        plan="خدي حديد كل يوم بعد الأكل، وأعيدي صورة الدم بعد شهر.",
-        said="الدوا مش متوفر في الصيدلية",
+        plan="Take iron every day after food and repeat the blood count in one month.",
+        said="The medicine is not available at the pharmacy",
         contracts=(
             Contract(type="MEDICATION", title="Start oral iron",
                      details={"drug": "ferrous sulfate", "dose": "one a day",
                               "action": "start"}, state="open",
                      barrier="availability", contacts=2,
-                     relay="الدوا مش متوفر في الصيدلية"),
+                     relay="The medicine is not available at the pharmacy"),
             Contract(type="TEST", title="Complete blood count",
                      details={"test_name": "cbc"}, due_in_days=21),
         ),
@@ -230,8 +231,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Youssef Abu Zeid", sex="male", age=7, specialty="paediatrics",
         diagnosis="asthma, on an inhaler", speak="ar",
-        plan="لو الكحة زادت بالليل بلغني.",
-        said="شكرا يا دكتور",
+        plan="Tell me if the cough gets worse at night.",
+        said="Thank you, doctor",
         contracts=(
             Contract(type="VISIT", title="Asthma review", due_in_days=12,
                      state="open", contacts=1),
@@ -240,8 +241,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Malak Sabry", sex="female", age=11, specialty="paediatrics",
         diagnosis="recurrent tonsillitis", speak="ar",
-        plan="كملي العلاج لآخره حتى لو الحرارة نزلت.",
-        said="خلصنا العلاج والحمد لله",
+        plan="Finish the full treatment even if the fever settles.",
+        said="We finished the treatment",
         contracts=(
             Contract(type="MEDICATION", title="Finish the antibiotic course",
                      details={"drug": "amoxicillin", "dose": "three times a day",
@@ -266,8 +267,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Fatma El Deeb", sex="female", age=44, specialty="general medicine",
         diagnosis="vitamin D deficiency", speak="ar",
-        plan="خدي الفيتامين مرة في الأسبوع لمدة شهرين.",
-        said="نسيت الجرعة الأسبوع اللي فات",
+        plan="Take the vitamin once a week for two months.",
+        said="I forgot last week's dose",
         contracts=(
             Contract(type="MEDICATION", title="Weekly vitamin D",
                      details={"drug": "vitamin D", "dose": "once a week",
@@ -278,7 +279,7 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Kamal Wahba", sex="male", age=68, specialty="pulmonology",
         diagnosis="chronic obstructive pulmonary disease", speak="ar",
-        plan="لو النفس ضاق أكتر من المعتاد بلغني على طول.",
+        plan="Tell me at once if your breathing becomes worse than usual.",
         said="",
         contracts=(
             Contract(type="VISIT", title="Chest clinic review", due_in_days=-6,
@@ -315,19 +316,19 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Reem Fahmy", sex="female", age=35, specialty="gastroenterology",
         diagnosis="irritable bowel syndrome", speak="ar",
-        plan="جربي الأكل اللي اتفقنا عليه وسجلي الأعراض.",
-        said="أنا كويسة ليه أرجع؟",
+        plan="Try the diet we agreed and record your symptoms.",
+        said="I feel well, why should I come back?",
         contracts=(
             Contract(type="VISIT", title="Follow-up visit", due_in_days=10,
                      state="open", barrier="asymptomatic", contacts=2,
-                     relay="أنا كويسة ليه أرجع؟"),
+                     relay="I feel well, why should I come back?"),
         ),
     ),
     Person(
         name="Sherif Nassar", sex="male", age=62, specialty="rheumatology",
         diagnosis="gout", speak="ar",
-        plan="اعمل تحليل حمض اليوريك بعد أسبوعين.",
-        said="عملت التحليل امبارح",
+        plan="Do a uric acid test in two weeks.",
+        said="I did the test yesterday",
         contracts=(
             Contract(type="TEST", title="Uric acid",
                      details={"test_name": "uric acid"}, due_in_days=2,
@@ -353,8 +354,8 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Adel Mansi", sex="male", age=73, specialty="haematology",
         diagnosis="on long term anticoagulation", speak="ar",
-        plan="تحليل تجلط الدم كل أسبوعين من غير تأخير.",
-        said="النتيجة معايا هبعتهالك",
+        plan="Do the clotting test every two weeks without delay.",
+        said="I have the result and will send it",
         contracts=(
             Contract(type="TEST", title="Coagulation profile",
                      details={"test_name": "coagulation"}, due_in_days=-1,
@@ -368,15 +369,15 @@ PEOPLE: tuple[Person, ...] = (
     Person(
         name="Mervat Halim", sex="female", age=41, specialty="haematology",
         diagnosis="iron deficiency anaemia", speak="ar",
-        plan="كملي الحديد وأعيدي صورة الدم بعد شهر.",
-        said="خلصت الشريط الأول",
+        plan="Continue the iron and repeat the blood count in one month.",
+        said="I finished the first strip",
         contracts=(
             Contract(type="TEST", title="Complete blood count",
                      details={"test_name": "cbc"}, due_in_days=-5,
                      state="done", reviewed=True, contacts=3,
                      results=({"analyte": "Hb", "value": "11.8", "unit": "g/dL",
                                "level": "normal",
-                               "line": "Haemoglobin 11.8 g/dL, in range"},)),
+                               "line": "Haemoglobin 11.8 g/dL, no printed range to compare"},)),
             Contract(type="MEDICATION", title="Continue oral iron",
                      details={"drug": "ferrous sulfate", "dose": "one a day",
                               "action": "start"}, state="done", reviewed=True,
@@ -398,10 +399,9 @@ def _reading_row(base: datetime, row: dict[str, Any], per_day: int
                  ) -> dict[str, Any]:
     """A fixture reading (day, slot) -> the row a MONITOR loop stores.
 
-    Day one is the day the first reminder goes out, one day after the loop was
-    created (core/chaser.schedule_loop, core/monitoring.FIRST_REMINDER_DAY).
-    This fixture carried the same off-by-one the summary did until S11 wave A
-    (reviews/codex-troubleshoot-1.md item 8), so it moved with it.
+    Day one is the confirmation day, when the plan and welcome first ask for
+    the reading (core/chaser.schedule_loop, core/monitoring.FIRST_REMINDER_DAY).
+    Reminders begin on contract day two, so the fixture uses that same origin.
     """
     hour = (8, 20, 13, 17)[min(int(row.get("slot", 0)), 3)] if per_day > 1 else 9
     when = base + timedelta(days=int(row.get("day", 1)) + monitoring.FIRST_REMINDER_DAY - 1)

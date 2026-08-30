@@ -33,9 +33,8 @@ DOCTOR_TAPPED_LINK = (
 )
 
 INTRO = (
-    "أنا سند، مساعد الدكتور الذكي. لو دكتورك بعتلك لينك، افتحه عشان أعرفك.\n"
-    "I am Sanad, a doctor's AI assistant. If your doctor sent you a link, open it "
-    "so I can recognise you."
+    "I am Sanad, a doctor's AI assistant. If your doctor sent you a link, open "
+    "it so I can recognise you. You can write to me in Arabic."
 )
 
 

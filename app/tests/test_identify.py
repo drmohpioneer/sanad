@@ -578,6 +578,9 @@ class TheRegistrarAgainstABoard(Borrowable):
                 outer.scheduled.append(loop.id)
             return [{"loop": l.id} for l in rows]
 
+        async def current_settings():
+            return "run1", 86400
+
         for name in STORE_NAMES:
             self.enterContext(patch.object(store_module, name,
                                            getattr(self.fake, name)))
@@ -589,6 +592,8 @@ class TheRegistrarAgainstABoard(Borrowable):
         self.enterContext(patch.object(chaser, "schedule_loop", schedule_loop))
         self.enterContext(patch.object(chaser, "schedule_patient",
                                        schedule_patient))
+        self.enterContext(patch.object(sanad_main.settings, "current",
+                                       current_settings))
         self.enterContext(patch.object(telegram, "enabled", lambda: False))
 
     # helpers ---------------------------------------------------------------

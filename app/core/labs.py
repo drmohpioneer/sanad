@@ -117,6 +117,8 @@ ALIASES: dict[str, str] = {
     "blood culture": "Culture (blood/CSF)", "csf culture": "Culture (blood/CSF)",
     "culture": "Culture (blood/CSF)",
     "pregnancy": "Pregnancy test", "bhcg": "Pregnancy test", "hcg": "Pregnancy test",
+    "beta hcg": "Pregnancy test", "b hcg": "Pregnancy test",
+    "beta hcg qualitative": "Pregnancy test",
 }
 
 # Words a lab prints in its own flag column when a value is out of range. A flag
@@ -535,6 +537,38 @@ def panel_analytes(test_name: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+ARABIC_TEST_NAMES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("glucose", "tolerance"), "اختبار تحمل الجلوكوز"),
+    (("glycated",), "تحليل السكر التراكمي"),
+    (("hba1c",), "تحليل السكر التراكمي"),
+    (("lipid",), "تحليل الدهون"),
+    (("cholesterol",), "تحليل الدهون"),
+    (("kidney",), "تحاليل وظائف الكلى"),
+    (("renal",), "تحاليل وظائف الكلى"),
+    (("kft",), "تحاليل وظائف الكلى"),
+    (("liver",), "تحاليل وظائف الكبد"),
+    (("lft",), "تحاليل وظائف الكبد"),
+    (("thyroid",), "تحاليل وظائف الغدة الدرقية"),
+    (("cbc",), "صورة دم كاملة"),
+    (("blood", "count"), "صورة دم كاملة"),
+    (("pregnancy",), "تحليل الحمل بالدم"),
+    (("beta", "hcg"), "تحليل الحمل بالدم"),
+    (("potassium",), "تحليل البوتاسيوم"),
+    (("sodium",), "تحليل الصوديوم"),
+    (("creatinine",), "تحليل الكرياتينين"),
+    (("inr",), "تحليل سيولة الدم"),
+)
+
+
+def arabic_test_name(test_name: str) -> str:
+    """A patient-facing Arabic label for a known test, never a translation model."""
+    words = set(_key(test_name).split())
+    for required, translated in ARABIC_TEST_NAMES:
+        if set(required).issubset(words):
+            return translated
+    return "التحليل المطلوب"
+
+
 def panel_overlap(test_name: str, analytes: Sequence[str]) -> int:
     """How many of a slip's analytes belong to the panel the doctor ordered.
 
@@ -832,7 +866,7 @@ def _lookup(book: dict[str, str], analyte: str) -> Optional[float]:
 
 def _line(analyte: str, printed: str, unit: str, level: Level,
           target: Optional[float], baseline: Optional[float], rule: Optional[LabRule],
-          ref_range: str, searched: bool = False) -> str:
+          ref_range: str, flag: str = "", searched: bool = False) -> str:
     head = f"{analyte} {printed}{(' ' + unit) if unit else ''}".strip()
     if level == "critical":
         bound = ""
@@ -859,8 +893,22 @@ def _line(analyte: str, printed: str, unit: str, level: Level,
     if level == "cannot_judge":
         return f"{head} · {CANNOT_JUDGE_NOTE if rule else NOT_IN_TABLE_NOTE}"
     if baseline is not None:
-        return f"{head}, baseline {_short(baseline)}, in range"
-    return f"{head}, in range"
+        return f"{head}, baseline {_short(baseline)}"
+    value = parse_value(printed)
+    low, high = parse_range(ref_range)
+    if flag_is_high(flag):
+        return (f"{head}, above the lab's reference ({ref_range})" if ref_range
+                else f"{head}, flagged {flag.strip()} by the lab")
+    if flag_is_low(flag):
+        return (f"{head}, below the lab's reference ({ref_range})" if ref_range
+                else f"{head}, flagged {flag.strip()} by the lab")
+    if value is not None and (low is not None or high is not None):
+        if low is not None and value < low:
+            return f"{head}, below the lab's reference ({ref_range})"
+        if high is not None and value > high:
+            return f"{head}, above the lab's reference ({ref_range})"
+        return f"{head}, in range (lab reference {ref_range})"
+    return f"{head}, no printed range to compare"
 
 
 def _short(number: float) -> str:
@@ -915,7 +963,7 @@ def assess(
                 target=target,
                 baseline=base,
                 line=_line(analyte, printed or "(no value)", unit, level, target,
-                           base, rule_for(analyte), ref_range, searched),
+                           base, rule_for(analyte), ref_range, flag, searched),
             )
         )
     return findings

@@ -100,7 +100,7 @@ class TheSixParts(unittest.TestCase):
     def test_the_policy_that_binds_it_is_shown_with_it(self) -> None:
         shown = self.rendered()["policy"]
         self.assertEqual(shown["max_contacts"], 6)
-        self.assertIn("22:00 to 08:00 Cairo", shown["quiet_hours"])
+        self.assertIn("22:00 to 09:00 Cairo", shown["quiet_hours"])
 
     def test_where_it_stands_is_read_from_the_loop(self) -> None:
         state = self.rendered()["state"]

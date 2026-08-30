@@ -47,6 +47,7 @@ class TheChatOpensWithTheDoctorsPlanInIt(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         outer = self
         self.sent: list = []
+        self.receipts: dict[str, str] = {}
         self.speak = "ar"
         self.doctor = Doctor(id="d", name="دكتور محمد", web_token="t",
                              created_at=NOW)
@@ -64,10 +65,29 @@ class TheChatOpensWithTheDoctorsPlanInIt(unittest.IsolatedAsyncioTestCase):
         async def for_patient(*a, **kw):
             return outer.speak
 
+        async def claim_send(send):
+            state = outer.receipts.get(send.id)
+            if state is None:
+                outer.receipts[send.id] = "claimed"
+                return store_module.CLAIMED
+            if state == "failed":
+                outer.receipts[send.id] = "claimed"
+                return store_module.RESEND
+            return store_module.ALREADY_SENT
+
+        async def mark_send(send_id, state, error=""):
+            outer.receipts[send_id] = state
+
+        async def send_state(send_id):
+            return outer.receipts.get(send_id, "")
+
         self.patches = [
             patch.object(links, "fanout", lambda: Fanout()),
             patch.object(store_module, "update_patient", update_patient),
             patch.object(store_module, "now", lambda: NOW),
+            patch.object(store_module, "claim_send", claim_send),
+            patch.object(store_module, "mark_send", mark_send),
+            patch.object(store_module, "send_state", send_state),
             patch.object(lang, "for_patient", for_patient),
         ]
         for one in self.patches:
@@ -108,8 +128,8 @@ class TheChatOpensWithTheDoctorsPlanInIt(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await links.welcome(self.patient, self.doctor))
         self.assertEqual(len(self.texts()), 3)
 
-    async def test_the_flag_is_written_before_the_first_word_leaves(self) -> None:
-        """A reload racing the first send is the case this has to survive."""
+    async def test_completion_is_written_only_after_every_word_lands(self) -> None:
+        """A partial delivery stays retryable instead of consuming onboarding."""
         seen: list = []
 
         class Watching:
@@ -124,7 +144,26 @@ class TheChatOpensWithTheDoctorsPlanInIt(unittest.IsolatedAsyncioTestCase):
         with patch.object(links, "fanout", lambda: watcher):
             await links.welcome(self.patient, self.doctor)
         self.assertTrue(seen)
-        self.assertTrue(all(flag is not None for flag in seen))
+        self.assertTrue(all(flag is None for flag in seen))
+        self.assertIsNotNone(self.patient.welcomed_at)
+
+    async def test_a_mid_send_failure_retries_only_the_unfinished_steps(self) -> None:
+        calls = 0
+
+        class Flaky:
+            async def send(inner, ref, msg):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise RuntimeError("channel down")
+                self.sent.append((ref, msg.text, msg.meta or {}))
+
+        with patch.object(links, "fanout", lambda: Flaky()):
+            with self.assertRaises(RuntimeError):
+                await links.welcome(self.patient, self.doctor)
+            self.assertIsNone(self.patient.welcomed_at)
+            self.assertTrue(await links.welcome(self.patient, self.doctor))
+        self.assertEqual(len(self.texts()), 3)
 
     async def test_a_patient_with_no_plan_still_gets_hello(self) -> None:
         self.patient.plan_text = ""

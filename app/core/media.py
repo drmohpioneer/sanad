@@ -15,9 +15,11 @@ two-second poll (S1 review, carry-over 1).
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import subprocess
 import tempfile
+import wave
 
 from google import genai
 from google.genai import types
@@ -32,6 +34,31 @@ LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
 client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION)
 
 TRANSCRIBE_PROMPT = "Transcribe this audio verbatim in its original language."
+
+
+class SilentAudio(ValueError):
+    """The decoded note contains no signal that is safe to interpret as speech."""
+
+
+def require_audible_wav(wav_bytes: bytes) -> None:
+    """Reject digital silence before a model can hallucinate a transcript.
+
+    ffmpeg always gives this module mono 16-bit PCM.  The deliberately tiny
+    threshold catches zero-filled and near-zero decoder output without trying
+    to decide whether a genuinely quiet human voice is loud enough.
+    """
+    try:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as source:
+            if source.getsampwidth() != 2:
+                raise SilentAudio("unsupported decoded sample width")
+            frames = source.readframes(source.getnframes())
+    except (EOFError, wave.Error) as exc:
+        raise SilentAudio("decoded voice note is not readable") from exc
+    if not frames:
+        raise SilentAudio("decoded voice note is empty")
+    samples = memoryview(frames).cast("h")
+    if not samples or max(abs(sample) for sample in samples) <= 8:
+        raise SilentAudio("decoded voice note is silent")
 
 
 def ffmpeg_version() -> str:
@@ -92,7 +119,9 @@ def transcribe_wav(wav: bytes) -> str:
 
 def transcribe(raw: bytes) -> str:
     """Voice note bytes -> transcript, in whatever language was spoken."""
-    return transcribe_wav(to_wav(raw))
+    wav = to_wav(raw)
+    require_audible_wav(wav)
+    return transcribe_wav(wav)
 
 
 # --------------------------------------------------------------------------- #
@@ -116,4 +145,5 @@ async def transcribe_wav_async(wav: bytes) -> str:
 async def transcribe_async(raw: bytes) -> str:
     """Voice note bytes -> transcript, without blocking the event loop."""
     wav = await asyncio.to_thread(to_wav, raw)  # ffmpeg is a blocking subprocess
+    await asyncio.to_thread(require_audible_wav, wav)
     return await transcribe_wav_async(wav)

@@ -26,7 +26,7 @@
   <g id="n-ADAPT">
     <rect x="170" y="196" width="400" height="52" rx="8" fill="#f5f7fa" stroke="#1c1f26" stroke-width="1.4"/>
     <text x="370.0" y="216" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">ChannelAdapter interface</text>
-    <text x="370.0" y="232" font-size="11" fill="#4a4f59" text-anchor="middle">inbound(message) / send(target, text | card)</text>
+    <text x="370.0" y="232" font-size="11" fill="#4a4f59" text-anchor="middle">send(target, text | card) only</text>
   </g>
   <g id="g-core">
     <rect x="40" y="268" width="1180" height="912" rx="12" fill="#ffffff" stroke="#1c1f26" stroke-width="1.6"/>

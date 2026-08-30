@@ -228,13 +228,13 @@ class EveryCardSaysWhoDecidedIt(unittest.TestCase):
     card send with no readable label fails here, which is the image build.
     """
 
-    def test_there_are_nineteen_of_them_and_the_rail_can_read_them_all(self
-                                                                      ) -> None:
-        """Fifteen at rev 18, eighteen at S9, nineteen in wave C.
+    def test_every_card_send_is_counted_and_the_rail_can_read_them_all(self
+                                                                       ) -> None:
+        """Fifteen at rev 18, nineteen in wave C, twenty-one in round two.
 
         The nineteenth is the unreadable voice note (codex item 11): a
         transcription that hangs or throws used to be an HTTP 500 and is now a
-        card.
+        card. Round two adds the bare-name lookup and explicit opt-out cards.
 
         The number is not the point and the rail is: every card send in core/
         has to carry a `decided_by` this file can read without running it. The
@@ -242,7 +242,7 @@ class EveryCardSaysWhoDecidedIt(unittest.TestCase):
         here rather than an "unlabelled" the doctor reads on the board.
         """
         sends = card_sends()
-        self.assertEqual(len(sends), 19)
+        self.assertEqual(len(sends), 21)
         for name, line, found in sends:
             with self.subTest(where=f"{name}:{line}"):
                 self.assertTrue(found, "this card send carries no decided_by")

@@ -6,8 +6,10 @@ while the camera is running. Nothing here needs a redeploy.
 ## 0. The two lines you paste first
 
 ```bash
+PROJECT="$(gcloud config get-value project)"
+test -n "$PROJECT" && test "$PROJECT" != "(unset)"
 U=https://<SERVICE_URL>
-S=$(gcloud secrets versions access latest --secret=sanad-admin-secret --project=sanad-506914)
+S=$(gcloud secrets versions access latest --secret=sanad-admin-secret --project="$PROJECT")
 ```
 
 `<SERVICE_URL>` is what `deploy.sh` prints at the end, and what `gcloud run
@@ -94,7 +96,7 @@ silence, because it does not depend on the purge having propagated.
 # 1. Purge the queue. Asynchronous: `gcloud tasks list` can lag a minute behind
 #    it, which is why it is not the kill switch, only tidying.
 gcloud tasks queues purge sanad-chase --location europe-west1 \
-  --project sanad-506914 --quiet
+  --project "$PROJECT" --quiet
 
 # 2. Bump the run id. Every task already on the queue carries the OLD id and is
 #    dropped, unsent, the moment it fires. Use a new value every take: demo2,
@@ -142,7 +144,7 @@ What is still queued, if you want to see it:
 
 ```bash
 gcloud tasks list --queue sanad-chase --location europe-west1 \
-  --project sanad-506914 \
+  --project "$PROJECT" \
   --format='table(name.basename(),scheduleTime,dispatchCount)'
 ```
 
@@ -160,8 +162,9 @@ Drop `&name=Test%20Doctor` to seed your own board instead. Run it after step 3
 (the reset) and before step 5 (the dictation), so the board is the twenty plus
 whoever you dictate on camera.
 
-All twenty are invented: made up names, one impossible phone block
-(0100 000 00NN), textbook diagnoses, and no photographs anywhere. They are a
+All twenty are invented: made up names, conspicuously formatted demo phone
+values (`0100 000 00NN`), textbook diagnoses, and no photographs. The number
+pattern is not an officially reserved test range, so never dial it. The rows are a
 table in `app/core/background.py` and nothing about them came from a real
 person. The seeder writes patients, loops, events and relays and nothing else:
 it creates no Cloud Task and sends no message, so it can never reach a phone.
@@ -213,18 +216,20 @@ at them.
 1. Section 0: paste the two lines.
 2. Section 1, steps 1 to 4: purge the queue, bump the run id to a value you
    have not used yet, reset the board (Test Doctor for a rehearsal, the demo
-   doctor for the real take), set the clock to 86400.
+   doctor for the real take), and set the clock per item 5 (3 before beat 1's
+   Confirm, back to 86400 right after beat 2).
 3. Section 1, "The twenty background patients": seed them, so the board
    carries real load and Amany Roushdy's Glucose tolerance test loop sits at
    six contacts for beat 7.
 4. Section 1, item 16 check: if you set a policy value for testing, confirm
    `POST /admin/reset` cleared it back to `core/policy.py`'s defaults before
    you record, from `GET /c/<token>/settings`.
-5. Section 4's time-scale trick is for beat 2 only. Set `time_scale=3` right
-   before advancing the run on camera, and set it back to `86400` the moment
-   the reschedule lands in the feed, before beat 3's patient message. Quiet
-   hours do not apply while it is compressed, which is exactly why the trick
-   is scoped to that one beat.
+5. Beat 2: set `time_scale=3` before Confirm. The blood-pressure reminders
+   start about 3 seconds after Confirm and the lipid ladder's first rung
+   lands about 36 seconds after it; the lipid rung is the one to point at.
+   Let it go unanswered and show the feed line for it, the real ladder rung.
+   Never `/force_due` this beat on camera. Set `time_scale=86400` again right
+   after beat 2, before beat 3.
 
 **Beat 1, the exact dictation:**
 
@@ -234,7 +239,9 @@ at them.
 
 "3 weeks," not the canonical seed's "a month": the 720-hour hop is proven live,
 but 3 weeks is the rehearsed path and there is no reason to spend the buffer.
-Confirm, then scan the QR with the patient phone.
+Confirm, then scan the QR with the patient phone. Before the patient has written,
+the welcome defaults to English. Once the patient writes, later proactive text
+uses the language of the latest patient message.
 
 **Beat 1 is a new patient, and the card now says so.** Since S9 the Registrar
 matches the dictated name against the board before it builds the confirm card,
@@ -247,30 +254,38 @@ that one attaches to the record beat 1 made and adds a dated addendum to his
 plan.
 
 **Beat 3, the cost barrier, patient phrase and the doctor's typed reply:**
-patient sends `مش هعمل التحليل عشان غالي` (voice note or typed). When the
-barrier card lands on the doctor's phone, answer it with: "The hospital lab is
-free, go there." Rehearse that exact sentence, since it is what the narration
-in `specs/video-spine-v3.md` describes the doctor saying.
+patient sends "I'm not doing the test, it's too expensive." (voice note or
+typed). When the barrier card lands on the doctor's phone, answer it with:
+"The hospital lab is free, go there." Rehearse that exact sentence, since it
+is what the narration in `specs/video-spine-v3.md` describes the doctor
+saying.
 
-**Beat 4, the incomplete-evidence slip:** `docs/seed/lab-slip-7-lipid-partial.png`
-(Ahmed Ali, the same Nile Specialized letterhead as slips 1 and 2, collected
-29/08/2026, LDL 160 H and Total Cholesterol 240 H printed, HDL and Triglycerides
-absent from the slip entirely). Against the Lipid panel loop beat 1 opens, the
-card carries these two lines verbatim:
+**Beat 4, the incomplete-evidence slip:** use the pair dated the day of the
+take. `docs/seed/lab-slip-7-lipid-partial-0830.png` is collected 30/08/2026,
+for the Sunday rehearsal; `lab-slip-7-lipid-partial-0831.png` is collected
+31/08/2026, for the Monday take, and the unsuffixed
+`lab-slip-7-lipid-partial.png` is the same file as the 31/08 pair. Using a
+slip dated earlier than the order date is what makes the verifier correctly
+report `date before_order`, so match the file to the day you are filming on.
+Every version prints LDL 160 H and Total Cholesterol 240 H, with HDL and
+Triglycerides absent. On a date-valid take, the card carries:
 
 ```
 verified: identity match, date ok, 2 of 4 requested analytes present
 missing: Triglycerides, HDL
 ```
 
-`satisfies` is false, the values still attach, the loop stays open instead of
-moving to review, and the Coordinator calls `request_missing_evidence` naming
-the missing analytes. Full description in `docs/seed/dictations.md` item 17.
+`satisfies` is false, the values still attach and the loop stays open. The card
+and the patient request name both missing analytes. LDL 160 follows the printed
+`H` flag and `<100` reference, so it is not labelled in range.
 
-**Beat 5, the complete slip:** `docs/seed/lab-slip-8-lipid-complete.png` (the
-same letterhead, Ahmed Ali, collected 29/08/2026, all four lipid analytes
-printed and none of them critical: LDL 92, HDL 48, Total Cholesterol 178,
-Triglycerides 130). Its card line is:
+**Beat 5, the complete slip:** same rule as beat 4, use the pair dated the day
+of the take. `docs/seed/lab-slip-8-lipid-complete-0830.png` is collected
+30/08/2026, for the Sunday rehearsal; `lab-slip-8-lipid-complete-0831.png` is
+collected 31/08/2026, for the Monday take, and the unsuffixed
+`lab-slip-8-lipid-complete.png` is the same file as the 31/08 pair. It prints
+all four lipid analytes: LDL 92, HDL 48, Total Cholesterol 178 and
+Triglycerides 130. On a date-valid take its card line is:
 
 ```
 verified: identity match, date ok, 4 of 4 requested analytes present
@@ -280,23 +295,36 @@ verified: identity match, date ok, 4 of 4 requested analytes present
 camera, then cut to the card already rendered, per the spine's own instruction
 not to show a second spinner on camera.
 
-**Beat 6, the critical value:** `docs/seed/lab-slip-2.png` (potassium 6.4,
-flagged H). It escalates on the critical-value path whether or not a matching
-loop is open, so no kidney or electrolyte loop needs to have been ordered
-first.
+**Beat 6, the critical value:** `docs/seed/lab-slip-2.png` prints potassium 6.4,
+flagged H. It escalates whether or not a matching loop is open. After beat 5 the
+lipid loop is pending review, so this appears as an unordered critical result
+with Attach/Open-a-loop actions. Narrate that; do not say it attached to the
+lipid contract.
 
-**Beat 7, the refusal:** this is section 3b, verbatim: `/force_due Amany
-glucose strict` on the background patient seeded in step 3 above. Do not
-re-derive the command or the refusal wording; section 3b already has both.
+**Beat 7, the refusal:** from Amany Roushdy's patient box, send exactly:
+
+```
+I did the glucose test
+```
+
+The code administrative pattern attempts to schedule the next evidence contact.
+Her glucose loop already has six contacts, so the feed's audit line is:
+
+```
+refused by code (core/policy.py): 6 contacts already on this loop and the
+policy limit is 6
+```
+
+This is a natural patient interaction and does not depend on the filming hour.
 
 **Beat 9, the end-of-day sentence:** read `GET /c/<token>/summary` on screen.
 If the board carries only the background twenty plus Ahmed Ali, the sentence
 is the one already recorded above under "The twenty background patients," with
 whatever Ahmed Ali did in beats 1 through 8 added to each count.
 
-Sections 2 (the two phones), 3 (if a beat fails), 3b (the refusal), 4 (the
-time-scale trick), and 5 (after the final take) are unchanged by spine v3 and
-are not repeated here.
+Sections 2 (the two phones), 3 (if a beat fails), and 5 (after the final take)
+apply. Section 3b is an off-camera diagnostic only; section 4 is an optional
+separate ladder rehearsal, not part of the filmed spine.
 
 ---
 
@@ -333,35 +361,41 @@ Take them in this order. Every one of these is a step down, not a rebuild.
 1. **A beat is slow, not broken.** Say what is happening and keep going. A lab
    photo takes 15 to 25 seconds end to end: upload, EXIF pass, one Gemini read,
    the comparison in code, two cards. That is worth narrating, not cutting.
-2. **A nudge does not arrive on the patient phone.** Use the console: the same
+2. **The same slip lands twice.** The exact same image sent again on the same
+   board on the same day is refused as a duplicate: "I already received this
+   image today." No second card, result or model call. Recover with the other
+   dated pair (beats 4 and 5, section 1b) or a board reset.
+3. **A nudge does not arrive on the patient phone.** Use the console: the same
    card is in the feed, because every reply fans out to both. If the phone is
    the problem, the demo is not.
-3. **Telegram is down or the phone will not bind.** Run the whole demo in the
+4. **Telegram is down or the phone will not bind.** Run the whole demo in the
    browser. The console's Patient box and the patient page (`/p/<link token>`,
    linked under the QR) are the same brain through the same gates. Say so on
    camera: the adapter is the only thing that changed.
-4. **Cloud Tasks refuses to enqueue.** Redeploy with the in-process engine:
+5. **Cloud Tasks refuses to enqueue.** Redeploy with the in-process engine:
    `CHASER_ENGINE=inprocess bash deploy.sh`. Same `enqueue()`, same handler,
    same nudges; it forgets pending nudges on a restart, which is why it is the
    fallback and not the default. `/health` will then say `chaser: inprocess`,
    so do not claim Cloud Tasks on camera while it says that.
-5. **Vertex or the model is failing.** The Sentinel's code net, the critical-lab
+6. **Vertex or the model is failing.** The Sentinel's code net, the critical-lab
    table, the Chaser and the whole board still work with no model at all. Run
    beats 1, 4 and 6 (dictate is the only one that needs the model). Say what is
    degraded.
-6. **Anything else.** Stop and use the previous unedited rehearsal recording as
+7. **Anything else.** Stop and use the previous unedited rehearsal recording as
    the submitted video, then write down what failed. A calm recorded run beats a
    live stumble, and that was decided before the first take, not in the moment.
 
 ---
 
-## 3b. Showing a guard refuse, on camera
+## 3b. Showing a guard refuse, on camera (legacy diagnostic only)
+
+Do **not** use this procedure in the submitted video. Beat 7 above is the
+natural patient interaction and is the only refusal path in the filmed spine.
+This section remains as an off-camera operator diagnostic for the same handler.
 
 The load-bearing claim is "the model chooses and code decides". On rev 15 no
-guard had ever been observed refusing anything outside a unit test, which makes
-the claim an assertion rather than a demonstration. This is the cheapest real
-way to film one. Nothing about it is staged: the number it refuses on is on the
-record before you start.
+guard had been observed refusing anything outside a unit test. The number this
+diagnostic refuses on is on the record before you start.
 
 One of the twenty background patients, **Amany Roushdy**, carries a Glucose
 tolerance test that has already cost six contacts, which is the default policy
@@ -384,11 +418,11 @@ refused by code (core/policy.py): 6 contacts already on this loop and the
 policy limit is 6
 ```
 
-On the board it lands in Live Activity as a red **REFUSED** chip with the guard
-text under it. Read the guard off the screen when you narrate it; do not say it
-from memory, because the wording is the evidence.
+At real scale inside Cairo quiet hours, policy is evaluated before an allowed
+task is deferred to 09:00, and the deferral is written to the feed. The natural
+Beat 7 patient pattern remains the submitted-video path.
 
-Two things worth knowing before you point a camera at it:
+Two things worth knowing before you run it:
 
 - No message is sent, and none should be. The refusal is the whole event.
 - The same red chip appears in front of any Coordinator turn where a guard
@@ -398,15 +432,31 @@ Two things worth knowing before you point a camera at it:
 
 ---
 
-## 4. Turning the clock down for the ladder
+## 4. The compressed clock, for beat 2 and for the full ladder
 
-To show all three nudges plus the unreachable card inside a minute:
+Beat 2 in the filmed spine runs on this clock, and the scale has to be set
+**before Confirm**, because a task's delay is fixed at the moment it is
+created:
 
 ```bash
 curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=3"   # a day is 3 seconds
-# dictate a patient with a dated TEST loop, tap Confirm, watch the feed
-curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=86400"  # back to real time
+# dictate Ahmed Ali, tap Confirm: the blood-pressure reminders land at 3, 6,
+# 9, 12, 15 and 18 seconds; the lipid ladder's first rung lands at 36 seconds,
+# the one to point at. Let it go unanswered, show the feed line for it.
+curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=86400"  # back to real time, before beat 3
 ```
+
+Never `/force_due` either reminder on camera: the tasks waking on their own,
+unforced, is the whole point of beat 2. Changing the scale after Confirm does
+not touch already-created Cloud Tasks, which is why the order above is fixed.
+The full Beat 1 dictation creates twelve tasks total across its four loops
+(three lipid, six blood pressure, three visit); the blood-pressure reminders
+arrive first, then the lipid rung at 36 seconds, so this window is not a clean
+lipid-only ladder.
+
+To rehearse all three nudges plus the unreachable card separately from the
+video, off camera, run the same two commands around a dictation with a dated
+TEST loop and watch the feed to the end of the ladder.
 
 ### A loop dated more than a month out
 
@@ -429,7 +479,7 @@ run at midnight will be.
 
 ```bash
 gcloud tasks queues purge sanad-chase --location europe-west1 \
-  --project sanad-506914 --quiet
+  --project "$PROJECT" --quiet
 curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?run_id=post-demo"
 ```
 
@@ -493,7 +543,7 @@ is serving, so there is no window where `/admin` is unreachable.
 # 1. Add a new version of the secret. Nothing reads it yet.
 openssl rand -hex 24 | tr -d '\n' \
   | gcloud secrets versions add sanad-admin-secret \
-      --project sanad-506914 --data-file=-
+      --project "$PROJECT" --data-file=-
 
 # 2. Redeploy, so the running revision picks the new version up. The service
 #    mounts `latest`, so this is what makes the change live.
@@ -501,7 +551,7 @@ bash app/deploy.sh
 
 # 3. Re-read it into the shell for everything below.
 S=$(gcloud secrets versions access latest --secret=sanad-admin-secret \
-      --project=sanad-506914)
+      --project="$PROJECT")
 ```
 
 Then rotate every console token, because a doctor's token is a bearer credential
@@ -517,9 +567,9 @@ Disable the old secret version last, once the new one has been used against the
 live service at least once:
 
 ```bash
-gcloud secrets versions list sanad-admin-secret --project sanad-506914
+gcloud secrets versions list sanad-admin-secret --project "$PROJECT"
 gcloud secrets versions disable <OLD_VERSION> --secret=sanad-admin-secret \
-  --project sanad-506914
+  --project "$PROJECT"
 ```
 
 ### The judges get their own board
@@ -568,7 +618,7 @@ a named revision:
 
 ```bash
 gcloud run services update-traffic sanad --to-revisions sanad-000NN-xxx=100 \
-  --region europe-west1 --project sanad-506914
+  --region europe-west1 --project "$PROJECT"
 ```
 
 That works, and it has one consequence that is invisible until it costs a
@@ -583,7 +633,7 @@ deploy:**
 
 ```bash
 gcloud run services update-traffic sanad --to-latest \
-  --region europe-west1 --project sanad-506914
+  --region europe-west1 --project "$PROJECT"
 ```
 
 `app/deploy.sh` now runs that itself as its step 9 and then reads
@@ -600,7 +650,7 @@ that a credential was on camera. A budget alert is the thing that tells you if
 that ever mattered.
 
 Console: Billing, then Budgets and alerts, then Create budget. Scope it to
-project `sanad-506914`, set a monthly amount you are willing to lose, and tick
+project `$PROJECT`, set a monthly amount you are willing to lose, and tick
 the alert thresholds at 50, 90 and 100 percent so the mail arrives before the
 money does. Do it in the same sitting as the upload; a budget alert set the week
 after is a budget alert that was not there for the week that mattered.
@@ -619,21 +669,19 @@ back from `rotate-token`.
 
 ## 6. The public repo, when that gate opens
 
-The public repository is four paths, and only four:
+The public repository is five paths, and only five:
 
 ```
+README.md    at the repository root, because GitHub renders that one
 app/         the service (no secrets, no .env, test-assets are synthetic)
-docs/        README, ARCHITECTURE, SAFETY, DEVPOST, RUNBOOK, seed/
+docs/        ARCHITECTURE, SAFETY, DEVPOST, RUNBOOK, seed/
 LICENSE      MIT, Mohamed Mostafa 2026
 .gitignore   at the repository root
 ```
 
 Everything else in the working folder this was built in is planning material,
 slice specs, verification results and reviews. None of it ships: the public
-repository is the four entries above and nothing else.
-
-`docs/README.md` is the file to move or symlink to the repository root as
-`README.md` when the repo is created, because GitHub renders the root one.
+repository is the five entries above and nothing else.
 
 Creating and pushing that repository is a separate gate. Nothing in this build
 does it, and no commit has been made from this tree.

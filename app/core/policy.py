@@ -80,8 +80,8 @@ class Policy:
     grace_days: int = 7           # not after the due date plus this
     max_contacts: int = 6         # per loop, ever; the seventh is refused
     max_per_day: int = 1          # contacts per loop per day
-    quiet_from: int = 22          # 22:00 Cairo, inclusive
-    quiet_until: int = 8          # 08:00 Cairo, exclusive
+    quiet_from: int = timing.QUIET_FROM_HOUR
+    quiet_until: int = timing.QUIET_UNTIL_HOUR
     max_evidence_requests: int = 2
     cost_escalate_only: bool = True
     followup_reason: str = DEFAULT_FOLLOWUP_REASON
@@ -222,11 +222,9 @@ class Decision:
 # --------------------------------------------------------------------------- #
 # Quiet hours, this file's own window
 # --------------------------------------------------------------------------- #
-# core/timing.py owns the Chaser's send-time window (22:00 to 09:00 Cairo) and
-# is not touched. This is the policy window a scheduled contact is checked
-# against, 22:00 to 08:00 by default, and it is the narrower of the two: a
-# contact this file allows at 08:30 can still be held by the Chaser at send
-# time. Nothing here can widen what the Chaser already refuses.
+# core/timing.py owns the shared default window (22:00 to 09:00 Cairo). A
+# doctor's stored policy may narrow it further; the Chaser still applies the
+# shared window at send time, so a stored value can never widen that floor.
 def in_quiet_hours(when: datetime, policy: Policy = DEFAULT,
                    time_scale: int = timing.REAL_DAY_SECONDS) -> bool:
     """True when a contact at this moment would land inside the quiet window.

@@ -57,7 +57,7 @@ from . import (
     lang, photos, report, sentinel, store, templates, validator, vitals,
 )
 from .adapters import OutboundMessage, fanout
-from .models import ConciergeAnswer, Doctor, Loop, Patient, Relay
+from .models import ConciergeAnswer, Doctor, Loop, Patient, Relay, Send
 
 log = logging.getLogger("sanad.concierge")
 
@@ -125,6 +125,36 @@ async def from_doctor(doctor: Doctor, patient: Patient, text: str) -> str:
 
 def plan_overrides_line(text: str) -> str:
     return PLAN_OVERRIDES_AR if is_arabic(text) else PLAN_OVERRIDES_EN
+
+
+async def _send_consent_once(
+    patient: Patient, doctor: Doctor, step: str, target: str,
+    message: OutboundMessage,
+) -> bool:
+    """Deliver one opt-out consequence once, and leave a retryable receipt.
+
+    Consent is durable before this is called.  The separate receipts make the
+    doctor's card and the patient's acknowledgement independently retryable if
+    an instance dies or a channel fails between them.
+    """
+    receipt = store.derived_id("opt-out", patient.id, step)
+    send = Send(
+        id=receipt, doctor_id=doctor.id, patient_id=patient.id,
+        loop_id="consent", attempt=0, kind=f"opt-out:{step}",
+        state=store.CLAIMED, run_id="consent", day_index=0,
+        created_at=store.now(),
+    )
+    claim = await store.claim_send(send)
+    if claim == store.ALREADY_SENT:
+        return await store.send_state(receipt) == "sent"
+    message.receipt = receipt
+    try:
+        await fanout().send(target, message)
+        await store.mark_send(receipt, "sent")
+        return True
+    except Exception as exc:
+        await store.mark_send(receipt, "failed", str(exc)[:500])
+        raise
 
 
 # --------------------------------------------------------------------------- #
@@ -432,9 +462,9 @@ async def handle_patient_message(
     # where it should have named three numbers in code. A measurement is not a
     # sentence. The table grades it, the chart keeps it, and no model is asked.
     #
-    # Only a RED reading is taken here. A reading the table calls normal falls
-    # through to the Sentinel exactly as it always did, so the model vote can
-    # still add an escalation and this ordering can never remove one.
+    # A bare reading is wholly described by the table. Red readings keep the
+    # emergency route; non-red readings are filed and acknowledged by a fixed
+    # sentence. Prose cannot parse as a bare reading and still reaches Sentinel.
     bp = vitals.judge_text(text) if text else None
     if bp is not None and bp.red:
         loop = await record_reading(patient, text)
@@ -444,6 +474,18 @@ async def handle_patient_message(
             speak=await lang.for_patient(patient, doctor.id),
             who=gender.of_patient(patient), channel=channel, loop=loop,
         )
+        return
+    if bp is not None:
+        loop = await record_reading(patient, text)
+        line = (f"Recorded {bp.systolic}/{bp.diastolic}"
+                if loop is not None else
+                f"I read {bp.systolic}/{bp.diastolic}, but there is no open "
+                "monitoring request to file it under")
+        await fanout().send(f"patient:{patient.id}", OutboundMessage(
+            text=line + ". Thank you.",
+            meta={"audit": {"tier": "vitals", "generated": "code template"},
+                  "decided_by": "code (core/vitals.py normal reading)"},
+        ))
         return
 
     # Gate 1 - Sentinel. Both nets get their chance; a hit ends the turn here.
@@ -532,6 +574,55 @@ async def handle_patient_message(
             change_reason = "asks to change treatment (matched in code)"
         elif await validator.model_change_vote(text):
             change_reason = "asks to change treatment (model vote, add-only)"
+
+    # Consent and privacy gates follow the emergency and treatment-change
+    # checks. They still precede photos, the Coordinator and every generative
+    # reply, so an opt-out cannot suppress an emergency and a third party never
+    # receives clinical information.
+    if text and intents.explicit_opt_out(text):
+        await store.claim_opt_out(patient.id)
+        loops = await store.list_loops(patient.id)
+        for loop in loops:
+            if loop.state in coordinator.LIVE_STATES:
+                await store.update_loop(
+                    loop.id, paused=True, barrier="opt_out",
+                    barrier_note="patient asked to stop proactive messages")
+        speak = lang.of(text)
+        ack = ("تم. وقفت التذكيرات، وبلغت دكتورك. تقدر تكتب هنا في أي وقت."
+               if speak == "ar" else
+               "Done. I stopped the reminders and told your doctor. You can "
+               "still write here at any time.")
+        doctor_told = await _send_consent_once(
+            patient, doctor, "doctor", to_doctor, OutboundMessage(
+                text=f"{patient.name} asked to stop reminders; live loops paused.",
+                patient_id=patient.id,
+                meta={"decided_by": "code (explicit patient opt-out)"},
+                card={"title": f"Patient opted out · {patient.name}",
+                      "severity": "yellow",
+                      "lines": ["Patient asked to stop proactive messages.",
+                                "All live loops are paused. Inbound messages and "
+                                "emergency handling remain available."],
+                      "actions": []},
+            ))
+        # A concurrent/in-flight doctor receipt is not evidence of delivery.
+        # The patient acknowledgement says the doctor was told, so it may only
+        # follow a durable `sent` outcome for that card. A retry after the claim
+        # lease or a failed delivery finishes both receipts without duplicates.
+        if not doctor_told:
+            return
+        await _send_consent_once(
+            patient, doctor, "patient", to_patient, OutboundMessage(
+                text=ack, meta={"audit": {"tier": "consent",
+                                           "generated": "code template"}}))
+        return
+
+    if text and intents.third_party_identity(text):
+        await relay_to_doctor(
+            patient, doctor, text,
+            "third party is using the patient link; no clinical information disclosed",
+            channel=channel,
+        )
+        return
 
     # A photo goes to the Lab-Extractor, which reads it only when a TEST loop is
     # open and hands every comparison to core/labs.py. A caption that asked for
@@ -829,10 +920,13 @@ async def doctor_reply(doctor: Doctor, relay_id: str, text: str) -> None:
     # loop on it (every Concierge relay) leaves here having done nothing.
     resumed = await coordinator.resume_after_answer(doctor, relay, text)
     if resumed is not None:
-        told += (" That follow-up is off hold and Sanad will check again."
-                 if resumed["scheduled"] else
-                 f" That follow-up is off hold. Nothing was scheduled: "
-                 f"{resumed['why']}.")
+        if not resumed.get("resumed", True):
+            told += f" No reminder was resumed: {resumed['why']}."
+        else:
+            told += (" That follow-up is off hold and Sanad will check again."
+                     if resumed["scheduled"] else
+                     f" That follow-up is off hold. Nothing was scheduled: "
+                     f"{resumed['why']}.")
     await out.send(to_doctor, OutboundMessage(text=told))
 
 

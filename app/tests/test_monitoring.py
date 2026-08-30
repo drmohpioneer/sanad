@@ -36,14 +36,12 @@ class Loop:
 def reading(day: int, hour: int, systolic: int, diastolic: int = 85) -> dict:  # noqa: E501
     """One reading, at that hour Cairo on that day of the schedule.
 
-    Day one is the day the first reminder goes out, which is one day after the
-    loop is created (core/chaser.schedule_loop, core/monitoring.FIRST_REMINDER
-    _DAY). Before S11 this fixture counted from the creation day, which is the
-    off-by-one the summary itself carried.
+    Day one is the day the doctor confirms the plan. The plan is the first ask;
+    reminders begin on day two.
     """
     when = (START.astimezone(monitoring.timing.CAIRO)
             .replace(hour=hour, minute=0)
-            + timedelta(days=day))
+            + timedelta(days=day - 1))
     return {"at": when.astimezone(timezone.utc).isoformat(timespec="minutes"),
             "value": f"{systolic}/{diastolic}", "number": float(systolic)}
 
@@ -105,7 +103,7 @@ class TheSeededWeek(unittest.TestCase):
         rows = [{"value": "150/90", "number": 150.0},
                 {"value": "148", "number": 148.0},
                 {"value": "146/88", "number": 146.0}]
-        self.assertEqual(monitoring.trend_of(rows), "148 to 148")
+        self.assertEqual(monitoring.trend_of(rows), "too early")
 
     def test_a_barrier_the_patient_reported_is_named(self) -> None:
         loop = seeded()
@@ -195,27 +193,13 @@ class TheScheduleTheDoctorDictated(unittest.TestCase):
         self.assertIn("for one day ·", summary.line)
 
 
-class TheWindowStartsOnTheFirstReminderDay(unittest.TestCase):
-    """S11 wave A item 8, from reviews/codex-troubleshoot-1.md line 9:
-
-    "HIGH Monitoring off-by-one-day: reminders start day 1 (tomorrow), summary
-    day 1 is creation date (chaser.py:180; monitoring.py:253,265,271)."
-
-    `chaser.schedule_loop` queues a MONITOR loop's reminders at
-    `timing.seconds(day, scale)` for day in 1..N, so the first reminder reaches
-    the patient one day after the loop is created and the last one N days after.
-    The summary counted from the creation date instead, so the whole window sat
-    one day early: the last day the patient was actually asked for a reading fell
-    outside it, and a reading sent on that day filled no slot.
-
-    The reproduction is the smallest one that shows it: two days, one reading a
-    day, both sent on the days Sanad asked for them.
-    """
+class TheWindowStartsWhenTheDoctorAsks(unittest.TestCase):
+    """Confirm and the welcome carry day one's ask; reminders cover days 2..N."""
 
     def asked_on(self, day: int, hour: int = 9, systolic: int = 130) -> dict:
-        """A reading sent on the day the chaser's own reminder fires."""
+        """A reading sent on this numbered day of the monitoring contract."""
         when = (START.astimezone(monitoring.timing.CAIRO)
-                .replace(hour=hour, minute=0) + timedelta(days=day))
+                .replace(hour=hour, minute=0) + timedelta(days=day - 1))
         return {"at": when.astimezone(timezone.utc).isoformat(timespec="minutes"),
                 "value": f"{systolic}/85", "number": float(systolic)}
 
@@ -228,24 +212,20 @@ class TheWindowStartsOnTheFirstReminderDay(unittest.TestCase):
         self.assertEqual(summary.missing_slots, ())
         self.assertEqual(summary.missing, "none")
 
-    def test_the_last_reminder_day_is_inside_the_window(self) -> None:
-        """Seven days of reminders, and the seventh is day seven, not day eight."""
+    def test_the_last_contract_day_is_inside_the_window(self) -> None:
         rows = [self.asked_on(day) for day in range(1, 8)]
         summary = monitoring.summary(Loop(rows, schedule="once a day", days=7))
         self.assertEqual(summary.received, 7)
         self.assertEqual(summary.missing_slots, ())
 
-    def test_the_day_a_reading_is_missed_is_named_by_the_reminder_day(self) -> None:
+    def test_the_day_a_reading_is_missed_is_named_by_contract_day(self) -> None:
         rows = [self.asked_on(1), self.asked_on(3)]
         summary = monitoring.summary(Loop(rows, schedule="once a day", days=3))
         self.assertEqual(summary.missing_slots, ((2, 0),))
         self.assertEqual(summary.missing, "every reading on day 2")
 
-    def test_a_reading_sent_before_the_first_reminder_is_received_not_a_slot(self) -> None:
-        """The window is the days Sanad asked on. A patient who measured the
-        evening the doctor dictated the plan is counted as having sent a reading
-        and does not fill a slot nobody had asked for yet."""
-        loop = Loop([self.asked_on(0), self.asked_on(1), self.asked_on(2)],
+    def test_a_reading_on_confirm_day_fills_day_one(self) -> None:
+        loop = Loop([self.asked_on(1), self.asked_on(2), self.asked_on(3)],
                     schedule="once a day", days=2)
         summary = monitoring.summary(loop)
         self.assertEqual(summary.received, 3)
@@ -280,25 +260,22 @@ class TheDemoScaleIsADayToo(unittest.TestCase):
         return Loop(rows, schedule=schedule, days=days)
 
     def test_a_compressed_run_answered_on_every_reminder_is_missing_nothing(self) -> None:
-        """Reminders fire at +3s and +6s; the patient answers a second after
-        each. A second is a third of a day at this scale, which is the demo's
-        equivalent of answering the same morning; five seconds would be two days
-        late and is counted as two days late, which is correct."""
-        loop = self.loop_at(self.SCALE, [self.SCALE + 1, 2 * self.SCALE + 1])
+        """Confirm asks on day one; the reminder asks again on day two."""
+        loop = self.loop_at(self.SCALE, [1, self.SCALE + 1])
         summary = monitoring.summary(loop, time_scale=self.SCALE)
         self.assertEqual(summary.received, 2)
         self.assertEqual(summary.missing_slots, ())
         self.assertEqual(summary.missing, "none")
 
     def test_the_reviewers_scale_sixty_reproduction(self) -> None:
-        loop = self.loop_at(60, [65, 125])
+        loop = self.loop_at(60, [5, 65])
         summary = monitoring.summary(loop, time_scale=60)
         self.assertEqual(summary.expected, 2)
         self.assertEqual(summary.received, 2)
         self.assertEqual(summary.missing, "none")
 
     def test_a_compressed_run_still_reports_the_day_that_was_skipped(self) -> None:
-        loop = self.loop_at(self.SCALE, [self.SCALE + 1], days=2)
+        loop = self.loop_at(self.SCALE, [1], days=2)
         summary = monitoring.summary(loop, time_scale=self.SCALE)
         self.assertEqual(summary.missing_slots, ((2, 0),))
 
@@ -306,8 +283,7 @@ class TheDemoScaleIsADayToo(unittest.TestCase):
         """A slot is a position inside the day, and at demo scale a day is three
         seconds, so the hour of the clock cannot be what names it."""
         loop = self.loop_at(
-            self.SCALE, [self.SCALE, self.SCALE + 2, 2 * self.SCALE,
-                         2 * self.SCALE + 2],
+            self.SCALE, [0, 2, self.SCALE, self.SCALE + 2],
             schedule="twice a day",
         )
         summary = monitoring.summary(loop, time_scale=self.SCALE)

@@ -917,6 +917,9 @@ FROZEN_ALIASES = {
     'pregnancy': 'Pregnancy test',
     'bhcg': 'Pregnancy test',
     'hcg': 'Pregnancy test',
+    'beta hcg': 'Pregnancy test',
+    'b hcg': 'Pregnancy test',
+    'beta hcg qualitative': 'Pregnancy test',
 }
 
 

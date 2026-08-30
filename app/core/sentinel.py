@@ -189,6 +189,10 @@ NEEDS_SUPPORT: dict[str, tuple[str, ...]] = {
                   "urgent", "quick", "quickly", "please"),
     "dying": ("i am", "im", "i m", "he is", "hes", "she is", "shes", "feel",
               "feels", "think", "help", "cant", "can t"),
+    "هموت": ("ساعد", "الحق", "مش قادر", "وجع", "نزيف", "اتنفس", "صدر",
+              "طوارئ", "اسعاف"),
+    "hamoot": ("help", "el7a2", "mesh 2ader", "wag3", "nazeef", "atnafas",
+               "sadri", "tawari2", "es3af"),
 }
 _SUPPORT: dict[str, tuple[str, ...]] = {
     normalize(phrase): tuple(normalize(w) for w in words)
@@ -292,6 +296,23 @@ RESOLVED_MARKERS: tuple[str, ...] = (
 )
 _RESOLVED = tuple(normalize(m) for m in RESOLVED_MARKERS)
 
+# Egyptian Arabic often uses "I will die" to mean "that is hilarious". These
+# markers stand down only the ambiguous urgency phrases in that
+# idiom. Any independent emergency phrase (for example "can't breathe") still
+# fires, and net two still receives the message when code stands down.
+LAUGHTER_MARKERS: tuple[str, ...] = (
+    "من الضحك", "من كتر الضحك", "mn el de7k", "mn el do7k",
+    "laughing", "laughter", "hahaha", "ههه", "😂",
+)
+_LAUGHTER = tuple(normalize(m) for m in LAUGHTER_MARKERS)
+_LAUGHING_AMBIGUOUS = frozenset(normalize(p) for p in (
+    "هموت", "hamoot", "dying",
+))
+
+
+def laughing_context(haystack: str) -> bool:
+    return any(marker.strip() and marker in haystack for marker in _LAUGHTER)
+
 
 def resolved_tense(haystack: str) -> bool:
     """Is this message telling us about something that is already over?"""
@@ -391,11 +412,14 @@ def code_net(text: str) -> Optional[str]:
     seen written that way.
     """
     haystack = normalize(text)
+    laughing = laughing_context(haystack)
     for concept, phrases in _NORMALIZED:
         for phrase in phrases:
+            if laughing and phrase in _LAUGHING_AMBIGUOUS:
+                continue
             if phrase.strip() and phrase in haystack and supported(phrase, haystack):
                 return concept
-    return concept_net(haystack)
+    return None if laughing else concept_net(haystack)
 
 
 # --------------------------------------------------------------------------- #

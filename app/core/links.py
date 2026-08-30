@@ -32,7 +32,7 @@ from typing import Optional
 
 from . import gender, lang, names, store, telegram, templates
 from .adapters import OutboundMessage, fanout
-from .models import Doctor, LinkToken, Patient
+from .models import Doctor, LinkToken, Patient, Send
 
 # How long a patient link opens anything. codex item 14: it opened a patient's
 # whole record and it never expired, so a QR printed on a slip in March was a
@@ -125,38 +125,63 @@ def _audit(template: str) -> dict:
 async def welcome(patient: Patient, doctor: Doctor) -> bool:
     """The first three bubbles. False when this patient has already had them.
 
-    The flag is written before the first message is sent, not after. A patient
-    who reloads the page while the first send is still in flight is the case
-    that matters here, and sending the plan twice is a worse failure than the
-    rare one where the flag is set and a send then throws: the second is a
-    missing hello on a chat he can talk into, the first is a bot that looks
-    broken in the first ten seconds.
+    Each bubble has a deterministic durable send receipt. A retry skips every
+    channel that already landed and resumes the failed one; completion is
+    marked only after all required bubbles have durable sent receipts.
     """
     if patient.welcomed_at is not None:
         return False
-    await store.update_patient(patient.id, welcomed_at=store.now())
-
-    speak = await lang.for_patient(patient, doctor.id)
+    speak = patient.welcome_lang or await lang.for_patient(patient, doctor.id)
+    if not patient.welcome_lang:
+        await store.update_patient(patient.id, welcome_lang=speak)
+        patient.welcome_lang = speak
     who = gender.of_patient(patient)
     first = names.vocative(patient.name, speak)
     out = fanout()
     ref = f"patient:{patient.id}"
 
-    await out.send(ref, OutboundMessage(
-        text=templates.render("welcome", speak, who, patient=first,
-                              doctor=doctor.name),
-        meta=_audit("welcome")))
+    messages: list[tuple[str, OutboundMessage]] = [
+        ("intro", OutboundMessage(
+            text=templates.render("welcome", speak, who, patient=first,
+                                  doctor=doctor.name),
+            meta=_audit("welcome"))),
+    ]
 
     plan = (patient.plan_text or "").strip()
     if plan:
         head = templates.render("plan_again", speak, who, doctor=doctor.name)
-        await out.send(ref, OutboundMessage(
+        messages.append(("plan", OutboundMessage(
             text=f"{head}\n{plan}",
             meta={"audit": {"tier": "onboarding",
                             "generated": "the doctor's own confirmed plan text",
-                            "template": "plan_again"}}))
+                            "template": "plan_again"}})))
 
-    await out.send(ref, OutboundMessage(
+    messages.append(("next", OutboundMessage(
         text=templates.render("welcome_next", speak, who, doctor=doctor.name),
-        meta=_audit("welcome_next")))
+        meta=_audit("welcome_next"))))
+
+    for step, message in messages:
+        receipt = store.derived_id("welcome", patient.id, step)
+        send = Send(
+            id=receipt, doctor_id=doctor.id, patient_id=patient.id,
+            loop_id="onboarding", attempt=0, kind=f"welcome:{step}",
+            state=store.CLAIMED, run_id="onboarding", day_index=0,
+            created_at=store.now(),
+        )
+        claim = await store.claim_send(send)
+        if claim == store.ALREADY_SENT:
+            if await store.send_state(receipt) == "sent":
+                continue
+            return False
+        message.receipt = receipt
+        try:
+            await out.send(ref, message)
+            await store.mark_send(receipt, "sent")
+        except Exception as exc:
+            await store.mark_send(receipt, "failed", str(exc)[:500])
+            raise
+
+    completed = store.now()
+    await store.update_patient(patient.id, welcomed_at=completed)
+    patient.welcomed_at = completed
     return True

@@ -1,8 +1,8 @@
 # Sanad - Safety
 
-Sanad's safety model rests on one rule: **anything that decides whether a message is an emergency, or whether a reply is safe to send, is code, not a model call.** The model transcribes, extracts, phrases, and casts one bounded vote. It never has the last word on a life-or-death decision. This document lays out the mechanism end to end. Every claim in it points at a file in this repository: the phrase table is `app/core/sentinel.py`, the critical-lab table is `app/core/labs.py`, the blood-pressure table is `app/core/vitals.py`, the output check is `app/core/validator.py`, and the gate order is the sequence of statements in `app/core/concierge.handle_patient_message`. Each has a regression suite under `app/tests/`, and the image does not build unless they pass.
+Sanad's safety model rests on one rule: anything that decides whether a message is an emergency, or whether a reply is safe to send, is code, not a model call. Models transcribe, extract, phrase replies and cast bounded yes-or-no votes; a vote can add a relay or an escalation and can never remove one. This document lays out the mechanism end to end. The phrase table is `app/core/sentinel.py`, the critical-lab table is `app/core/labs.py`, the blood-pressure table is `app/core/vitals.py`, the output check is `app/core/validator.py`, and the gate order is in `app/core/concierge.handle_patient_message`. Their regression suites run during the container build.
 
-Three sentences carry the whole model: **every gate that can escalate is code; a model on the safety path casts one bounded yes/no vote that can only ADD a relay or an escalation, never remove one; and every one of those calls fails closed, so an error relays to the doctor instead of passing the message on.** Text the doctor himself wrote is the one trusted path: it is delivered as his, prefixed with his name, and it is not rewritten, graded or voted on by anything.
+Three sentences carry the whole model: **every gate that can escalate is code; every safety vote is bounded and add-only; every one of those calls fails closed, so an error relays to the doctor instead of passing the message on.** Text the doctor himself wrote is the trusted path: it is delivered as his, prefixed with his name, and is not rewritten by a model.
 
 **The tables are frozen, not just exercised.** Until S11 both regression suites iterated the table they were guarding, so they asserted that whatever the table currently holds still fires. Deleting a phrase deleted its own test with it and the build stayed green (Codex, reviews/codex-troubleshoot-1.md item 15). Both tables now also exist as a literal copy inside their test file, typed out rather than read from the module: `FROZEN_MUST_WAKE`, `FROZEN_CONCEPT_RULES`, `FROZEN_NEEDS_SUPPORT` and `FROZEN_NEVER_WAKE` in `app/tests/test_sentinel.py`, and `FROZEN_CRITICAL_LABS`, `FROZEN_UNIT_CONVERSIONS`, `FROZEN_ALIASES`, the four flag tables and the four abdominal-pain tables in `app/tests/test_labs.py`, and `FROZEN_CONTEXT_CLASSES` in `app/tests/test_validator.py`. Every table that decides something is in that list, which is the whole point of the sentence: a flag word is a threshold made of letters (remove "positive" from `HIGH_FLAGS` and a positive troponin quietly becomes "cannot judge"), an alias decides whether a row is found at all, and a negation decides whether a patient who said she has no pain is sent to an emergency room. Each frozen list is also run through the live code, not only diffed, so an entry that stops working fails even when the table itself is untouched. Removing a row, moving a threshold or changing a conversion factor fails the comparison, and the image does not build. A deliberate change is a change in three places at once: the module, the frozen literal, and this document. Every threshold in the table is also walked across its own boundary, just below it, at it and just above it, in the table's unit and in every alternate unit the conversion table knows, so a rule cannot quietly become an inequality it was not.
 
@@ -10,7 +10,7 @@ Three sentences carry the whole model: **every gate that can escalate is code; a
 
 Every patient message is answered in a fixed order, enforced by code, never left to a prompt to self-police:
 
-1a. **The blood-pressure table**: a message that is nothing but a reading ("185/125") is graded by the three numbers in `app/core/vitals.py` before any model is asked anything. This runs ahead of the Sentinel because a measurement is not a sentence: sending a real 185/125 through the deployed service showed the Sentinel's model vote escalating it first, so the reading never reached the table and never reached the patient's chart. Only a red reading is taken here; a reading the table calls normal falls through to the Sentinel, so the model vote can still add an escalation and this ordering can never remove one.
+1a. **The blood-pressure table**: a message that is nothing but a reading ("185/125") is graded by the three thresholds in `app/core/vitals.py` before any model is asked. A red reading exits through the emergency path. A non-red reading is filed under an open monitoring loop, when one exists, receives a fixed acknowledgement and exits without a model or doctor card.
 1. **Sentinel**: can only escalate. If either net fires, no answer is generated at all; the patient gets a canned emergency block and the doctor gets a card. See below. If the model net could not be reached at all, the gate still fires, and the message is relayed to the doctor as a yellow "triage unavailable, please read" card while the patient gets the relay line; the audit line reads `model:error -> relayed`.
 1b. **Treatment change**: a request to change, stop, start or substitute a treatment is caught by `validator.wants_treatment_change` (literal phrases plus token rules in three languages) and then by one model yes/no vote that can only add a relay. This gate runs **before the photo branch**, so a caption under a photo is gated exactly like typed text.
 2. **Plan**: if the message is clear of the sentinel, and the question is about the patient's own care, the answer comes only from `plan_text`, the doctor's own written words, injected as the single source of truth. The Concierge holds no tool of any kind (see "No tool surface" below), so there is no mechanism by which it could read another patient's data even if asked to.
@@ -22,9 +22,9 @@ Anything that falls outside these tiers (a request to change treatment, a questi
 
 ## The two sentinel nets
 
-Both nets run on every patient message, in order, before any reply is generated. Either one firing is sufficient to escalate; neither can be skipped or talked out of it by the patient's own words, because neither is a prompt instruction: both are code paths that run before generation.
+Both nets run on every message that reaches the Sentinel; a message that is nothing but a blood-pressure reading is graded by the table first and never reaches them. Net 1 runs before net 2 and either firing is sufficient. Other modality and code-shortcut exits are described in the request lifecycle.
 
-**Net 1: code, and it is two nets in one.** The patient's text is normalized (Arabic diacritics stripped, common letter variants unified, lowercased, Franco-Arabic digits preserved, and Franco spellings of one word folded onto one form through `sentinel.FRANCO_ALIASES`, so "nafasy", "nfsy" and "nafsi" are the same word). It is then matched against the phrase table `MUST_WAKE`, which covers all clinic specialties in Egyptian Arabic, Franco-Arabic and English, and after that against `sentinel.CONCEPT_RULES`, which match a **set of tokens** instead of a sentence: a chest word with a pain word, a breath word with an inability word, a face word with a drooping word, a limb word with a weakness word, a lips or face word with a blue word. That is what catches "وجع فظيع بمنتصف الصدر ونازل لدراعي الشمال" and "my face suddenly went crooked and my left hand has no strength", which no phrase list held. A hit on either skips every later step, including any model call. This is the deterministic floor: it does not depend on the model being available, working correctly, or resisting a clever prompt.
+**Net 1: code, and it is two nets in one.** The patient's text is normalized (Arabic diacritics stripped, common letter variants unified, lowercased, Franco-Arabic digits preserved, and Franco spellings folded through `sentinel.FRANCO_ALIASES`). It is matched against `MUST_WAKE` and then `CONCEPT_RULES`, which combine token concepts such as chest plus pain or face plus drooping. The fixtures span multiple clinic specialties and three writing styles; they are a broad floor, not proof of coverage for every specialty. A hit skips later generation.
 
 The one thing a token rule cannot read is tense, so a message carrying a resolved marker ("embare7", "kan", "yesterday", "went away") stands the concept rules down and is left to the phrase table and the model vote. That is why "sadri kan wag3ny embare7 bas ra7" is still a never-wake sentence.
 
@@ -50,11 +50,11 @@ The validator's verdict is stored on the event alongside the tier that was used,
 
 Three entries in the phrase table are single English words - "pounding", "emergency", "dying" - and each one fires on sentences that are not emergencies: "a pounding headache", "is this an emergency?", "my phone is dying". Since S4 each of those three needs a second word from its own concept before it counts (`sentinel.NEEDS_SUPPORT`): "pounding" wants a heart, a chest or a pulse near it; "emergency" wants an ambulance, a hospital, help or now; "dying" wants a first-person marker or a call for help.
 
-The direction of the change is worth being precise about, because it is the only change in this build that can make the Sentinel fire *less*. It can only ever stop those three specific words from firing, only when the sentence carries nothing else from their own concept, and only on the code net - the model net still runs on exactly the same sentences and can still escalate them. "I have a pounding headache since this morning" run against the deployed service produces no escalation from either net and a yellow relay card for the doctor, which is the right answer: a new symptom the doctor should see, not an ER instruction. `app/tests/test_sentinel.py` holds both halves - the benign sentences that must not fire, and "my heart is pounding and I feel dizzy", which must.
+The direction of that change is precise: it can stop only those three English words from firing alone on the code net; the model net still sees the same text and may add an escalation. `app/tests/test_sentinel.py` holds both the benign fixtures and positive counterparts such as "my heart is pounding and I feel dizzy." Laughter markers ("من الضحك", "mn el de7k", "laughing") now stand the code net down for هموت / hamoot / dying, the same way a resolved-tense marker does; the model net still sees the sentence and can still escalate it.
 
 ## Where a model output enters the safety path
 
-There are exactly five places, and each one is named here so the claim can be checked rather than believed:
+Model output enters the patient path in these categories; the list is explicit rather than summarized as "exactly five":
 
 1. **A voice note's transcript.** For voice notes the code sentinel runs on the transcript, which is a model output; the modality boundary is stated. `core/dispatch.py` transcribes and then calls `sentinel.check` on the transcript on that same lane, before the Concierge is called at all, and hands the verdict to the Concierge rather than letting it ask for one later.
 2. **A photograph's contents.** Image content is model-read: the extractor's model classifies the picture and transcribes what is printed on it, and it is told, in the instruction and by the schema, that it may not judge, interpret, reassure or advise. Every comparison after that is `core/labs.py` or `core/vitals.py`. The caption on the photo is the patient's own text and goes through the sentinel and the change-request gate before the extractor is called. The analyte names and flags the model read back are themselves passed through the sentinel word list.
@@ -62,11 +62,17 @@ There are exactly five places, and each one is named here so the claim can be ch
 4. **The change-request vote** (`validator.model_change_vote`): one call, yes/no schema, temperature 0, can only add a relay, fails closed.
 5. **The reassurance vote** (`validator.model_reassurance_vote`): one call, yes/no schema, temperature 0, asked only about a reply the code rules already passed, can only add a relay, fails closed.
 
-Everything else on the patient path is code. And one path carries no model at all: **text the doctor wrote himself is the trusted path.** His answer to a card is delivered as his, prefixed with his name, appended to the plan as a dated addendum, and neither validator gate nor either vote is applied to it.
+6. **The administrative vote** (`intents.model_vote`): may add only either of the two answer-only chores; state-changing intents require code patterns.
+
+7. **The Coordinator choice** (`coordinator.run`): selects among seven code-guarded tools or stands down. It writes no patient sentence itself.
+
+8. **The Concierge reply**: generated from the injected plan/open-loop context and then checked by the deterministic validator plus the reassurance vote before send.
+
+One path carries no model rewrite: **text the doctor wrote himself is trusted.** His answer to a card is delivered as his, prefixed with his name and appended to the plan as a dated addendum.
 
 ## Gendered wording, because getting it wrong is a safety-adjacent failure
 
-Arabic conjugates the second person. A reminder that reads "فاكر" to a man reads wrong to a woman, and Mohamed's first real phone test found exactly that: a female patient addressed throughout as a man. A patient who can tell the message was not written for her is a patient who trusts the next one less, including the one that tells her to go to an emergency room.
+Arabic conjugates the second person. A reminder that reads "فاكر" to a man reads wrong to a woman. The implementation therefore treats grammatical gender as a code decision rather than asking a model to improvise it.
 
 The fix is code, not a prompt. `app/core/gender.py` turns the record's `sex` field into one of three answers - masculine, feminine, or unknown - and every template that addresses or mentions a patient picks its wording from that: the three nudge rungs, the monitoring reminder, the emergency block, the critical-lab block, the doctor's cards ("his"/"her"/"their"), the Telegram lines. Unknown is a real third answer with its own wording, not a fallback to masculine: a doctor who did not say the sex gets text that commits to neither, rather than a guess with a good chance of reading wrong. `app/tests/test_gender.py` asserts that a woman never receives a masculine form, that a man keeps his, and that the unknown form contains no gendered verb at all.
 
@@ -76,7 +82,7 @@ When a message is relayed, the doctor sees a yellow card with the patient's ques
 
 ## The critical-lab table
 
-Approved by the doctor before it was written down, and it does not move at runtime. The table and its `judge()` function are plain data and a pure function in `app/core/labs.py`, covered by `app/tests/test_labs.py`. The extractor that calls them (`app/core/extractor.py`), the critical-value escalation, and the private Cloud Storage bucket the images go to are all built, and were exercised against the deployed service with five synthetic slips carrying twenty-three analyte rows between them. A potassium of 6.7 is a red card because `6.7 > 6.0` in the table below, not because a model thought the slip looked bad, and the card says so on its own face.
+The table is static project configuration, not runtime model output. It and its `judge()` function are plain data and a pure function in `app/core/labs.py`, covered by `app/tests/test_labs.py`. The synthetic slip fixtures exercise extraction inputs, while deterministic unit tests prove the comparison boundaries. A potassium of 6.7 is a red card because `6.7 > 6.0` in the table below, not because a model judged severity.
 
 | Analyte | Escalate when |
 |---|---|
@@ -111,7 +117,9 @@ A photograph of a result is not evidence yet. It is evidence when it is this pat
 
 **And no tool call talks the verifier out of it.** The Coordinator is woken on every unsatisfied verdict, and its instruction says "a complete result arrived: mark_evidence_received". The guard behind that tool used to ask only whether any values were on the loop, which they are, so a model vote could have moved the loop to `pending_review`, the state the verifier had just refused, and the end state would have been the pre-S11 one reached by a model instead of by code. `core/policy.py` now reads the verifier's own verdict: `mark_evidence_received` and `close_verified_loop` are refused with "the verifier did not accept this slip: escalate_barrier and let the doctor decide" when the loop's recorded verdict says it was not satisfied. A loop the verifier never saw (a typed reading, a monitoring loop) is unchanged, because there is nothing there for the guard to contradict. This is the rule the top of this document leads with, applied to itself: the code has the last word, including over the agent that is supposed to be helping.
 
-Two verdicts come out of it and they are not the same verdict. **Attaches** is whether the values may be written onto the patient's loop at all: only an identity failure says no, because most Egyptian lab slips print a name and some do not, and refusing the ones that do not would mean refusing most real results. **Satisfies** is whether the slip closes the evidence side of the obligation, and since S11 all three checks have to pass, which is not the same thing as none of them failing. A slip with no printed name and a slip with no readable date each cost one check, and a check that could not be made is not a check that passed: the values attach, the doctor sees them, the card names which check stood down ("the identity and the date check could not be done on this slip, so the values are attached for your review and the obligation stays open"), and the loop stays open exactly as it does for a partial result. The Coordinator's `request_missing_evidence` path already handles "not satisfied", so nothing new had to be built behind it. Before S11 only a date before the order was refused, so an unnamed or undated slip closed an obligation on a check nobody had made.
+Two verdicts come out of it and they are not the same verdict. **Attaches** is whether values may be written onto the patient's loop; an identity mismatch says no. **Satisfies** is whether the slip closes the evidence side of the obligation, and all three checks must pass. A slip with no printed name or no readable date attaches for doctor review but cannot satisfy the obligation. The card names the checks that could not be completed and the loop stays open.
+
+An identity mismatch has its own review card. It shows the extracted values so a dangerous value cannot disappear, and a critical or urgent value still makes the card red, but it suppresses ordered-test completeness and offers no Attach action. Exact image bytes are also claimed transactionally per patient and Cairo day before extraction: a same-day replay receives a fixed acknowledgement and creates no second result, card or model call.
 
 ## The blood-pressure table
 
@@ -122,7 +130,7 @@ Blood pressure arrives two ways: the patient types "185/125" into the chat, or p
 | systolic 180 or above | hypertensive crisis | red card to the doctor **and** the emergency block to the patient |
 | diastolic 120 or above | hypertensive crisis | red card to the doctor **and** the emergency block to the patient |
 | systolic below 90 | low blood pressure | red card to the doctor **and** the emergency block to the patient |
-| anything else | filed | it joins the chart, and nothing is called dangerous |
+| anything else | not red by this table | it joins an open monitoring chart and receives a fixed acknowledgement; no model or doctor card |
 
 Three things about this are deliberate.
 
@@ -132,21 +140,23 @@ Both red rows reach the patient. The first build of this table sent the emergenc
 
 The reading is filed to the chart whatever the verdict, including a crisis. A chart that silently drops the worst reading in the series is worse than no chart.
 
+A non-red bare reading such as `120/80` terminates at this table. With an open monitoring loop it is filed and acknowledged by a fixed template; without one, the patient is told truthfully that there is no open monitoring request. It does not call a model or create a doctor card.
+
 The emergency text a red reading sends is the same block the Sentinel sends, in the patient's language and grammatical gender. No new wording was written for it, so there is one Arabic emergency instruction in the system rather than two that could drift apart.
 
 What this table is not: a hypertension grading scale, an opinion about trend, or anything that reads symptoms. It is a floor under the readings that must not be missed while the doctor is asleep.
 
 ## AI self-disclosure and disclaimer
 
-Sanad introduces itself as an AI assistant, not a doctor, on first contact and whenever a patient could reasonably mistake its reply for the doctor's own words.
+Sanad introduces itself as an AI assistant, not a doctor, during onboarding.
 
-**English:**
-> Hi, I'm Sanad, Dr [Name]'s AI assistant. I follow up on your care plan and can answer questions based on what the doctor wrote for you. I'm not a doctor and I don't make medical decisions: for anything urgent, or anything outside your plan, I'll get the doctor involved.
+**English onboarding template:**
+> Hi [Patient] 👋 I'm Sanad, [Doctor]'s AI assistant. I'm not a doctor: I follow your plan and pass anything you tell me to your doctor.
 
-**Egyptian Arabic:**
-> أهلاً، أنا سند، المساعد الذكي بتاع دكتور [الاسم]. بتابع معاك خطة العلاج وبجاوبك من كلام الدكتور اللي كتبه لك. أنا مش دكتور ومش بتخذ قرار طبي؛ أي حاجة عاجلة أو مش موجودة في خطتك هوصلها للدكتور.
+**Egyptian Arabic onboarding template, masculine form:**
+> أهلاً [المريض] 👋 أنا سند، المساعد الذكي بتاع [الدكتور]. أنا مش دكتور: بتابع معاك الخطة وأوصّل أي حاجة لدكتورك.
 
-The wording that actually ships is in `app/core/tg_router.py` (the introduction an unknown chat gets, and the welcome a patient gets when the link binds) and in `app/core/sentinel.py` (the emergency block). It has not been signed off line by line; that review sits with Mohamed before any real patient is onboarded, alongside the Law 151/2020 work below. It is listed under "Data handling" as a gate, not marked as done.
+The exact variants are in `app/core/templates.py`; the unknown-chat introduction is in `app/core/tg_router.py`, and emergency wording is in `app/core/templates.py`. Before the patient has written, language selection defaults to English; later proactive messages follow the latest patient message.
 
 ## The doctor is told before the patient is told he was told
 
@@ -165,7 +175,7 @@ The Care Coordinator's cost barrier is the same rule with a different shape: `_e
 
 ## Nothing a patient waits on runs without a deadline
 
-Every dependency on the patient's lane is somebody else's service, and a call that hangs is indistinguishable from one that is down. Each of them now runs inside `core/bounded.within`, with one table of deadlines in `app/core/bounded.py`: the triage vote, the two output votes, the Concierge reply, the voice transcription, the photo read and the bucket write. None of them may become an HTTP 500, because a 500 tells the patient nothing, tells the doctor nothing, and leaves no record that anything happened.
+The external model and storage calls a patient waits on run through `core/bounded.within`, with deadlines in `app/core/bounded.py`: the triage and output votes, Concierge reply, voice transcription, photo read and bucket write. Firestore operations sit outside this wrapper.
 
 What "fail closed" means differs by call site and each one is written down where it lives:
 
@@ -183,21 +193,23 @@ A refusal is not an error and not a clinical event. The patient gets one line in
 
 ## What Sanad never does
 
-- Never changes a dose, starts, or stops a medication on its own judgment. Any medication instruction a patient receives traces to the doctor's own dictation.
-- Never diagnoses. Lab values are extracted and compared to targets, baselines, and the critical table; they are never interpreted into a diagnosis.
-- Never claims medication adherence. The system records what was instructed and what was reported back; it does not claim or imply that a patient actually took a medication.
-- Never has the bot call a patient. Outbound contact is text/message only (Meta blocks bot-initiated calls to Egypt in any case; patient-initiated calls to Sanad are a later phase, not this build).
-- Never decides what to do with a photo by asking a model. The model says what the picture is and reads what is printed on it; a table in `app/core/photos.py` turns that answer plus the patient's open loops into a route, and `app/core/labs.py` does every comparison. A result that arrives with no order behind it is still read and still compared - a critical value escalates on that path exactly as it does on any other - but it is never attached to a record or closed off on Sanad's own judgment: the doctor gets it with two buttons and decides.
-- Never lets a patient conversation write to the record. The Concierge has no tool surface at all: ADK 2.8.0 does not allow `output_schema` and `tools` together, so the plan and open loops are fetched by code and injected as text instead. This isn't a prompt instruction to resist; it's a capability that does not exist in that code path.
+- Never changes a dose, starts or stops a medication on its own judgment: every instruction a patient receives traces to the doctor's own dictation.
+- Never diagnoses: values are compared to targets, baselines and the critical table, and the report is assembled from stored facts; no model writes a clinical opinion.
+- Never claims medication adherence: it records what was instructed and what was reported back, nothing more.
+- Never calls a patient: text only.
+- Never decides what to do with a photo by asking a model: a code table (`app/core/photos.py`) turns the model's read of the picture plus the patient's open loops into a route, and `app/core/labs.py` does every comparison. A result with no order behind it is still read and compared, and a critical value still escalates, but nothing attaches or closes on Sanad's own judgment: the doctor gets it with two buttons and decides.
+- The Concierge cannot write: it has no tool surface, because ADK 2.8.0 does not allow `output_schema` and `tools` together. Code-matched administrative replies can still invoke Coordinator tools, and plain-code patient lanes can still file messages, readings and evidence; those are explicit code routes, not Concierge capabilities.
 
-## All-specialty scope
+## Broad general-clinic scope
 
-The sentinel phrase list, the critical-lab table, and the extraction/comparison logic are written for any clinic specialty, not for cardiology: the concepts in `sentinel.MUST_WAKE` run from stroke signs and anaphylaxis to obstetric bleeding, poisoning and a limp infant. Prompts refer to "physician," never "cardiologist." The demo's lead patient is cardiology because that happens to be the doctor's own story, and the seed set (`docs/seed/patients.json`) spans cardiology, endocrinology, nephrology, obstetrics, and pediatrics to demonstrate this directly.
+The sentinel phrase fixtures and lab table span stroke signs, anaphylaxis, obstetric bleeding, poisoning, infant illness and multiple laboratory categories. Prompts say "physician," and the seed set spans cardiology, endocrinology, nephrology, obstetrics and pediatrics. It is not validated for clinical use; the closing block below is what stands between this demo and a real patient.
 
 **Roadmap, not shipped today:** per-doctor additions to the sentinel phrase list, so a specialist can add must-wake phrases specific to his own practice on top of the general-clinic floor. Today the table in `app/core/sentinel.py` is the same for every doctor.
 
-## Data handling
+## Data handling, and what stands between this and a real patient
 
-Every patient in this build, including everything in `docs/seed/`, is synthetic. No real patient data has been entered into Sanad at any point in its development.
+Every patient in this repository and in the demo is invented; do not enter real patient data.
 
-Before any real patient is onboarded, the product needs a Law 151/2020 (Egypt's personal data protection law) review and a consent flow, and the WhatsApp channel needs Meta Business Verification with Sanad as the single verified sender. None of that has happened yet; it is scoped as the gate between "hackathon demo" and "first real patient," not a checkbox already ticked.
+Nothing repeats the AI disclosure after onboarding.
+
+Before any real patient is onboarded: a Law 151/2020 (Egypt's personal data protection law) review and a consent flow, clinical governance sign-off on the critical-lab and blood-pressure thresholds, a line-by-line clinical and legal read of the AI self-disclosure templates, and, for the WhatsApp channel, Meta Business Verification with Sanad as the single verified sender. None of that has happened yet. This is the gate between hackathon demo and first real patient, not a checkbox already ticked.

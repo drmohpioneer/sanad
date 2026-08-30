@@ -614,6 +614,8 @@ async def patient_send(
     link_token: str, text: str = Form(""), file: Optional[UploadFile] = File(None)
 ) -> dict:
     patient = await patient_from_link(link_token)
+    if len(text or "") > dispatch.MAX_PATIENT_TEXT:
+        raise HTTPException(413, dispatch.patient_limit_text(text))
     raw, lane, mime = None, "", None
     if file is not None:
         # Security audit M2. The cap is applied while reading, and the lane is
@@ -828,6 +830,8 @@ async def patient_in(
     patient = await store.get_patient(patient_id)
     if patient is None or patient.doctor_id != doctor.id:
         raise HTTPException(404, "Not Found")
+    if len(text or "") > dispatch.MAX_PATIENT_TEXT:
+        raise HTTPException(413, dispatch.patient_limit_text(text))
 
     raw, lane, mime = None, "", None
     if file is not None:

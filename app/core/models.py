@@ -88,6 +88,11 @@ class Patient(BaseModel):
     # reloaded page, a second scan of the QR and a Telegram bind after a web
     # open must not send the plan three times.
     welcomed_at: Optional[datetime] = None
+    welcome_lang: str = ""
+    # Patient consent controls proactive reminders. It never blocks an inbound
+    # message, emergency handling, evidence, or a doctor's direct reply.
+    proactive_paused: bool = False
+    opt_out_at: Optional[datetime] = None
     created_at: datetime
 
 
@@ -342,6 +347,21 @@ class ProposedLoop(BaseModel):
     text: Optional[str] = Field(default=None, description="TASK only.")
 
 
+class OtherPatientMention(BaseModel):
+    """A second person named in one dictation, never a record to be committed.
+
+    The Registrar may only use this to warn the doctor that one dictation
+    contained more than one patient. Code checks the name against the original
+    dictation before it is shown; the instruction is deliberately not trusted
+    or stored.
+    """
+
+    name: str = Field(description="Another patient's name, exactly as dictated.")
+    instruction: str = Field(
+        default="", description="That patient's instruction, exactly as dictated."
+    )
+
+
 class ProposedRecord(BaseModel):
     patient: ProposedPatient
     baseline: list[Metric] = Field(default_factory=list)
@@ -350,6 +370,10 @@ class ProposedRecord(BaseModel):
         description="The doctor's plan rewritten for the patient in plain words."
     )
     loops: list[ProposedLoop] = Field(default_factory=list)
+    other_patients: list[OtherPatientMention] = Field(
+        default_factory=list,
+        description="People named in the dictation other than the primary patient.",
+    )
 
 
 # --------------------------------------------------------------------------- #

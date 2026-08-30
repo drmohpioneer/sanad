@@ -186,6 +186,8 @@ def trend_of(rows: Sequence[Any]) -> str:
                 if isinstance((row or {}).get("number"), (int, float))]
     if len(readings) < 2:
         return "not enough readings"
+    if len(readings) < 4:
+        return "too early"
     first, last = readings[:3], readings[-3:]
     if all(diastolic is not None for _, diastolic in readings):
         return (f"{_whole(_average([s for s, _ in first]))}/"
@@ -234,11 +236,9 @@ class Monitoring:
         }
 
 
-# How many days after a MONITOR loop is created its first reminder goes out.
-# One, and it is not a choice made here: core/chaser.schedule_loop enqueues the
-# reminders for day in range(1, days + 1). The two numbers have to be the same
-# number or the doctor's summary calls a day missing that nobody was asked on.
-FIRST_REMINDER_DAY = 1
+# Day one begins when the doctor confirms the plan. The plan and welcome are
+# the first request; core/chaser.schedule_loop reminds on the remaining days.
+FIRST_REMINDER_DAY = 0
 
 
 def is_monitoring(loop: Any) -> bool:
@@ -282,13 +282,11 @@ def summary(loop: Any, time_scale: int = timing.REAL_DAY_SECONDS) -> Monitoring:
     days = max(days, 1)
     expected = number * days
 
-    # Day 1 is the first day Sanad ASKED for a reading, not the day the doctor
-    # dictated the plan. core/chaser.schedule_loop queues a MONITOR loop's
-    # reminders at timing.seconds(day, scale) for day in 1..N, so the first one
-    # reaches the patient one Sanad day after the loop is created and the last
-    # one N days after. Counting from the creation date put the whole window a
-    # day early, and the last day the patient was actually asked on fell outside
-    # it (reviews/codex-troubleshoot-1.md item 8).
+    # Day 1 is the day the doctor confirmed and the patient received the plan.
+    # That onboarding is already a request, so the Chaser starts reminders on
+    # the next day and stops on day N. A reading sent immediately after Confirm
+    # therefore fills day 1 instead of being counted while every slot still
+    # prints missing.
     #
     # The bucket is timing.day_index, which is the Cairo calendar day at real
     # time and the scaled bucket at any other scale, so the two ends of the same

@@ -35,7 +35,7 @@ async def build(doctor: Doctor) -> str:
         every_loop += await store.list_loops(patient.id)
     counts = summary.compute(
         every_loop, history, await store.open_relays(doctor.id),
-        on=store.now().date(),
+        on=summary.today(store.now()),
     )
     lines.append(summary.line(counts))
 

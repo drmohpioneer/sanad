@@ -3,7 +3,8 @@
 Sanad answers a patient in the language he wrote in, which is a code decision,
 not a model one. When Sanad speaks first - a nudge, a lab result, a reminder -
 there is no message to read, so the choice falls back to the last thing the
-patient ever sent, and then to Arabic, because the clinic is in Cairo.
+patient ever sent, and then to English, because the judge-facing first contact
+must not guess a language the patient has never used.
 
 Three callers share this: the Concierge (replies), the Chaser (nudges) and the
 Lab-Extractor (what the patient hears about his own slip).
@@ -32,9 +33,9 @@ def of(text: str) -> Lang:
 
 
 async def for_patient(patient: Patient, doctor_id: str) -> Lang:
-    """The patient's language when Sanad speaks first. Defaults to Arabic."""
+    """The patient's last written language; English before they have written."""
     history = await events.last_events(doctor_id, 0)
     for event in reversed(history):
         if event.patient_id == patient.id and event.kind == "patient_in" and event.text:
             return of(event.text)
-    return "ar"
+    return "en"

@@ -15,10 +15,11 @@ The doctor's commands are matched here, in code, before anything is generated:
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 
 from . import (
-    bounded, chaser, concierge, digest, events, media, registrar, report,
+    bounded, chaser, concierge, digest, events, lang, media, registrar, report,
     sentinel, store,
 )
 from .adapters import InboundMessage, OutboundMessage, fanout
@@ -36,6 +37,30 @@ ANSWER_WINDOW = timedelta(minutes=10)
 CANCELLED = "Cancelled. That question is still waiting; tap Answer again."
 EXPIRED = ("That answer window closed, so I treated this as a new message. "
            "Tap Answer on the card again to reply to the patient.")
+MAX_PATIENT_TEXT = 1000
+PATIENT_TEXT_TOO_LONG = {
+    "en": ("That message is longer than 1,000 characters. Shorten it and send it "
+           "again. If this may be an emergency, call 123 or go to the nearest ER."),
+    "ar": ("الرسالة أطول من ١٠٠٠ حرف. اختصرها وابعتها تاني. لو ممكن تكون حالة "
+           "طوارئ، اتصل بالإسعاف 123 أو روح أقرب طوارئ."),
+}
+PATIENT_TURN_BUSY = {
+    "en": ("I am still handling your previous message. Wait for that reply, then "
+           "send the next one. If this may be an emergency, call 123 or go to the "
+           "nearest ER."),
+    "ar": ("لسه بتعامل مع رسالتك اللي قبلها. استنى الرد وبعدها ابعت الرسالة "
+           "التالية. لو ممكن تكون حالة طوارئ، اتصل بالإسعاف 123 أو روح أقرب طوارئ."),
+}
+
+log = logging.getLogger("sanad.dispatch")
+
+
+def patient_limit_text(text: str) -> str:
+    return PATIENT_TEXT_TOO_LONG[lang.of(text)]
+
+
+def patient_busy_text(text: str) -> str:
+    return PATIENT_TURN_BUSY[lang.of(text)]
 
 
 async def handle_inbound(msg: InboundMessage) -> None:
@@ -100,25 +125,63 @@ async def handle_inbound(msg: InboundMessage) -> None:
         doctor = await store.doctor_by_id(patient.doctor_id)
         if doctor is None:
             return
+        await _handle_patient(patient, doctor, msg)
+        return
 
+    # An unresolvable ref has no feed to write to, which is why the /c routes
+    # validate the token and the patient id before they ever call in here.
+    await out.send(msg.sender_ref, OutboundMessage(text=UNKNOWN_REPLY))
+
+
+async def _handle_patient(patient, doctor, msg: InboundMessage) -> None:
+    """One patient turn behind a durable lease, with emergencies never queued."""
+    raw_text = msg.text or ""
+    text = raw_text.strip()
+    code_concept = sentinel.code_net(text) if text else None
+
+    # A large payload does not buy a model call. Explicit code-net emergencies
+    # still take the emergency path; every other long message is returned with
+    # a fixed instruction that includes the emergency fallback.
+    if len(raw_text) > MAX_PATIENT_TEXT and code_concept is None:
+        await fanout().send(msg.sender_ref, OutboundMessage(
+            text=patient_limit_text(raw_text),
+            meta={"audit": {"tier": "input_limit", "generated": "code template"},
+                  "decided_by": "code (1,000-character patient limit)"},
+        ))
+        return
+
+    # Code-net emergencies bypass an ordinary in-flight turn. Waiting behind a
+    # model answer is the unsafe direction; this path costs no competing model
+    # call and reaches the same emergency persistence order as any other hit.
+    owner = ""
+    if code_concept is None:
+        owner = store.new_id()
+        try:
+            claimed = await store.claim_patient_turn(patient.id, owner)
+        except Exception:  # noqa: BLE001 - fail closed without paying a model
+            log.exception("patient turn claim failed patient_id=%s", patient.id)
+            claimed = False
+        if not claimed:
+            await fanout().send(msg.sender_ref, OutboundMessage(
+                text=patient_busy_text(raw_text),
+                meta={"audit": {"tier": "in_flight", "generated": "code template"},
+                      "decided_by": "code (one in-flight patient turn)"},
+            ))
+            return
+
+    try:
         # Gate 1 runs here, on this lane, and it runs twice for a reason.
-        #
         # Typed text is checked as it arrives. A voice note has no text until a
-        # model has made some, so the transcript is a model output, and the
-        # code sentinel is the first thing that reads it: transcribe, then
-        # check, then hand the checked verdict to the Concierge. Nothing
-        # between those two lines can generate a reply, and the Concierge is
-        # given the verdict rather than being trusted to ask for one.
-        text, voice = (msg.text or "").strip(), False
-        gate = await sentinel.check(text) if text else sentinel.Sentinel()
+        # model has made some, so the transcript is checked immediately after
+        # transcription and before the Concierge sees it.
+        voice = False
+        gate = (sentinel.Sentinel(fired=True, net="code", concept=code_concept,
+                                  checked=["code"])
+                if code_concept else
+                await sentinel.check(text) if text else sentinel.Sentinel())
         if msg.audio_bytes:
-            # codex item 11. Bounded, and a failure is an answered turn and not
-            # a 500. There is no transcript to check, so there is nothing for
-            # the Sentinel to read and nothing for the Concierge to answer: the
-            # turn ends here with the patient asked for the message again and
-            # the doctor told one arrived that Sanad could not hear.
             try:
-                text = await bounded.within(
+                transcript = await bounded.within(
                     bounded.TRANSCRIBE, media.transcribe_async(msg.audio_bytes),
                     what="the voice transcription")
             except Exception as exc:  # noqa: BLE001 - the card carries the error
@@ -127,7 +190,15 @@ async def handle_inbound(msg: InboundMessage) -> None:
                     exc.__class__.__name__, channel=msg.channel)
                 return
             voice = True
-            text = (text or "").strip()
+            transcript = transcript or ""
+            text = transcript.strip()
+            if len(transcript) > MAX_PATIENT_TEXT:
+                await fanout().send(msg.sender_ref, OutboundMessage(
+                    text=patient_limit_text(transcript),
+                    meta={"audit": {"tier": "input_limit",
+                                    "generated": "code template"}},
+                ))
+                return
             gate = await sentinel.check(text) if text else gate
 
         await concierge.handle_patient_message(
@@ -135,11 +206,12 @@ async def handle_inbound(msg: InboundMessage) -> None:
             image_bytes=msg.image_bytes, mime=msg.mime or "image/jpeg", voice=voice,
             gate=gate,
         )
-        return
-
-    # An unresolvable ref has no feed to write to, which is why the /c routes
-    # validate the token and the patient id before they ever call in here.
-    await out.send(msg.sender_ref, OutboundMessage(text=UNKNOWN_REPLY))
+    finally:
+        if owner:
+            try:
+                await store.release_patient_turn(patient.id, owner)
+            except Exception:  # noqa: BLE001 - the lease expires on its own
+                log.exception("patient turn release failed patient_id=%s", patient.id)
 
 
 # --------------------------------------------------------------------------- #

@@ -446,8 +446,35 @@ class TheSmallOnes(unittest.TestCase):
         self.assertIn("<SERVICE_URL>", RUNBOOK)
 
     def test_i1_the_deploy_script_takes_the_project_from_the_environment(self) -> None:
-        """So a forker does not deploy into somebody else's project."""
-        self.assertIn("PROJECT=${PROJECT:-sanad-506914}", DEPLOY)
+        """So a forker does not deploy into somebody else's project.
+
+        S15 G2 finished the job the audit started. The environment still wins,
+        but the fallback is no longer a hard-coded id that a fork inherits by
+        accident: it is the operator's own gcloud configuration, and a shell
+        that has neither stops instead of guessing.
+        """
+        self.assertIn(
+            "PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}",
+            DEPLOY)
+        self.assertNotIn("PROJECT:-sanad-", DEPLOY)
+
+    def test_i1_an_unconfigured_shell_is_told_what_to_do_and_stops(self) -> None:
+        """Empty and the literal "(unset)" gcloud prints are both refusals."""
+        guard = DEPLOY.split("PROJECT=${PROJECT:-", 1)[1].split("REGION=", 1)[0]
+        self.assertIn('[ -z "${PROJECT}" ]', guard)
+        self.assertIn('[ "${PROJECT}" = "(unset)" ]', guard)
+        self.assertIn("exit 1", guard)
+        message = [line for line in guard.splitlines()
+                   if line.strip().startswith("echo ")]
+        self.assertEqual(len(message), 1, "one line to the operator, not a wall")
+        self.assertIn("set PROJECT=", message[0])
+        self.assertIn("gcloud config set project", message[0])
+        self.assertIn(">&2", message[0])
+
+    def test_i1_the_guard_runs_before_anything_is_created(self) -> None:
+        """A refusal after the first gcloud call is not a refusal."""
+        self.assertLess(DEPLOY.index("exit 1"),
+                        DEPLOY.index("gcloud iam service-accounts describe"))
 
     def test_l6_the_console_escapes_quotes_like_the_dashboard_does(self) -> None:
         console = (APP_ROOT / "web" / "console.html").read_text(encoding="utf-8")

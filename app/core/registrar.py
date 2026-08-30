@@ -34,6 +34,7 @@ from .models import (
     Loop,
     Patient,
     PendingConfirm,
+    OtherPatientMention,
     ProposedLoop,
     ProposedRecord,
     loop_details,
@@ -77,6 +78,10 @@ Extract:
   imaging order, MONITOR for something the patient measures repeatedly,
   MEDICATION for starting/stopping/changing a drug, VISIT for a return
   appointment, TASK for anything else.
+- other_patients: if the doctor mentions more than one patient, choose only one
+  primary patient for `patient` and `loops`, and list every other named patient
+  here with that person's instruction exactly as dictated. Never merge two
+  patients' instructions and never silently omit the other person.
 
 Fill only the fields that belong to a loop's type. TEST needs test_name.
 MEDICATION needs drug and action. MONITOR needs metric, and schedule and days
@@ -171,7 +176,9 @@ PLACEHOLDER_NAMES: frozenset[str] = frozenset(
     for n in (
         "unknown", "unknown patient", "unnamed", "no name", "not given", "n a",
         "na", "none", "anonymous", "patient", "the patient", "new patient",
+        "unspecified", "not specified",
         "غير معروف", "مش معروف", "مجهول", "بدون اسم", "مريض", "المريض",
+        "غير محدد",
     )
 )
 
@@ -179,6 +186,59 @@ PLACEHOLDER_NAMES: frozenset[str] = frozenset(
 def is_placeholder_name(name: str) -> bool:
     """True when the model filled the name field with a stand-in, not a name."""
     return sentinel.normalize(name).strip() in PLACEHOLDER_NAMES
+
+
+def checked_other_patients(
+    record: ProposedRecord, dictation: str, rows: list[Any] = ()
+) -> list[OtherPatientMention]:
+    """Second names that code can point to in the doctor's original words.
+
+    `other_patients` is model output, so its instruction is never displayed or
+    stored. A name is retained only when the normalized full name occurs in the
+    dictation and it is not the primary patient's name. Existing board names
+    provide an independent code backstop when the extraction omits the second
+    person entirely, which is the deployed two-patient failure Fable found.
+    """
+    said = sentinel.normalize(dictation).strip()
+    primary = sentinel.normalize(record.patient.name).strip()
+    kept: list[OtherPatientMention] = []
+    seen: set[str] = set()
+
+    padded_said = f" {said} "
+
+    def keep(name: str, instruction: str = "") -> None:
+        clean = " ".join(str(name or "").split())
+        normalized = sentinel.normalize(clean).strip()
+        if (not clean or is_placeholder_name(clean) or normalized == primary
+                or normalized in seen or f" {normalized} " not in padded_said):
+            return
+        seen.add(normalized)
+        exact = " ".join(str(instruction or "").split())
+        normalized_exact = sentinel.normalize(exact).strip()
+        # The instruction is printed only when the model returned a contiguous
+        # phrase the doctor actually said. A paraphrase or invention is blanked.
+        if not normalized_exact or f" {normalized_exact} " not in padded_said:
+            exact = ""
+        kept.append(OtherPatientMention(name=clean, instruction=exact))
+
+    for mention in record.other_patients:
+        keep(mention.name, mention.instruction)
+    for row in rows:
+        keep(getattr(row, "name", ""))
+    return kept
+
+
+def _other_patient_warning_lines(record: ProposedRecord) -> list[str]:
+    if not record.other_patients:
+        return []
+    lines = ["🔴 SAFETY WARNING: this dictation named more than one patient."]
+    for mention in record.other_patients:
+        detail = f" - {mention.instruction}" if mention.instruction else ""
+        lines.append(
+            f"    Not registered from this dictation: {mention.name}{detail}. "
+            "Dictate that patient's instructions separately."
+        )
+    return lines
 
 # codex item 16. The model's output was trusted for everything the two checks
 # below did not name, so a negative due date, an empty plan, an age of 400 and a
@@ -453,6 +513,12 @@ def confirm_card(record: ProposedRecord, confirm_id: str,
         lines.append("Not dictated, and NOT filled in by Sanad:")
         lines += [f"    {one}" for one in missing]
 
+    # Fable red-team 2 item 8. ProposedRecord can hold only one primary record,
+    # so a second patient must be impossible to lose silently. These names were
+    # checked against the original dictation by `checked_other_patients`; no
+    # model-written instruction is trusted or stored.
+    lines += _other_patient_warning_lines(record)
+
     # codex re-audit 2. The identification note is stored on the record as a
     # dated note the moment he taps Confirm, and until now he never saw it: it
     # was written by a model and checked by nothing he could read. It is
@@ -514,6 +580,7 @@ def ask_card(record: ProposedRecord, confirm_id: str,
     """
     by_id = {row.id: row for row in rows}
     lines = [f"The dictation reads as: {describe(record.patient)}."]
+    lines += _other_patient_warning_lines(record)
     actions: list[dict] = []
     for patient_id, reason in outcome.candidates:
         row = by_id.get(patient_id)
@@ -623,6 +690,27 @@ async def handle_doctor(
     # anything; all they can do is choose which card the doctor is shown.
     said = (text or "").strip()
     rows = await board_for(doctor)
+    record = record.model_copy(
+        update={"other_patients": checked_other_patients(record, said, rows)}
+    )
+    if identify.is_bare_name(said, record.patient.name):
+        matches = identify.code_matches(rows, record.patient.name)
+        outcome = identify.Outcome(
+            kind=identify.LIST,
+            candidates=tuple((row.id, "the name matches this record")
+                             for row in matches),
+            why="a bare name is a lookup, never a clinical proposal",
+        )
+        await events.append_event(
+            doctor.id, "system", f"lookup: {record.patient.name}",
+            meta={"identification": identified(outcome, None)},
+        )
+        await adapter.send(target, OutboundMessage(
+            text=f"Looking up {record.patient.name}.",
+            meta={"decided_by": "code (bare names are lookup-only)"},
+            card=lookup_card(record.patient.name, rows, outcome),
+        ))
+        return
     problems = validate(record)
     if problems and not identify.asks_lookup(said):
         await adapter.send(
@@ -833,6 +921,12 @@ async def choose_new(doctor: Doctor, confirm_id: str) -> None:
     if confirm is None or confirm.doctor_id != doctor.id:
         await adapter.send(target, OutboundMessage(text="That proposal is gone."))
         return
+    record = ProposedRecord.model_validate(confirm.proposed)
+    if is_placeholder_name(record.patient.name):
+        await adapter.send(target, OutboundMessage(
+            text="I need the patient's name before I can register anyone. "
+                 "Please dictate it again with the name."))
+        return
     confirm = confirm.model_copy(update={"patient_id": None})
     await store.save_confirm(confirm)
     await send_confirm(doctor, confirm, ProposedRecord.model_validate(confirm.proposed))
@@ -953,7 +1047,8 @@ async def _commit(doctor: Doctor, confirm: PendingConfirm,
     link_lines = await links.card_lines(token, base_url)
 
     # The whole future of this patient is created here, in one go: three nudges
-    # per dated loop, a daily reminder per monitoring loop. Nothing in Sanad
+    # per dated loop, and a daily reminder on days two through N per monitoring
+    # loop, day one being this confirmation itself. Nothing in Sanad
     # stays alive in between (core/chaser.py). A queue that refuses is a card
     # the doctor can act on, never a failed Confirm: the record is already real
     # and the reminders can be put back with /force_due.

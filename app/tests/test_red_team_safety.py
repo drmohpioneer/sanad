@@ -35,14 +35,20 @@ class SentinelBypasses(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertIsNotNone(sentinel.code_net(message))
 
-    def test_voice_cannot_run_a_model_before_the_code_sentinel(self) -> None:
+    def test_voice_transcript_hits_code_sentinel_before_patient_models(self) -> None:
         source = (APP_ROOT / "core" / "dispatch.py").read_text(encoding="utf-8")
-        patient_lane = source.split('if role == "patient":', 1)[1]
-        patient_lane = patient_lane.split("# An unresolvable ref", 1)[0]
-        self.assertIn("sentinel.check", patient_lane)
+        patient_lane = source.split("async def _handle_patient", 1)[1]
+        patient_lane = patient_lane.split("# The doctor's commands", 1)[0]
+        voice_lane = patient_lane.split("if msg.audio_bytes:", 1)[1]
+        voice_lane = voice_lane.split("elif not text:", 1)[0]
+        self.assertIn("sentinel.check", voice_lane)
         self.assertLess(
-            patient_lane.index("sentinel.check"),
-            patient_lane.index("media.transcribe_async"),
+            voice_lane.index("media.transcribe_async"),
+            voice_lane.index("sentinel.check"),
+        )
+        self.assertLess(
+            patient_lane.index("sentinel.code_net"),
+            patient_lane.index("claim_patient_turn"),
         )
 
 

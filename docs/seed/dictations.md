@@ -117,15 +117,31 @@ check failed. A critical value on such a slip still escalates: the direction the
 errors point is towards the doctor, never towards silence.
 
 **17. Spine v3, beats 4 and 5 (RUNBOOK section 1b): upload
-`docs/seed/lab-slip-7-lipid-partial.png`, then later
-`docs/seed/lab-slip-8-lipid-complete.png`, as Ahmed Ali, against the open Lipid
-panel loop that beat 1's dictation opens**
+`docs/seed/lab-slip-7-lipid-partial-<date>.png`, then later
+`docs/seed/lab-slip-8-lipid-complete-<date>.png`, as Ahmed Ali, against the open
+Lipid panel loop that beat 1's dictation opens**
 
-Beat 4, `lab-slip-7-lipid-partial.png`: LDL Cholesterol 160 mg/dL (H, ref <100)
-and Total Cholesterol 240 mg/dL (H, ref <200) printed, HDL and Triglycerides
-absent from the slip entirely, collected 29/08/2026, one day after the
-28/08/2026 order date that `lab-slip-1.png` and `lab-slip-2.png` already use for
-this same loop. Expected verifier lines, verbatim from `core/verify.py`'s
+**Each slip exists as a dated pair.** The verifier refuses a slip collected
+before the order it is supposed to satisfy, and the order is created on the day
+of the take, so one fixed printed date can only ever be right on one day. Slips
+7 and 8 therefore ship twice each, identical in layout and in every value,
+differing in one printed digit:
+
+| Take | Beat 4 | Beat 5 |
+|---|---|---|
+| Sunday 30/08/2026, rehearsal | `lab-slip-7-lipid-partial-0830.png` | `lab-slip-8-lipid-complete-0830.png` |
+| Monday 31/08/2026, the take | `lab-slip-7-lipid-partial-0831.png` | `lab-slip-8-lipid-complete-0831.png` |
+
+`lab-slip-7-lipid-partial.png` and `lab-slip-8-lipid-complete.png` without a
+suffix are byte-for-byte copies of the 31/08 pair, because Monday is the final
+take. Use the pair dated the day you are recording; a 30/08 slip against a
+31/08 order returns `date before_order` and beat 4 fails on camera.
+
+Beat 4, `lab-slip-7-lipid-partial-0831.png`: LDL Cholesterol 160 mg/dL (H, ref
+<100) and Total Cholesterol 240 mg/dL (H, ref <200) printed, HDL and
+Triglycerides absent from the slip entirely, collected 31/08/2026 (30/08/2026 on
+the `-0830` copy), on or after the order date the beat 1 dictation creates that
+morning. Expected verifier lines, verbatim from `core/verify.py`'s
 `Verdict.lines()` (this is the exact wording proved live in
 `research/s6-block1-live-results.md` step 8a, now generated properly in the
 repo instead of a scratchpad):
@@ -138,10 +154,10 @@ missing: Triglycerides, HDL
 `satisfies` is false, the values still attach, the loop stays open rather than
 moving to review, and the Coordinator calls `request_missing_evidence`.
 
-Beat 5, `lab-slip-8-lipid-complete.png`: all four lipid analytes printed and
-none of them critical: LDL 92, HDL 48, Total Cholesterol 178, Triglycerides
-130, all mg/dL, all inside their printed reference range, collected 29/08/2026.
-Expected verifier line:
+Beat 5, `lab-slip-8-lipid-complete-0831.png`: all four lipid analytes printed
+and none of them critical: LDL 92, HDL 48, Total Cholesterol 178, Triglycerides
+130, all mg/dL, all inside their printed reference range, collected 31/08/2026
+(30/08/2026 on the `-0830` copy). Expected verifier line:
 
 ```
 verified: identity match, date ok, 4 of 4 requested analytes present
@@ -149,10 +165,12 @@ verified: identity match, date ok, 4 of 4 requested analytes present
 
 `satisfies` is true and the loop moves to `pending_review`.
 
-## The eight synthetic lab slips
+## The eight synthetic lab slips, in ten files
 
-All fake: fake labs, fake patients, fake values, generated with Pillow. Each one
+All fake: fake labs, fake patients, fake values, generated as demo fixtures. Each one
 carries a printed line saying it is a synthetic document for a software demo.
+Slips 7 and 8 are one slip each in two dated copies, plus an unsuffixed copy of
+the 31/08 one, which is why eight slips are ten files.
 
 | File | What it looks like | Values | Expected card |
 |---|---|---|---|
@@ -162,8 +180,10 @@ carries a printed line saying it is a synthetic document for a software demo.
 | `lab-slip-4-handwritten.png` | a small lab's bilingual slip, Arabic and English test names, values written in by hand | LDL 148 against a target of 70, HDL 38, total 214, triglycerides 165 | 🟡 values card, "LDL 148, target 70, above target" |
 | `lab-slip-5-glare.png` | a phone photo of a slip on a desk, taken at an angle, with a window reflection across the top third | K 6.7 flagged H, creatinine 2.1, urea 88, Na 138, Ca 9.1 | 🚨 red, "Potassium (K+) 6.7 mmol/L · CRITICAL (critical outside 2.5-6.0)" |
 | `lab-slip-6-unjudgeable.png` | a plain printed report for Ahmed Ali, collected 21/08/2026 | Hb 45 printed as a percentage, ferritin 2450 flagged HH, creatinine 1.0, Na 139, K 4.3 | 🚨 amber-red URGENT REVIEW: two rows the table refuses to grade, three in range |
-| `lab-slip-7-lipid-partial.png` | the same Nile Specialized letterhead as slips 1 and 2, Ahmed Ali, collected 29/08/2026, only two of the four lipid rows printed | LDL 160 H, Total Cholesterol 240 H; HDL and Triglycerides absent | 🟡 values card, "verified: identity match, date ok, 2 of 4 requested analytes present" · "missing: Triglycerides, HDL"; loop stays open, `request_missing_evidence` |
-| `lab-slip-8-lipid-complete.png` | the same letterhead, Ahmed Ali, collected 29/08/2026, all four lipid rows printed | LDL 92, HDL 48, Total Cholesterol 178, Triglycerides 130, none flagged | values card, "verified: identity match, date ok, 4 of 4 requested analytes present"; loop moves to `pending_review` |
+| `lab-slip-7-lipid-partial-0830.png` | the same Nile Specialized letterhead as slips 1 and 2, Ahmed Ali, 58/M, Ref. Dr Mohamed, collected 30/08/2026, only two of the four lipid rows printed | LDL 160 H, Total Cholesterol 240 H; HDL and Triglycerides absent | 🟡 values card, "verified: identity match, date ok, 2 of 4 requested analytes present" · "missing: Triglycerides, HDL"; loop stays open, `request_missing_evidence` |
+| `lab-slip-7-lipid-partial-0831.png` (and `lab-slip-7-lipid-partial.png`, the same bytes) | the same slip, collected 31/08/2026 | the same two rows | the same card |
+| `lab-slip-8-lipid-complete-0830.png` | the same letterhead, Ahmed Ali, collected 30/08/2026, all four lipid rows printed | LDL 92, HDL 48, Total Cholesterol 178, Triglycerides 130, none flagged | values card, "verified: identity match, date ok, 4 of 4 requested analytes present"; loop moves to `pending_review` |
+| `lab-slip-8-lipid-complete-0831.png` (and `lab-slip-8-lipid-complete.png`, the same bytes) | the same slip, collected 31/08/2026 | the same four rows | the same card |
 
 Two more assets live in `app/test-assets/`, alongside copies of slips 1 and 2:
 `bp-monitor-1.png` (a blood-pressure machine reading 142/91, pulse 78) and
@@ -178,3 +198,10 @@ Coordinator and has been proved against `core/labs.py` in the suite
 seventh and eighth were added for spine v3 beats 4 and 5 (rev 19 of
 `specs/S6-fix-queue-rev18.md`) and their verifier lines above were checked
 directly against `core/verify.check()`, not yet against the deployed extractor.
+Both were regenerated as dated pairs for S15 item 1. All four files were put
+through `core.verify.check()` against an order dated the same day and returned
+`identity match`, `date ok` and 2 of 4 / 4 of 4, and the 30/08 copy against a
+31/08 order returns `date before_order`, which is the reason the pairs exist.
+Nothing in either file changed except one printed digit: the 0830 and 0831
+copies of a slip differ in 235 pixels, all of them inside the second character
+of the printed date. None of the four has been read by the deployed extractor.

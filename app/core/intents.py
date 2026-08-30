@@ -132,6 +132,42 @@ PATTERNS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Consent and identity are gates, not Coordinator tools. They are deliberately
+# code-only and live here beside the other patient-language patterns.
+OPT_OUT_PATTERNS: tuple[str, ...] = (
+    "stop sending me messages", "stop messaging me", "no more messages",
+    "no more reminders", "do not send me reminders", "dont send me reminders",
+    "i do not want reminders", "i dont want reminders",
+    "بطل تبعتلي", "ماتبعتش", "متبعتش", "مش عايز رسايل",
+    "مش عايز تذكيرات", "مش عايزه رسايل", "متبعتيش",
+    "khalas messages", "matb3atsh messages", "mesh 3ayez reminders",
+)
+OPT_OUT_NEGATIONS: tuple[str, ...] = (
+    "dont stop sending", "do not stop sending", "dont stop messaging",
+    "do not stop messaging", "ماتبطلش تبعت", "متبطلش تبعت",
+)
+
+THIRD_PARTY_PATTERNS: tuple[str, ...] = (
+    "i am his wife", "i am her husband", "i am his son", "i am his daughter",
+    "this is his wife", "this is her husband", "i am not the patient",
+    "i am not ahmed", "im not ahmed",
+    "انا مراته", "انا مراتو", "انا جوزها", "انا ابنه", "انا بنته",
+    "انا مش المريض", "انا مش احمد", "دي مراته", "ده جوزها",
+)
+
+
+def explicit_opt_out(text: str) -> bool:
+    folded = sentinel.normalize(text)
+    if any(sentinel.normalize(p).strip() in folded for p in OPT_OUT_NEGATIONS):
+        return False
+    return any(sentinel.normalize(p).strip() in folded for p in OPT_OUT_PATTERNS)
+
+
+def third_party_identity(text: str) -> bool:
+    folded = sentinel.normalize(text)
+    return any(sentinel.normalize(p).strip() in folded
+               for p in THIRD_PARTY_PATTERNS)
+
 # The seven answers the model vote may give. "none" is one of them and it is the
 # one the vote gives when it fails, because the tiers below this file are the
 # behaviour that existed before it.

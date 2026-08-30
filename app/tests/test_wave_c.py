@@ -19,6 +19,7 @@ the guarantee is the shape of the handler.
 
 from __future__ import annotations
 
+import re
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -47,6 +48,7 @@ class FakeStore:
         self.patients: dict[str, Patient] = {}
         self.loops: dict[str, Loop] = {}
         self.events: list[Event] = []
+        self.photo_receipts: dict[tuple[str, int, str], dict] = {}
         self.clock = NOW
         self.counter = 0
 
@@ -106,10 +108,29 @@ class FakeStore:
         await self.update_loop(loop_id, schedule_version=version)
         return version
 
+    async def claim_photo(self, patient_id, day_index, digest, owner) -> bool:
+        key = (patient_id, day_index, digest)
+        if key in self.photo_receipts:
+            return False
+        self.photo_receipts[key] = {"owner": owner, "state": "claimed"}
+        return True
+
+    async def complete_photo(self, patient_id, day_index, digest, owner) -> None:
+        row = self.photo_receipts.get((patient_id, day_index, digest))
+        if row and row["owner"] == owner:
+            row["state"] = "complete"
+
+    async def release_photo(self, patient_id, day_index, digest, owner) -> None:
+        key = (patient_id, day_index, digest)
+        row = self.photo_receipts.get(key)
+        if row and row["owner"] == owner:
+            del self.photo_receipts[key]
+
 
 STORE_NAMES = ("now", "new_id", "add_event", "list_events", "get_patient",
                "doctor_by_id", "list_loops", "get_loop", "update_loop",
-               "append_reading", "append_result", "bump_schedule_version")
+               "append_reading", "append_result", "bump_schedule_version",
+               "claim_photo", "complete_photo", "release_photo")
 
 
 class Recorder:
@@ -297,6 +318,8 @@ class ThePhotoPath(unittest.IsolatedAsyncioTestCase):
             await extractor.handle_photo(self.patient, self.doctor, b"x")
             await extractor.handle_photo(self.patient, self.doctor, b"x")
         self.assertEqual(len(self.fake.loops["l1"].results), 1)
+        self.assertTrue(any(e.meta.get("duplicate_image") for e in self.fake.events))
+        self.assertTrue(any("already received" in m.text for m in self.out.to("patient:")))
 
     async def test_a_second_slip_does_not_erase_the_first(self) -> None:
         """A partial slip followed by the missing half keeps both halves."""
@@ -304,7 +327,7 @@ class ThePhotoPath(unittest.IsolatedAsyncioTestCase):
             await extractor.handle_photo(self.patient, self.doctor, b"x")
         with self._read(slip(analytes=[{"analyte": "Progesterone",
                                         "value": "18"}])):
-            await extractor.handle_photo(self.patient, self.doctor, b"x")
+            await extractor.handle_photo(self.patient, self.doctor, b"y")
         names = [r["analyte"] for r in self.fake.loops["l1"].results]
         self.assertIn("Beta hCG", names)
         self.assertIn("Progesterone", names)
@@ -356,7 +379,7 @@ class ThePhotoPath(unittest.IsolatedAsyncioTestCase):
         told = [m for ref, m in self.out.sent if ref.startswith("patient:")]
         self.assertEqual(len(told), 1)
         self.assertEqual(told[0].text,
-                         escalate.fail_closed_text("ar", "f", emergency=True))
+                         escalate.fail_closed_text("en", "f", emergency=True))
         self.assertIn("123", told[0].text, "he is still sent to hospital")
         self.assertNotIn("دكتورك اتبلغ", told[0].text)
         self.assertEqual(told[0].meta["audit"]["error"], escalate.FAIL_CLOSED)
@@ -860,6 +883,89 @@ class TheDashboardSaysWhatItIsAndWhetherItIsLive(unittest.TestCase):
             "\n}", 1)[0]
         self.assertIn("pending[0]", block)
         self.assertNotIn("pending[pending.length - 1]", block)
+
+
+# --------------------------------------------------------------------------- #
+# The Dictate button and the runbook say the same sentence (S15 G3)
+# --------------------------------------------------------------------------- #
+# The demo panel's first button is the sentence Mohamed dictates on camera. It
+# used to be a shorter LDL line that opened one loop, while docs/RUNBOOK.md
+# section 1b dictated four: a rehearsal from the button and a take from the
+# document were not the same take. There is no reason for two copies of one
+# sentence to exist and no way to notice by eye when one of them moves, so the
+# rail is here: the runbook block is the source, both pages quote it, and this
+# test fails the build the moment either drifts.
+RUNBOOK_PATH = APP_ROOT.parent / "docs" / "RUNBOOK.md"
+# The image's build context is `app/` alone, so docs/RUNBOOK.md is not in it.
+# Same reasoning as tests/test_background.py: skip only where the file cannot
+# exist, which is never in a checkout of the whole tree.
+HAS_RUNBOOK = unittest.skipUnless(
+    RUNBOOK_PATH.exists(), "docs/RUNBOOK.md is outside the image")
+
+_JS_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def runbook_beat_one() -> str:
+    """The RUNBOOK 1b "Beat 1, the exact dictation" block, as one line."""
+    body = RUNBOOK_PATH.read_text(encoding="utf-8").split(
+        "**Beat 1, the exact dictation:**", 1)[1]
+    quoted: list[str] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if quoted:
+                break
+            continue
+        if not stripped.startswith(">"):
+            break
+        quoted.append(stripped.lstrip(">").strip())
+    return " ".join(" ".join(quoted).split())
+
+
+def dictate_button(page: str) -> str:
+    """The text the "1. Dictate" demo button puts in the doctor's box.
+
+    Read out of the BEATS entry rather than off a single line, because the
+    string is wrapped with `+` across three source lines in both pages and a
+    rail that only matches one layout is a rail that breaks on reformatting.
+    """
+    entry = page.split('["1. Dictate", "doctor",', 1)[1].split("],", 1)[0]
+    return "".join(_JS_STRING.findall(entry))
+
+
+class TheDictateButtonQuotesTheRunbook(unittest.TestCase):
+    @HAS_RUNBOOK
+    def test_the_dashboard_button_is_the_runbook_sentence(self) -> None:
+        page = (APP_ROOT / "web" / "dashboard.html").read_text(encoding="utf-8")
+        self.assertEqual(dictate_button(page), runbook_beat_one())
+
+    @HAS_RUNBOOK
+    def test_the_console_button_is_the_runbook_sentence(self) -> None:
+        page = (APP_ROOT / "web" / "console.html").read_text(encoding="utf-8")
+        self.assertEqual(dictate_button(page), runbook_beat_one())
+
+    def test_both_pages_carry_the_same_sentence(self) -> None:
+        """This half needs no document, so it runs inside the image too."""
+        dashboard = (APP_ROOT / "web" / "dashboard.html").read_text(
+            encoding="utf-8")
+        console = (APP_ROOT / "web" / "console.html").read_text(encoding="utf-8")
+        self.assertEqual(dictate_button(dashboard), dictate_button(console))
+
+    def test_the_sentence_opens_all_four_of_beat_ones_loops(self) -> None:
+        """The point of the change: four obligations, not one.
+
+        A button that opened a single lipid loop could not rehearse the beat the
+        spine films, so the words each loop is recognised by are asserted here
+        and not left to the reader to spot.
+        """
+        said = dictate_button(
+            (APP_ROOT / "web" / "dashboard.html").read_text(encoding="utf-8"))
+        for phrase in ("Ahmed Ali, 58, male", "Start atorvastatin 40 at night",
+                       "Lipid panel in 2 weeks",
+                       "Blood pressure twice a day for 7 days",
+                       "Come back in 3 weeks"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, said)
 
 
 if __name__ == "__main__":  # pragma: no cover

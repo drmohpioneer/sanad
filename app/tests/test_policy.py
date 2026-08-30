@@ -131,7 +131,7 @@ class TheScheduleWindow(unittest.TestCase):
 
 
 class QuietHours(unittest.TestCase):
-    """22:00 to 08:00 Cairo, the doctor's policy window.
+    """22:00 to 09:00 Cairo, the single patient quiet window.
 
     core/timing.py owns the Chaser's own send-time window (22:00 to 09:00) and
     is untouched. This one is inside it, so nothing here can widen what the
@@ -145,12 +145,13 @@ class QuietHours(unittest.TestCase):
         self.assertTrue(policy.in_quiet_hours(self.evening(23)))
         self.assertTrue(policy.in_quiet_hours(self.evening(3)))
         self.assertTrue(policy.in_quiet_hours(self.evening(22)))
-        self.assertFalse(policy.in_quiet_hours(self.evening(8)))
+        self.assertTrue(policy.in_quiet_hours(self.evening(8)))
+        self.assertFalse(policy.in_quiet_hours(self.evening(9)))
         self.assertFalse(policy.in_quiet_hours(self.evening(21)))
 
     def test_a_contact_inside_it_is_moved_to_the_morning_not_sent(self) -> None:
         moved = policy.out_of_quiet_hours(self.evening(23))
-        self.assertEqual(moved.astimezone(timing.CAIRO).hour, 8)
+        self.assertEqual(moved.astimezone(timing.CAIRO).hour, 9)
         self.assertEqual(moved.astimezone(timing.CAIRO).day, 30)
         self.assertFalse(policy.in_quiet_hours(moved))
 
@@ -255,7 +256,7 @@ class TheDoctorsPolicyRecord(unittest.TestCase):
         self.assertEqual(pol.grace_days, 7)
         self.assertEqual(pol.max_contacts, 6)
         self.assertEqual(pol.max_per_day, 1)
-        self.assertEqual((pol.quiet_from, pol.quiet_until), (22, 8))
+        self.assertEqual((pol.quiet_from, pol.quiet_until), (22, 9))
         self.assertEqual(pol.max_evidence_requests, 2)
         self.assertTrue(pol.cost_escalate_only)
 

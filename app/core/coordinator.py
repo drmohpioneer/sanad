@@ -812,8 +812,15 @@ async def _execute(turn: Turn, decision: policy_module.Decision) -> dict[str, An
             answered = True
 
     elif tool == "request_missing_evidence":
-        analyte = labs.display(str(args.get("analyte") or ""))
-        await _say(turn, "missing_part", analyte=analyte)
+        verified = turn.loop.verified or {}
+        missing = [labs.display(str(item)) for item in verified.get("missing", [])
+                   if str(item).strip()]
+        # The verifier is the source of truth. The model's one-analyte argument
+        # selects the tool, never the subset of evidence the patient is asked for.
+        if not missing:
+            missing = [labs.display(str(args.get("analyte") or ""))]
+        separator = "، " if turn.speak == "ar" else ", "
+        await _say(turn, "missing_part", analyte=separator.join(missing))
         # codex re-audit 13. This read the count off the snapshot this turn
         # started with and wrote it back plus one, across a model call and a
         # send, so two turns on one loop in the same second both wrote 1 and the
@@ -993,6 +1000,18 @@ async def resume_after_answer(doctor: Doctor, relay: Any, text: str
     if loop is None or loop.doctor_id != doctor.id:
         return None
 
+    if loop.state not in LIVE_STATES:
+        why = f"loop is {loop.state}; the doctor's answer was delivered but it was not resumed"
+        await events.append_event(
+            doctor.id, "system", f"{loop.title} not resumed: loop is {loop.state}",
+            patient_id=loop.patient_id, loop_id=loop.id,
+            meta={"audit": {"tier": "coordinator", "line": why},
+                  "decided_by": "code (closed loops never resume)"},
+        )
+        return {"loop_id": loop.id, "task": None, "scheduled": False,
+                "resumed": False,
+                "why": why, "audit": why}
+
     answer = " ".join((text or "").split())
     note = f"doctor answered: {answer}" if answer else "doctor answered"
     if not await store.claim_resume(loop.id, note):
@@ -1022,6 +1041,7 @@ async def resume_after_answer(doctor: Doctor, relay: Any, text: str
               "decided_by": "code (core/policy.py schedule window)"},
     )
     return {"loop_id": loop.id, "task": task, "scheduled": decision.allowed,
+            "resumed": True,
             "why": decision.why, "audit": decision.audit()}
 
 

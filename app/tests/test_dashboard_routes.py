@@ -331,7 +331,7 @@ class TheSettingsShape(unittest.TestCase):
         shape = views.settings_view(doctor, policy_module.for_doctor(doctor))
         self.assertEqual(shape["policy"]["max_contacts"], 3)
         self.assertEqual(shape["policy"]["followup_reason"], "because")
-        self.assertEqual(shape["policy"]["quiet_hours"], "22:00 to 08:00 Cairo")
+        self.assertEqual(shape["policy"]["quiet_hours"], "22:00 to 09:00 Cairo")
 
 
 class TheReportShape(unittest.TestCase):

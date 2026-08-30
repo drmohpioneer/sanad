@@ -177,6 +177,15 @@ def loose_criticals(events: Iterable[Any], on: Optional[date] = None) -> int:
     return count
 
 
+def duplicate_events(events: Iterable[Any], on: Optional[date] = None) -> int:
+    """Identical inbound photos Sanad refused to process a second time."""
+    return sum(
+        1 for event in events
+        if bool((getattr(event, "meta", None) or {}).get("duplicate_image"))
+        and _on_day(event, on)
+    )
+
+
 def classify(loop: Any, criticals: set[str]) -> str:
     """One loop -> exactly one bucket. Total by construction: the last is else."""
     if str(getattr(loop, "id", "")) in criticals:
@@ -233,11 +242,15 @@ def compute(
     open_relays: Sequence[Any] = (),
     *,
     on: Optional[date] = None,
-    duplicates: int = 0,
+    duplicates: Optional[int] = None,
 ) -> Counts:
     """The whole day from the records. Counting, and nothing else."""
     criticals = critical_loops(events, on)
-    counts = Counts(carried=len(loops), duplicates=duplicates)
+    counts = Counts(
+        carried=len(loops),
+        duplicates=(duplicate_events(events, on)
+                    if duplicates is None else duplicates),
+    )
 
     help_patients: set[str] = set()
     quiet_patients: set[str] = set()
@@ -320,7 +333,7 @@ def card(counts: Counts, doctor_name: str = "", when: Optional[datetime] = None)
             f"Lost: {counts.lost}. Every obligation carried is in exactly one "
             "bucket, so this number is zero by construction, not by hope "
             "(core/summary.py).",
-            f"Duplicate messages: {counts.duplicates}, from the send receipts.",
+            f"Duplicate inbound photos ignored: {counts.duplicates}.",
             "Counted from the records in code. No model was asked.",
         ],
         "actions": [],

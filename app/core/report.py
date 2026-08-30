@@ -5,10 +5,6 @@ its outcome, every value the extractor read with the doctor's target beside it,
 the monitoring table, and any escalation that happened. None of that is
 generated, so none of it can be invented.
 
-The model writes exactly one line, "what I would flag", from the structured
-summary it is handed and nothing else. If that call fails the report still goes,
-one line shorter.
-
 One claim is forbidden outright and the code, not the prompt, is what prevents
 it: Sanad never observes a patient swallowing anything, so a MEDICATION loop is
 reported as prescribed, never as taken, and the report says so in a fixed line
@@ -17,17 +13,11 @@ that the model cannot remove.
 
 from __future__ import annotations
 
-import json
-import logging
 from typing import Optional
 
-from google.genai import types
-
-from . import events, media, monitoring, names, settings, store, timing
+from . import events, monitoring, names, settings, store, timing
 from .adapters import OutboundMessage, fanout
 from .models import Doctor, Loop, Patient, Report
-
-log = logging.getLogger("sanad.report")
 
 NO_ADHERENCE_LINE = (
     "Sanad has no way to observe medication being taken, so nothing in this "
@@ -42,18 +32,6 @@ OUTCOME = {
     "unreachable": "unreachable after three reminders",
     "open": "open",
 }
-
-FLAG_PROMPT = """You are writing ONE sentence for a doctor, at the end of a
-follow-up report about his own patient.
-
-You are given the structured summary below and nothing else. Say what you would
-put in front of him first. Name only values that appear in the summary. Do not
-give advice, do not name a drug or a dose, do not suggest a treatment change,
-and never say or imply whether the patient took their medication - that is not
-recorded anywhere and you cannot know it.
-
-One sentence. No preamble."""
-
 
 def completion_title(patient: Patient) -> str:
     """The one place a completion report is named.
@@ -100,7 +78,7 @@ def trend(readings: list[dict]) -> str:
 
 
 async def build(doctor: Doctor, patient: Patient) -> str:
-    """The whole report, in code, plus one model line at the end."""
+    """The whole report, deterministically assembled from stored records."""
     loops = await store.list_loops(patient.id)
     history = await events.last_events(doctor.id, 0)
     # The rehearsal's own day length, so a monitoring line in a report counts
@@ -134,47 +112,8 @@ async def build(doctor: Doctor, patient: Patient) -> str:
     else:
         lines.append("Escalations: none.")
 
-    flag = await what_i_would_flag(loops, patient)
-    if flag:
-        lines += ["", f"What I would flag: {flag}"]
     lines += ["", NO_ADHERENCE_LINE]
     return "\n".join(lines)
-
-
-def _summary(loops: list[Loop], patient: Patient) -> str:
-    """The only thing the model sees: structured, already-judged data."""
-    return json.dumps(
-        {
-            "diagnosis": patient.diagnosis,
-            "targets": patient.targets,
-            "loops": [
-                {
-                    "type": l.type, "title": l.title, "state": l.state,
-                    "results": [
-                        {k: r.get(k) for k in ("analyte", "value", "unit", "level", "target")}
-                        for r in (l.results or [])
-                    ],
-                    "readings": l.readings or [],
-                }
-                for l in loops
-            ],
-        },
-        ensure_ascii=False,
-    )
-
-
-async def what_i_would_flag(loops: list[Loop], patient: Patient) -> str:
-    """One sentence, or an empty string. Never blocks the report from going out."""
-    try:
-        response = await media.client.aio.models.generate_content(
-            model=media.MODEL,
-            contents=[types.Part(text=_summary(loops, patient))],
-            config=types.GenerateContentConfig(system_instruction=FLAG_PROMPT),
-        )
-        return " ".join((response.text or "").split())[:400]
-    except Exception:
-        log.exception("the flag line failed; the report goes without it")
-        return ""
 
 
 async def find_patient(doctor: Doctor, fragment: str) -> tuple[Optional[Patient], str]:

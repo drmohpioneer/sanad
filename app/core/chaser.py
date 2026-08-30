@@ -57,7 +57,7 @@ from datetime import datetime
 from typing import Any
 
 from . import (
-    events, gender, lang, names, policy, settings, store, tasks, templates,
+    events, gender, labs, lang, names, policy, settings, store, tasks, templates,
     timing,
 )
 from .adapters import OutboundMessage, fanout
@@ -68,7 +68,10 @@ log = logging.getLogger("sanad.chaser")
 NUDGE_PATH = "/tasks/nudge"
 LADDER_LENGTH = len(timing.LADDER_DAYS)
 # A monitoring loop is the same machinery with a daily reminder. The cap is a
-# guard on the queue, not a clinical rule: a 30-day monitor gets 14 reminders.
+# guard on the queue, not a clinical rule. Day one is the confirmation itself,
+# so reminders run from day two, and the count is one short of the days: a
+# seven-day monitor gets six reminders and a 30-day monitor stops at 13, the
+# largest offset below this cap.
 MONITOR_MAX = 14
 
 # The loop states a nudge is still allowed to fire on.
@@ -139,12 +142,31 @@ MONITOR_AR: dict[str, str] = {
 }
 MONITOR_EN = ("Hello {patient}, a quick reminder from {doctor} to measure {what}.\n"
               "Just send me the reading here.")
+VISIT_EN = ("Hello {patient}, your appointment with {doctor} for {what} is coming "
+            "up. Tell me if you cannot make it.")
+VISIT_AR: dict[str, str] = {
+    "m": "أهلاً {patient}، موعدك مع {doctor} لـ{what} قرب. قوللي لو مش هتعرف تيجي.",
+    "f": "أهلاً {patient}، موعدك مع {doctor} لـ{what} قرب. قوليلي لو مش هتعرفي تيجي.",
+    "u": "الموعد مع {doctor} لـ{what} قرب. برجاء الإبلاغ هنا لو الحضور مش ممكن.",
+}
 
 
-def what_for(loop: Loop) -> str:
+def what_for(loop: Loop, speak: str = "en") -> str:
     """What the patient is being reminded about, in the doctor's own words."""
     details = loop.details or {}
-    return str(details.get("test_name") or details.get("metric") or loop.title)
+    said = str(details.get("test_name") or details.get("metric") or loop.title)
+    if speak != "ar":
+        return said
+    if loop.type == "TEST":
+        return labs.arabic_test_name(said)
+    if loop.type == "MONITOR":
+        key = said.strip().lower()
+        return {"bp": "ضغط الدم", "blood pressure": "ضغط الدم",
+                "weight": "الوزن", "glucose": "السكر"}.get(
+                    key, "القياس المطلوب")
+    if loop.type == "VISIT":
+        return "المتابعة"
+    return said
 
 
 def nudge_text(patient: Patient, doctor: Doctor, loop: Loop, attempt: int,
@@ -159,9 +181,12 @@ def nudge_text(patient: Patient, doctor: Doctor, loop: Loop, attempt: int,
     who = gender.of_patient(patient)
     fields = {"patient": names.in_arabic(patient.name) if speak == "ar"
                          else names.first_name(patient.name),
-              "doctor": doctor.name, "what": what_for(loop)}
+              "doctor": doctor.name, "what": what_for(loop, speak)}
     if kind == "monitor":
         table = MONITOR_AR[who] if speak == "ar" else MONITOR_EN
+        return templates.tidy(table.format(**fields))
+    if loop.type == "VISIT":
+        table = VISIT_AR[who] if speak == "ar" else VISIT_EN
         return templates.tidy(table.format(**fields))
     table = NUDGE_AR[who] if speak == "ar" else NUDGE_EN
     return templates.tidy(
@@ -204,7 +229,10 @@ async def schedule_loop(loop: Loop) -> list[dict[str, Any]]:
 
     if loop.type == "MONITOR":
         days = int((loop.details or {}).get("days") or 0) or 1
-        for day in range(1, min(days, MONITOR_MAX) + 1):
+        # Confirm + welcome are day one's request. Queue reminders only for
+        # days two through N, at offsets one through N-1, so the patient is not
+        # greeted and immediately sent a duplicate monitoring prompt.
+        for day in range(1, min(days, MONITOR_MAX)):
             payload = {"kind": "monitor", "run_id": run_id, "loop_id": loop.id,
                        "attempt": day, "schedule_version": version}
             name = await tasks.enqueue(NUDGE_PATH, payload, timing.seconds(day, scale))
@@ -320,8 +348,10 @@ async def force_due(doctor: Doctor, argument: str) -> str:
         meta={"task": name, "payload": payload, "strict": strict},
     )
     how = " Every guard applies to it." if strict else ""
-    return (f"Forced: {patient.name} · {loop.title}. Nudge {payload['attempt']} of "
-            f"{LADDER_LENGTH} is on the queue now.{how}")
+    count = (f"Nudge {payload['attempt']} of {LADDER_LENGTH}"
+             if payload["attempt"] <= LADDER_LENGTH else
+             f"A fourth wake-up (the ladder has {LADDER_LENGTH})")
+    return f"Forced: {patient.name} · {loop.title}. {count} is on the queue now.{how}"
 
 
 # --------------------------------------------------------------------------- #
@@ -487,6 +517,8 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
     doctor = await store.doctor_by_id(loop.doctor_id)
     if patient is None or doctor is None:
         return {"sent": False, "reason": "patient or doctor is gone"}
+    if patient.proactive_paused:
+        return {"sent": False, "reason": "patient opted out of proactive messages"}
 
     kind = str(payload.get("kind") or "nudge")
     attempt = int(payload.get("attempt") or loop.attempts + 1)
@@ -521,21 +553,6 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
     if loop.paused:
         return {"sent": False, "reason": "loop is paused on a recorded barrier"}
 
-    if not force:
-        if timing.in_quiet_hours(now, scale):
-            when = timing.next_allowed(now, scale)
-            await tasks.enqueue(NUDGE_PATH, payload, (when - now).total_seconds())
-            return {"sent": False, "reason": "quiet hours", "retry_at": when.isoformat()}
-        # codex item 12. This used to count Send rows, which are ladder nudges
-        # and nothing else, so a Coordinator template earlier the same day was
-        # invisible to it and the patient heard from Sanad twice. It reads the
-        # patient-wide ledger now, which every outbound message Sanad starts
-        # goes through, whichever loop or agent started it.
-        today = timing.day_index(now, scale)
-        if await store.contacted_on(patient.id, today):
-            await tasks.enqueue(NUDGE_PATH, payload, timing.seconds(1, scale))
-            return {"sent": False, "reason": "one message per patient per day"}
-
     # The doctor's own limits, applied to the ladder itself: the same guard the
     # Coordinator's schedule tool has to pass (core/policy.py). It is what makes
     # "never more than six contacts on one loop" true no matter who asked for
@@ -559,6 +576,16 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
             reason="the ladder step that is due now",
         )
         if not allowed.allowed:
+            # The policy snapshot can already see a contact won by another
+            # loop in this same tick.  That refusal is a deferral, not a lost
+            # wake-up: preserve the established one-message-a-day retry and
+            # its public reason.  Other refusals (especially the six-contact
+            # ceiling) are terminal and remain visible immediately, even at
+            # night.
+            if allowed.why == "this patient already hears from Sanad that day":
+                await tasks.enqueue(
+                    NUDGE_PATH, payload, timing.seconds(1, scale))
+                return {"sent": False, "reason": store.NO_DAY_LEFT}
             # The audit line says who refused, and on this path it is not the
             # model: no model was asked. `Decision.audit()` ends every line with
             # "decided_by: model choice, guards in code", which is true of the
@@ -576,6 +603,32 @@ async def fire(payload: dict[str, Any]) -> dict[str, Any]:
                       "decided_by": "code (core/policy.py schedule window)"},
             )
             return {"sent": False, "reason": allowed.why, "audit": line}
+
+        # A scheduled wake is checked against policy before quiet-hour parking,
+        # so an exhausted loop is refused now instead of looking merely delayed.
+        # An allowed scheduled wake still respects quiet hours, and that
+        # deferral is visible. Demo-only force_due bypasses both by design.
+        if timing.in_quiet_hours(now, scale):
+            when = timing.next_allowed(now, scale)
+            task = await tasks.enqueue(
+                NUDGE_PATH, payload, (when - now).total_seconds())
+            line = (f"deferred to {timing.QUIET_UNTIL_HOUR:02d}:00 Cairo: "
+                    "quiet hours")
+            await events.append_event(
+                doctor.id, "system", f"{line} on {loop.title}",
+                patient_id=patient.id, loop_id=loop.id,
+                meta={"task": task, "retry_at": when.isoformat(),
+                      "audit": {"tier": "chaser", "line": line},
+                      "decided_by": "code (core/timing.py quiet hours)"},
+            )
+            return {"sent": False, "reason": "quiet hours",
+                    "retry_at": when.isoformat()}
+
+        # The patient-wide ledger covers messages sent by every loop/agent.
+        today = timing.day_index(now, scale)
+        if await store.contacted_on(patient.id, today):
+            await tasks.enqueue(NUDGE_PATH, payload, timing.seconds(1, scale))
+            return {"sent": False, "reason": "one message per patient per day"}
 
     # The idempotency ledger, and it stands in front of the Coordinator, not
     # behind it. Until rev 17 the claim happened after the agent turn, so a

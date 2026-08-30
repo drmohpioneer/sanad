@@ -593,7 +593,14 @@ FROZEN_NEEDS_SUPPORT = {
     'pounding': ('heart', 'chest', 'pulse', 'beat', 'beats', 'beating', 'racing', 'palpitations', 'rib', 'ribs'),
     'emergency': ('ambulance', 'help', 'hospital', 'call', 'er', '123', 'now', 'urgent', 'quick', 'quickly', 'please'),
     'dying': ('i am', 'im', 'i m', 'he is', 'hes', 'she is', 'shes', 'feel', 'feels', 'think', 'help', 'cant', 'can t'),
+    'هموت': ('ساعد', 'الحق', 'مش قادر', 'وجع', 'نزيف', 'اتنفس', 'صدر', 'طوارئ', 'اسعاف'),
+    'hamoot': ('help', 'el7a2', 'mesh 2ader', 'wag3', 'nazeef', 'atnafas', 'sadri', 'tawari2', 'es3af'),
 }
+
+FROZEN_LAUGHTER_MARKERS = (
+    'من الضحك', 'من كتر الضحك', 'mn el de7k', 'mn el do7k',
+    'laughing', 'laughter', 'hahaha', 'ههه', '😂',
+)
 
 FROZEN_NEVER_WAKE = (
     'صداع خفيف من الصبح',
@@ -633,8 +640,11 @@ class TheFrozenSentinelTable(unittest.TestCase):
                   for c, groups in FROZEN_CONCEPT_RULES),
         )
 
-    def test_the_three_words_that_need_support_are_the_frozen_three(self) -> None:
+    def test_the_words_that_need_support_are_the_frozen_copy(self) -> None:
         self.assertEqual(dict(sentinel.NEEDS_SUPPORT), FROZEN_NEEDS_SUPPORT)
+
+    def test_the_laughter_stand_down_markers_are_the_frozen_copy(self) -> None:
+        self.assertEqual(tuple(sentinel.LAUGHTER_MARKERS), FROZEN_LAUGHTER_MARKERS)
 
     def test_the_never_wake_negatives_are_the_frozen_six(self) -> None:
         self.assertEqual(tuple(sentinel.NEVER_WAKE), FROZEN_NEVER_WAKE)

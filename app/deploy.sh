@@ -3,8 +3,14 @@
 set -euo pipefail
 
 # Security audit I1: a forker who runs this without thinking should not deploy
-# into somebody else's project. PROJECT= in the environment wins.
-PROJECT=${PROJECT:-sanad-506914}
+# into somebody else's project. PROJECT= in the environment wins, and the only
+# fallback is this machine's own gcloud configuration. There is no hard-coded
+# project id here to inherit by accident: an unconfigured shell stops.
+PROJECT=${PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}
+if [ -z "${PROJECT}" ] || [ "${PROJECT}" = "(unset)" ]; then
+  echo "No project: set PROJECT=your-gcp-project-id, or run gcloud config set project your-gcp-project-id" >&2
+  exit 1
+fi
 REGION=europe-west1
 SERVICE=sanad
 SA=sanad-run@${PROJECT}.iam.gserviceaccount.com

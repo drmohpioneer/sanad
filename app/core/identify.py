@@ -186,6 +186,16 @@ def asks_lookup(text: str) -> bool:
     return _has(text, LOOKUP_PHRASES)
 
 
+def is_bare_name(text: str, extracted_name: str) -> bool:
+    """True when the doctor supplied a name and no instruction whatsoever."""
+    said = sentinel.normalize(text).strip()
+    name = sentinel.normalize(extracted_name).strip()
+    if not said or not name or said != name:
+        return False
+    words = said.split()
+    return 1 <= len(words) <= 5 and not any(ch.isdigit() for ch in text)
+
+
 # --------------------------------------------------------------------------- #
 # The board, as the model is allowed to see it
 # --------------------------------------------------------------------------- #

@@ -1,6 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>Sanad</title>
 <!--
   The patient's phone page: the judge fallback for the Telegram chat, nothing
@@ -35,15 +36,15 @@
   #note.wait { color: #92400e; }
 </style>
 
-<header>سند &middot; Sanad<small id="who">…</small></header>
+<header>Sanad<small id="who">…</small></header>
 <div id="chat"></div>
 <footer>
   <div class="row">
-    <textarea id="t" placeholder="اكتب هنا / type here"></textarea>
-    <button id="send">إرسال</button>
+    <textarea id="t" dir="auto" placeholder="Type here"></textarea>
+    <button id="send">Send</button>
   </div>
   <label class="file">
-    صورة تحليل أو رسالة صوتية / lab photo or voice note
+    Lab photo or voice note
     <input type="file" id="f" accept="image/*,audio/*">
   </label>
   <div id="note" role="status" aria-live="polite"></div>
@@ -58,6 +59,7 @@ const el = (id) => document.getElementById(id);
 function bubble(e) {
   const div = document.createElement("div");
   div.className = "b " + (e.kind === "patient_in" ? "me" : "them");
+  div.dir = "auto";
   div.textContent = e.text;
   el("chat").appendChild(div);
   el("chat").scrollTop = el("chat").scrollHeight;
@@ -86,7 +88,7 @@ async function poll() {
     return true;
   } catch (err) {
     if (el("note").className !== "bad") {
-      note("wait", "جاري إعادة الاتصال… / reconnecting…");
+      note("wait", "Reconnecting…");
     }
     return false;
   }
@@ -101,16 +103,28 @@ async function send() {
   fd.append("text", el("t").value);
   if (el("f").files[0]) fd.append("file", el("f").files[0]);
   if (!el("t").value.trim() && !el("f").files[0]) return;
+  const restoreFocus = document.activeElement === el("send");
   el("send").disabled = true;
   note("", "");
   try {
     const r = await fetch(base, { method: "POST", body: fd });
-    if (!r.ok) throw new Error(r.status);
+    if (!r.ok) {
+      let message = "Not sent. Press Send to retry.";
+      if (r.status === 413) {
+        try { message = (await r.json()).detail || message; } catch (_) {}
+      }
+      const failed = new Error(String(r.status));
+      failed.patientMessage = message;
+      throw failed;
+    }
     el("t").value = ""; el("f").value = "";
     await poll();
   } catch (err) {
-    note("bad", "الرسالة ماوصلتش. اضغط إرسال تاني. / Not sent. Press send to retry.");
-  } finally { el("send").disabled = false; }
+    note("bad", err.patientMessage || "Not sent. Press Send to retry.");
+  } finally {
+    el("send").disabled = false;
+    if (restoreFocus || document.activeElement === document.body) el("t").focus();
+  }
 }
 
 el("send").onclick = send;

@@ -112,11 +112,18 @@ class TheOrderOfTheGates(unittest.TestCase):
 
 class TheVoiceLane(unittest.TestCase):
     def test_the_transcript_is_checked_where_it_is_made(self) -> None:
-        lane = DISPATCH.split('if role == "patient":', 1)[1].split(
+        route = DISPATCH.split('if role == "patient":', 1)[1].split(
             "# An unresolvable ref", 1
         )[0]
-        self.assertLess(lane.index("sentinel.check"),
-                        lane.index("media.transcribe_async"))
+        self.assertIn("await _handle_patient", route)
+        lane = DISPATCH.split("async def _handle_patient", 1)[1].split(
+            "# The doctor's commands", 1
+        )[0]
+        voice = lane.split("if msg.audio_bytes:", 1)[1].split(
+            "elif not text:", 1
+        )[0]
+        self.assertLess(voice.index("media.transcribe_async"),
+                        voice.index("sentinel.check"))
         self.assertIn("gate=gate", lane)
 
 
@@ -133,6 +140,12 @@ class ResetStaysInsideOneDoctor(unittest.TestCase):
         wipe = STORE.split("async def wipe_doctor", 1)[1]
         self.assertIn("chat_id", wipe)
         self.assertIn('row.get("chat_id") == chat_id', wipe)
+
+    def test_patient_scoped_turn_and_photo_receipts_are_reset_with_the_board(self) -> None:
+        wipe = STORE.split("async def wipe_doctor", 1)[1]
+        self.assertIn('collection("patient_turns")', wipe)
+        self.assertIn('collection("photo_receipts")', wipe)
+        self.assertIn('FieldFilter("patient_id", "==", patient_id)', wipe)
 
 
 # core.extractor imports the cloud SDK. The image always has it; a laptop may
