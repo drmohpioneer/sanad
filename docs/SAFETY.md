@@ -4,6 +4,8 @@ Sanad's safety model rests on one rule: anything that decides whether a message 
 
 Three sentences carry the whole model: **every gate that can escalate is code; every safety vote is bounded and add-only; every one of those calls fails closed, so an error relays to the doctor instead of passing the message on.** Text the doctor himself wrote is the trusted path: it is delivered as his, prefixed with his name, and is not rewritten by a model.
 
+**The same rule now covers four more agents, and it covers them the same way.** The Resolver (`core/resolver.py`), the Evidence Orchestrator (`core/evidence.py`), the Closure Auditor (`core/auditor.py`) and the Case Steward (`core/steward.py`) each hold either no tools or a fixed, code-guarded list, and each fails toward the code path that already existed rather than toward a model's own judgment. None of them can escalate less than the kernel below already decides to. The Resolver, the Auditor and the Steward run only for a doctor Sanad has explicitly enrolled in the Gate 3 cockpit (`doctor.workspace_facts_enabled`); a doctor who has not been enrolled gets the exact pre-S19 behavior, with no new deadline, no new agent turn and no new failure mode to reason about. The Evidence Orchestrator is the one exception to that cohort gate: it runs for every doctor, because its whole job is a better disposition for a photo the table would already have routed, and its failure mode is the table itself, not a doctor flag. "Fail-open honestly" is the phrase this document uses for all four, and it means something specific in each case: a model that is down never grants a permission code would have refused, it only ever falls back to the decision code already made before that agent existed, and the label written to the trail always says which one happened.
+
 **The tables are frozen, not just exercised.** Until S11 both regression suites iterated the table they were guarding, so they asserted that whatever the table currently holds still fires. Deleting a phrase deleted its own test with it and the build stayed green (Codex, reviews/codex-troubleshoot-1.md item 15). Both tables now also exist as a literal copy inside their test file, typed out rather than read from the module: `FROZEN_MUST_WAKE`, `FROZEN_CONCEPT_RULES`, `FROZEN_NEEDS_SUPPORT` and `FROZEN_NEVER_WAKE` in `app/tests/test_sentinel.py`, and `FROZEN_CRITICAL_LABS`, `FROZEN_UNIT_CONVERSIONS`, `FROZEN_ALIASES`, the four flag tables and the four abdominal-pain tables in `app/tests/test_labs.py`, and `FROZEN_CONTEXT_CLASSES` in `app/tests/test_validator.py`. Every table that decides something is in that list, which is the whole point of the sentence: a flag word is a threshold made of letters (remove "positive" from `HIGH_FLAGS` and a positive troponin quietly becomes "cannot judge"), an alias decides whether a row is found at all, and a negation decides whether a patient who said she has no pain is sent to an emergency room. Each frozen list is also run through the live code, not only diffed, so an entry that stops working fails even when the table itself is untouched. Removing a row, moving a threshold or changing a conversion factor fails the comparison, and the image does not build. A deliberate change is a change in three places at once: the module, the frozen literal, and this document. Every threshold in the table is also walked across its own boundary, just below it, at it and just above it, in the table's unit and in every alternate unit the conversion table knows, so a rule cannot quietly become an inequality it was not.
 
 ## The three-tier answer fence
@@ -68,7 +70,66 @@ Model output enters the patient path in these categories; the list is explicit r
 
 8. **The Concierge reply**: generated from the injected plan/open-loop context and then checked by the deterministic validator plus the reassurance vote before send.
 
+9. **The Resolver's tool choice** (`resolver.run`, S19, enrolled doctors only): one guarded tool per turn, ask a patient one bounded question, search Google Places, move a visit inside the doctor's own window, or hand to the doctor. It never writes a sentence itself; the one question it may ask is a fixed template, and everything a patient reads about a place is a field Google Places returned, copied, never phrased.
+
+10. **The Evidence Orchestrator's disposition** (`evidence.decide`, S24-E, every doctor): one bounded turn that names a photo's kind and which open loop it answers, chosen from a list of offers code built. It cannot write, attach or close anything itself; `core/photos.route` recomputes the route regardless of what it says, and `core/verify.check` still runs downstream and overrules it.
+
+11. **The Closure Auditor's verdict** (`auditor.review_close`, S24-D, enrolled doctors only): one bounded turn, asked only after code has already allowed the close, that may refuse with a named gap and may never approve. Its only free-text input is flattened to one capped line before anything downstream can treat it as a sentence a patient or a doctor reads unfiltered.
+
+12. **The Case Steward's verdict** (`steward.review`, S24-F, enrolled doctors only): one bounded turn over a proposal a tool guard has already accepted, that may approve, revise to a code-computed alternative, or hold the timing of a message that was already going to send. It never sees a patient's name, never writes to a patient, and never reaches a DANGER or an URGENT_SLA push.
+
 One path carries no model rewrite: **text the doctor wrote himself is trusted.** His answer to a card is delivered as his, prefixed with his name and appended to the plan as a dated addendum.
+
+## The Resolver: solving a barrier before it becomes the doctor's problem
+
+Until S19 a barrier had two ends: the Coordinator paused the loop, or handed it to the doctor as a card. `core/resolver.py` is a fourth ADK agent, asked when `classify_barrier` names `availability`, `transport` or `cost`, before `escalate_barrier` is ever reached, and it runs one short guarded tool loop rather than a free conversation.
+
+- **The model chooses; a table decides what it may choose from.** `resolver.ROUTES` is keyed on the barrier class, so `cost` can never be answered by rescheduling a visit and `forgot` can never spend a search; a call outside the table is refused with the reason, in code.
+- **One question, and the cap is enforced in code, not by asking nicely.** A second question on the same barrier is refused however the model asks for it, and the one question it may ask is a fixed template, never a sentence the model wrote.
+- **The model never sees a search result.** `find_places` proposes a search; the HTTP call happens afterwards, and a patient reads a name and an address exactly as Google Places returned them. There is no path from a model turn to the name of a place, so the Resolver cannot invent a laboratory and cannot quote a price: there is no price field in the payload to quote.
+- **Widening a search is a code decision, not a second model turn.** An empty first search is widened once and tried again by a fixed table; the model is not asked to try again and never sees either result.
+- **A refusal always names what was tried.** `hand_to_doctor` prints `tried` on the card, so the doctor sees what the Resolver already attempted rather than only that it failed.
+- **The cost fork is a yes-or-no read in code, never a model's read of the patient's tone.** `resolver.declined_public_lab` matches a fixed decline list, normalized the same way the Sentinel normalizes text, and treats everything else, including silence made of punctuation, as a yes: the wrong way to be wrong here is a barrier the Resolver could have answered landing on the doctor's desk instead. A patient who did not mean yes says so on the next message and the doctor's own card is one reply away either way.
+- **Places is data from outside, cleaned before Sanad repeats it.** `core/places.py` strips control characters, collapses whitespace, caps length and refuses any listing whose name or address reads like a dose. It fails soft, always: no API key, a network error, a quota, or a malformed payload comes back as an empty search with an error field, and the Resolver hands the barrier to the doctor with that sentence in `tried`, never a 500 on the patient's page.
+- **Gated the same way the rest of this section is.** `resolver.check` reads the same `workspace_facts_enabled` cohort gate every guard in this document reads; a doctor never enrolled in the Gate 3 cockpit never reaches this file, and every barrier for him escalates exactly as it did before S19.
+
+## The Closure Auditor: a second opinion, never a second authority
+
+The fifth agent, and the only one whose whole job is to say no, and only to the system's own hand. `core/auditor.py` is asked one bounded question every time a loop closes, on the enrolled cohort only, and its authority is not the same on the two paths a close can take.
+
+- **It may hold the system's own close; it may never hold the doctor's.** When the Coordinator itself proposes `close_verified_loop` during a wake-up, `core/policy.py` has already decided the close is allowed before the Auditor is asked (a code refusal, the verifier's own "does not satisfy," is answered in code, upstream), and here a refusal genuinely holds the close: the loop is left exactly as it was found, and the gap is written to the trail once. When the doctor himself taps Reviewed, the Auditor is still asked and may still name a gap, but it cannot hold that close: the tap closes the loop regardless, because the doctor's own authority is the one thing in Sanad no agent stands in front of, and what the Auditor adds is a line on the record, `closed with a gap on the record: <gap>`, filed alongside `closed_anyway: the doctor tapped Reviewed`, never a refusal.
+- **There is no verdict it can return that turns a system-proposed close the code refused into a close that happens.** A refusal on that path is a named gap, written to the trail once, and the loop is left exactly as it was found.
+- **It writes no state.** It returns a value; the caller acts on it. Every event, every close and every message stays owned by the file that already owned it.
+- **It fails open on the model, never on the guard in front of it.** An Auditor that cannot be reached, times out, or answers nonsense is a second opinion that is missing, not a gate that is down: the close proceeds exactly as it did before this file existed, and one log line says the second opinion was not available.
+- **Nothing it says is trusted as free text.** The gap is model-authored, so it is flattened to one capped line under a fixed prefix before any caller can put it in an event or a sentence a doctor reads. A refusal with nothing readable left in it still refuses, under the fixed wording `a required item is missing`.
+- **It is told nothing that identifies the patient.** The contract it reads is rendered for "the patient" and "the doctor," which is enough to judge whether a record is finished and carries no name.
+
+The Auditor exists because a loop that closes is a loop nobody looks at again: a close on an incomplete record is the mistake that never surfaces on its own, the board goes green, the doctor moves on, and the evening reading that was never sent is now a fact about a patient that no one will ever ask about again. Naming that gap once, in a fixed line, is the whole of what this agent is trusted to do.
+
+## The Case Steward: is this the right move, never is this allowed
+
+The seventh agent, and the only one that never touches the record. `core/steward.py` reads a move another agent has already chosen and answers with one of three words, on the enrolled cohort only, after `core/policy.check` has already decided the move is legal: the question this file answers is never "may this happen," code already answered that, but "should it, right now."
+
+- **`approve`** changes nothing. The proposal executes byte for byte as it would have executed if this file did not exist.
+- **`revise`** swaps in one named alternative, chosen from the same list `core/policy.check` would already allow on these exact facts, computed in code before the model is asked. The alternative is put through the identical guard the original proposal went through; a refusal there is not an argument, the original stands, because a steward that cannot produce a legal move has not produced a move at all.
+- **`hold_for_digest`** is timing only, and the limit matters more than the feature. The action is carried out exactly as proposed; what changes is a release moment, the earlier of the next digest and a fixed ceiling (two hours on a case already handed to the doctor or already waiting on his review, six hours otherwise). It can never delete a card, drop a queue row or change a count. `core/adapters.route_for` is the only thing in Sanad that decides what reaches a phone, and the Steward does not touch, stamp or reach around that decision: it can only make an already-parking-eligible message park a little sooner, and it can never touch a DANGER or an URGENT_SLA, because those are answered in code before the Steward's mark is ever read.
+
+**Danger bypasses it in code, not by convention.** `core/sentinel.py` and `core/escalate.py` do not import `core/steward.py` and never construct a turn on it; a critical reaches the phone with no Steward frame anywhere on the stack. A proposal that is not one of the Coordinator's seven tools is not judged at all, it is approved unasked. It writes no state of its own, no store, no event, no send, no task queue: every verdict is a returned value, and the caller writes the trail line. And it fails open exactly like the other three: a model that is down, slow, or answering nonsense means approve, today's un-Stewarded behavior verbatim, logged once.
+
+The product sentence this agent exists to make true: **the doctor hears from one mind.** Danger, which never comes through here at all. A finished outcome, which the phone contract parks to the morning. And answers to what he actually asked. Problems are not pushed at him; the agents settle them between themselves, and he can pull the report of what was handled.
+
+## The phone contract: what is allowed to ring an enrolled doctor's phone
+
+S24-G. `core/adapters.route_for` is the one place in Sanad that decides whether a message reaches a phone, and it reads the message's own `notification_class`, never the Steward, never a model.
+
+- **DANGER and URGENT_SLA ring the phone now.** Unchanged, including the failure behavior: a Telegram send that comes back `ok:false` still raises, and `core/escalate.told_or_fail_closed` still reads that exception.
+- **REVIEW_READY and DEADLINE_OUTCOME park.** The card is written to the cockpit exactly as before and marked parked; nothing about what the web console shows changes, and a parked message is never mistaken for a delivery.
+- **SILENT_WORK and SOLICITED_RESPONSE stay quiet.** No ring, no park: the cockpit carries it, and there is nothing the morning owes him that he did not already ask for.
+- **Anything unclassified rings the phone and logs a warning.** Fail open to noisy, never to silent.
+
+**The digest is doctor-pulled. There is no automatic push at any hour, 09:00 Cairo or otherwise.** `/digest` and `GET /c/{token}/summary` are the same counting code, run only when the doctor opens the console or types the command; a parked card is parked to that digest, not to a clock. A future Cloud Tasks push that fires the digest on a schedule is a month-two item, not something this revision does.
+
+Only an enrolled doctor (`workspace_facts_enabled`) is covered by any of this. A doctor who is not enrolled gets the fan-out he always had, and a patient-bound message is never touched by the phone contract at all.
 
 ## Gendered wording, because getting it wrong is a safety-adjacent failure
 
@@ -197,8 +258,11 @@ A refusal is not an error and not a clinical event. The patient gets one line in
 - Never diagnoses: values are compared to targets, baselines and the critical table, and the report is assembled from stored facts; no model writes a clinical opinion.
 - Never claims medication adherence: it records what was instructed and what was reported back, nothing more.
 - Never calls a patient: text only.
-- Never decides what to do with a photo by asking a model: a code table (`app/core/photos.py`) turns the model's read of the picture plus the patient's open loops into a route, and `app/core/labs.py` does every comparison. A result with no order behind it is still read and compared, and a critical value still escalates, but nothing attaches or closes on Sanad's own judgment: the doctor gets it with two buttons and decides.
+- Never decides what to do with a photo on a model's word alone: a code table (`app/core/photos.py`) is what always ran and still runs, the Evidence Orchestrator's disposition since S24-E is recomputed against that same table rather than trusted, and `app/core/labs.py` does every comparison. A result with no order behind it is still read and compared, and a critical value still escalates, but nothing attaches or closes on Sanad's own judgment: the doctor gets it with two buttons and decides.
 - The Concierge cannot write: it has no tool surface, because ADK 2.8.0 does not allow `output_schema` and `tools` together. Code-matched administrative replies can still invoke Coordinator tools, and plain-code patient lanes can still file messages, readings and evidence; those are explicit code routes, not Concierge capabilities.
+- Never quotes a price: the Resolver's search reads Google Places, which has no price field, and the template that follows it says so out loud rather than guessing a number.
+- Never redirects a patient to another doctor: a visit is moved to another day, on the doctor's own calendar, never to another clinic.
+- Never lets a second opinion become a second authority: the Closure Auditor may refuse a close and may never approve one, and the Case Steward may revise or hold a proposal's timing and may never grant a permission the code guard in front of it already refused.
 
 ## Broad general-clinic scope
 
@@ -208,8 +272,10 @@ The sentinel phrase fixtures and lab table span stroke signs, anaphylaxis, obste
 
 ## Data handling, and what stands between this and a real patient
 
-Every patient in this repository and in the demo is invented; do not enter real patient data.
+Every patient in this repository and in the demo is invented; do not enter real patient data. Every fixture behind the Resolver, the Evidence Orchestrator, the Closure Auditor and the Case Steward is synthetic in exactly the same way.
 
 Nothing repeats the AI disclosure after onboarding.
 
-Before any real patient is onboarded: a Law 151/2020 (Egypt's personal data protection law) review and a consent flow, clinical governance sign-off on the critical-lab and blood-pressure thresholds, a line-by-line clinical and legal read of the AI self-disclosure templates, and, for the WhatsApp channel, Meta Business Verification with Sanad as the single verified sender. None of that has happened yet. This is the gate between hackathon demo and first real patient, not a checkbox already ticked.
+**WhatsApp is not in this revision.** There is no WhatsApp code path in this repository today; Telegram and the web console are the two live adapters, and both are demonstrations that the `ChannelAdapter` interface is genuinely removable, not a promise that a third one exists. A production WhatsApp channel is a month-two item: it starts on a Meta test number, moves to Meta Business Verification with Sanad as the single verified sender only once that is complete, and reaches no real patient before it.
+
+Before any real patient is onboarded: a Law 151/2020 (Egypt's personal data protection law) review and a consent flow, clinical governance sign-off on the critical-lab and blood-pressure thresholds, a line-by-line clinical and legal read of the AI self-disclosure templates, and, for a production WhatsApp channel when one exists, Meta Business Verification with Sanad as the single verified sender. None of that has happened yet. This is the gate between hackathon demo and first real patient, not a checkbox already ticked.

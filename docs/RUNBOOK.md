@@ -92,6 +92,26 @@ wrong. Read the note above about which board a reset touches.
 The order matters. Bumping the run id is the step that actually guarantees
 silence, because it does not depend on the purge having propagated.
 
+**Steps 1, 2 and 4 are global, not scoped to whichever board name you are
+about to reset.** The queue purge hits the one `sanad-chase` Cloud Tasks
+queue every doctor's tasks share, and `run_id`/`time_scale` live in one
+shared settings document (`core/settings.py`, read by `POST /admin/settings`
+and by every task on every board). A "rehearse on the Test Doctor board
+only" plan still purges and rescales the demo doctor's queue too, because
+there is no per-board version of these three steps. Never run steps 1, 2 or
+4 between a real patient interaction on the demo board and this take without
+meaning to touch that board's clock as well. Step 3 (the reset) and step 7
+(enrollment) below are the only two of the seven that are genuinely
+per-doctor.
+
+`GET /health`'s `run_id` field is a read of that same shared document at the
+moment you call it; a live check of this revision still showed an old value
+(`s19b1`) once, so treat what `/health` prints as a display to double-check,
+never as proof by itself that a bump you just made has taken effect. If it
+looks stale, re-read `/admin/settings`'s own response from the call that set
+it, or the console header, rather than trusting a second `/health` call to
+disagree with itself.
+
 ```bash
 # 1. Purge the queue. Asynchronous: `gcloud tasks list` can lag a minute behind
 #    it, which is why it is not the kill switch, only tidying.
@@ -122,6 +142,19 @@ curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=86400"
 
 # 6. Check what the service believes about itself.
 curl -s "$U/health"
+
+# 7. Enroll the doctor you are about to film, if beats 3, 5b or 7b are in
+#    the take. Enrollment is what turns on the Resolver, the Evidence
+#    Orchestrator, the Closure Auditor, the Case Steward and the phone
+#    contract for that doctor; a doctor left unenrolled gets the exact
+#    pre-S19 behavior and none of those four beats has anything to show.
+#    Enrolling ALSO flips /c/<token>/app to the v2 cockpit for that doctor:
+#    if you want the plain console or the legacy /app page on camera, stay
+#    on /c/<token> itself, which the flag never touches.
+DOCTOR_ID=$(curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/seed" | jq -r .doctor_id)
+curl -s -X POST -H "X-Sanad-Admin: $S" -H "Content-Type: application/json" \
+  -d "{\"doctor_id\": \"$DOCTOR_ID\", \"cockpit_v2_enabled\": true}" \
+  "$U/admin/doctor-features"
 ```
 
 `/health` must show, before you start recording:
@@ -224,12 +257,33 @@ at them.
 4. Section 1, item 16 check: if you set a policy value for testing, confirm
    `POST /admin/reset` cleared it back to `core/policy.py`'s defaults before
    you record, from `GET /c/<token>/settings`.
-5. Beat 2: set `time_scale=3` before Confirm. Measured live on revision 25:
+5. Section 1, step 7: enroll the doctor you are filming, if beats 3, 5b or
+   7b are in the take. Without it those beats have nothing to show: an
+   unenrolled doctor gets the exact pre-S19 behavior and no Resolver, Evidence
+   Orchestrator, Closure Auditor, Case Steward or phone contract fires for him.
+   Enrolling turns the agents on; it does not decide which page shows their
+   work. A live check of this revision found the audit line the Coordinator,
+   the Steward and the Auditor write (`meta.audit`, `meta.auditor`) rendered
+   on the plain console and the legacy dashboard, not on cockpit v2. Default
+   to `/c/<token>` for any beat where the point is reading a specific line
+   off the feed (2's steward line, 7's guard clause, 7b's gap), whether or
+   not that doctor is enrolled; cockpit v2 is its own beat, for the visual
+   check in section 1c, not the surface these lines are proven on tonight.
+6. Rehearse once, off camera, with the phone in your hand: tap Attach once
+   before you photograph a slip (the verb was dead code before S24-C and now
+   actually does something); if any Telegram card button gets tapped mid take,
+   type `/cancel` on the laptop before dictating again, because the channel
+   lock that used to protect against that was removed by ruling.
+7. Beat 2: set `time_scale=3` before Confirm. Measured live on revision 25:
    the first blood-pressure reminder is on screen about 6 seconds after
    Confirm and the six of them run to about 22 seconds; the lipid ladder's
    first rung lands about 39 seconds after Confirm and is the one to point at;
    its unreachable card follows at about 55 seconds and the visit reminders
-   run from about 61 to about 76 seconds.
+   run from about 61 to about 76 seconds. On an enrolled doctor the feed also
+   carries the Case Steward's own line for this ordinary reminder, `the case
+   steward agreed with the plan`, because rail 1 of that agent is exactly
+   this: an approved proposal runs byte for byte as it would have run without
+   it.
    Let it go unanswered and show the feed line for it, the real ladder rung.
    Never `/force_due` this beat on camera. Set `time_scale=86400` again right
    after beat 2, before beat 3.
@@ -261,12 +315,38 @@ confirm it, and then say "follow up with Ahmed about his potassium in a week":
 that one attaches to the record beat 1 made and adds a dated addendum to his
 plan.
 
-**Beat 3, the cost barrier, patient phrase and the doctor's typed reply:**
-patient sends "I'm not doing the test, it's too expensive." (voice note or
-typed). When the barrier card lands on the doctor's phone, answer it with:
-"The hospital lab is free, go there." Rehearse that exact sentence, since it
-is what the narration in `specs/video-spine-v3.md` describes the doctor
-saying.
+**Beat 3, the cost barrier, now routed through the Resolver first (S19).**
+Patient sends "I'm not doing the test, it's too expensive." (voice note or
+typed). On an enrolled doctor this no longer escalates straight to the
+doctor: `classify_barrier` names `cost`, and `core/resolver.py` asks one
+fixed question in code before anything reaches the doctor at all: "Would a
+public hospital lab work for you? They are usually much cheaper." Two ways
+to play this beat, and both are true to the code:
+
+- **The doctor never hears about it.** The patient replies with anything
+  that is not a decline (a plain "OK" counts as yes, by design: the wrong way
+  to be wrong here is a barrier the Resolver could have answered landing on
+  the doctor's desk instead). The Resolver searches Google Places for a
+  public or government lab, sends the patient the nearest results with the
+  honest line that no price is quoted because Places carries none, and the
+  loop resumes with the next contact back on the ordinary schedule. Nothing
+  reaches the doctor's phone: on an enrolled board this is `SILENT_WORK`,
+  which is the literal shape of "the agents settle it between themselves."
+  This is the beat to film if the phone-contract beat (5b) already makes the
+  quiet-versus-loud point elsewhere.
+- **The doctor still gets a card, and it already carries what was tried.**
+  The patient declines: "no, I don't trust public hospitals" (English) or
+  "لأ مش هينفع" (Arabic) both match the fixed decline list in code. The
+  Resolver hands the barrier to the doctor, and the card's `tried` field
+  already says a public lab was offered and refused, before the doctor reads
+  a word. Answer it with: "The hospital lab is free, go there." Rehearse
+  that exact sentence, since it is what the narration in
+  `specs/video-spine-v3.md` describes the doctor saying.
+
+On a doctor who is not enrolled, or if you skip step 7 above, this beat runs
+exactly as it always has: straight to the doctor, no Resolver turn, no
+public-lab question. Decide which version you are filming before the take
+and rehearse the patient's exact line once.
 
 **Beat 4, the incomplete-evidence slip:** use the pair dated the day of the
 take. `docs/seed/lab-slip-7-lipid-partial-0830.png` is collected 30/08/2026,
@@ -301,7 +381,33 @@ verified: identity match, date ok, 4 of 4 requested analytes present
 
 `satisfies` is true and the loop moves to `pending_review`. Confirm that off
 camera, then cut to the card already rendered, per the spine's own instruction
-not to show a second spinner on camera.
+not to show a second spinner on camera. Since S24-E the Evidence Orchestrator
+also runs on this slip; its disposition is recomputed against the same
+`core/photos.route` table before anything is written, so the card above reads
+identically whether or not that turn fired, and the audit line names both:
+`evidence-orchestrator (gemini) + gates: model choice, guards in code`.
+
+**Beat 5b, the steward hold and the phone contract, enrolled doctor only.**
+The card the lipid loop just produced carries a Reviewed button, which is
+exactly what makes it `REVIEW_READY` under the phone contract (S24-G): a
+verified result waiting on the doctor's own tap. Two things to show, in
+order:
+
+1. **It does not ring the phone.** On the demo board this class rang the
+   phone like everything else; on an enrolled board it does not. Point at the
+   doctor's phone: no notification for this card, on purpose. The web console
+   and the feed carry it exactly as before.
+2. **The feed may carry a steward line for it, and either wording is
+   correct.** If a hold was in play, the line reads `the case steward is
+   keeping this for the morning`; if the case steward simply agreed there was
+   nothing to change about the timing, it reads `the case steward agreed with
+   the plan`. Read whichever one the feed actually shows rather than
+   asserting one in advance; both are the honest sentence for what happened.
+3. **Pull the digest, live.** Type `/digest` on the doctor's phone, or open
+   `GET /c/<token>/summary`. The card that never rang now appears in the
+   parked section, and the line to read on camera is that nothing pushed it
+   there: the doctor pulled it. There is no scheduled job anywhere in this
+   system that fires `/digest` on its own, at 09:00 or any other hour.
 
 **Beat 6, the critical value:** `docs/seed/lab-slip-2.png` prints potassium 6.4,
 flagged H. It escalates whether or not a matching loop is open. After beat 5 the
@@ -326,14 +432,96 @@ Read the guard clause off the screen: "6 contacts already on this loop and the p
 
 This is a natural patient interaction and does not depend on the filming hour.
 
+**Which surface shows this beat's proof, measured live on rev 30.** The
+guard clause above is written into `meta.audit.line` on the event, and only
+the plain console / legacy dashboard renders that line today; cockpit v2
+does not print it. Film beat 7 on `/c/<token>` or the legacy `/app` page,
+not on an enrolled doctor's flagged cockpit, or the line you are pointing at
+will not be on screen. The same is true of every guard clause in this
+runbook: check which surface you are recording before you rehearse the
+beat, not after.
+
+**Beat 7b, the auditor genuinely holds a close, enrolled doctor only.** The
+Coordinator's own `close_verified_loop` attempt is the one path the Closure
+Auditor can actually refuse rather than only annotate (`core/policy.py`
+requires `doctor_reviewed` already true before that tool is even offered),
+and a live, code-grounded review of this revision confirms the only
+reliable way to reach that exact state on camera is through one of the
+twenty seeded background patients (`core/background.py`), not through a
+live tap of Reviewed: the doctor's own tap sets the review flag and closes
+the loop in the same instant (`core/concierge.mark_reviewed`), so a
+hand-made close never leaves the loop sitting reviewed-but-open for the
+Coordinator to reach on its own. Before the take, read the seeded board
+(`GET /c/<token>` or `/board`) for a loop that is `pending_review` with
+`doctor_reviewed` already true, and write its patient and loop name into
+this runbook once you have it, so the beat is not improvised live. Force
+that patient's next wake (`/force_due <patient> <loop word>`) and let the
+Coordinator's own turn choose `close_verified_loop`; if the record genuinely
+is not finished, the feed carries the Auditor's refusal and the loop stays
+open, exactly the rejection beat the plan asked for. As a fallback only, if
+no seeded loop is in that state when you check: tap Reviewed on Ahmed Ali's
+blood-pressure monitoring loop instead. **Say plainly that this is the
+advisory path, not the rejection path: the doctor's own tap always closes
+the loop.** What the Auditor adds there is a line neither the card nor the
+feed carried before S24-D, `closed with a gap on the record: <the missing
+slots, named>`, filed next to `closed_anyway: the doctor tapped Reviewed`,
+model-authored and worth rehearsing once to see the exact wording before a
+take. Either way, tap Reviewed on the lipid loop from beat 5 afterward,
+which is genuinely complete: no gap line appears, because there is nothing
+to name. `docs/SAFETY.md` and `docs/ARCHITECTURE.md` both describe, in
+full, why these are two different verdicts from the same agent: one over a
+close the system proposes on its own, one over a close the doctor's own tap
+already decided.
+
 **Beat 9, the end-of-day sentence:** read `GET /c/<token>/summary` on screen.
 If the board carries only the background twenty plus Ahmed Ali, the sentence
 is the one already recorded above under "The twenty background patients," with
-whatever Ahmed Ali did in beats 1 through 8 added to each count.
+whatever Ahmed Ali did in beats 1 through 8 added to each count. Beats 5b and
+7b close two of his loops and change nothing else about the sentence's own
+arithmetic; `core/summary.classify` counts a closed loop the same way whether
+or not an Auditor line sits on its record.
 
 Sections 2 (the two phones), 3 (if a beat fails), and 5 (after the final take)
 apply. Section 3b is an off-camera diagnostic only; section 4 is an optional
 separate ladder rehearsal, not part of the filmed spine.
+
+---
+
+## 1c. Cockpit v2 visual check, Test Doctor only
+
+The cockpit v2 page (`/c/<token>/app` on an enrolled doctor) is not what the
+video shows by default; the legacy dashboard is byte-frozen and stays the
+default surface for every doctor except the one you explicitly enrolled in
+section 1, step 7. If cockpit v2 is going on camera at all, or even just
+into a screenshot for the submission, check it at both sizes it has to hold
+up at before you film, not after:
+
+```bash
+# device_scale_factor=2 (Retina, non-negotiable on this laptop), two
+# viewports: 375x812 (a phone) and 1440x900 (the laptop itself).
+python - <<'PY'
+from playwright.sync_api import sync_playwright
+
+URL = "https://<SERVICE_URL>/c/<enrolled-token>/app"
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    for name, size in (("phone", {"width": 375, "height": 812}),
+                        ("desktop", {"width": 1440, "height": 900})):
+        page = browser.new_page(viewport=size, device_scale_factor=2)
+        page.goto(URL)
+        page.wait_for_timeout(1500)
+        page.screenshot(path=f"cockpit-v2-{name}.png", full_page=True)
+    browser.close()
+PY
+```
+
+Look for the same five tiles laid out at desktop and stacked on a phone
+(`app/tests/test_gate3_cockpit_source.py::test_five_tiles_lay_out_at_desktop_and_stack_on_a_phone`
+asserts the CSS rule that makes this true; this check is whether the browser
+agrees). A failed poll should leave the last complete snapshot on screen
+rather than a half-rendered page at either size. Save the two screenshots
+outside `sanad-public`, next to the rest of the review material, never
+inside the repository this runbook ships in.
 
 ---
 
@@ -367,9 +555,14 @@ separate ladder rehearsal, not part of the filmed spine.
 
 Take them in this order. Every one of these is a step down, not a rebuild.
 
-1. **A beat is slow, not broken.** Say what is happening and keep going. A lab
-   photo takes 15 to 25 seconds end to end: upload, EXIF pass, one Gemini read,
-   the comparison in code, two cards. That is worth narrating, not cutting.
+1. **A beat is slow, not broken.** Say what is happening and keep going. Measured
+   live on rev 30, wider than the old estimate: a lab photo takes 13.5 to 33.5
+   seconds end to end (upload, EXIF pass, one Gemini read, the comparison in
+   code, two cards, and since S24-E an Evidence Orchestrator turn on top);
+   an ordinary patient text reply takes 16 to 27 seconds through the full
+   gate order; a dictation's confirm card renders about 11 seconds after you
+   stop talking. All three are worth narrating, not cutting, and none of them
+   is a failure on its own.
 2. **The same slip lands twice.** The exact same image sent again on the same
    board on the same day is refused as a duplicate: "I already received this
    image today." No second card, result or model call. Recover with the other
