@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1240" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1560" font-family="Helvetica, Arial, sans-serif">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#33363f"/></marker>
     <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9c3b2e"/></marker>
@@ -6,9 +6,10 @@
     <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f6f4f"/></marker>
     <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3b4f9c"/></marker>
     <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#a8622f"/></marker>
+    <marker id="arrowBrown" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a7048"/></marker>
   </defs>
-  <rect x="0" y="0" width="1660" height="1240" fill="#ffffff"/>
-  <text x="40" y="36" font-size="19" font-weight="bold" fill="#1c1f26">Sanad: three agents, one safety kernel, durable infrastructure</text>
+  <rect x="0" y="0" width="1660" height="1560" fill="#ffffff"/>
+  <text x="40" y="36" font-size="19" font-weight="bold" fill="#1c1f26">Sanad: seven agents, one safety kernel, durable infrastructure</text>
   <g id="g-channels">
     <rect x="40" y="56" width="660" height="112" rx="12" fill="#eaf1fb" stroke="#4b6fa8" stroke-width="1.6"/>
     <text x="56" y="78" font-size="13.5" font-weight="bold" fill="#4b6fa8">Channels: one interface, interchangeable</text>
@@ -29,7 +30,7 @@
     <text x="370.0" y="232" font-size="11" fill="#4a4f59" text-anchor="middle">send(target, text | card) only</text>
   </g>
   <g id="g-core">
-    <rect x="40" y="268" width="1180" height="912" rx="12" fill="#ffffff" stroke="#1c1f26" stroke-width="1.6"/>
+    <rect x="40" y="268" width="1180" height="1252" rx="12" fill="#ffffff" stroke="#1c1f26" stroke-width="1.6"/>
     <text x="56" y="290" font-size="13.5" font-weight="bold" fill="#1c1f26">Cloud Run service sanad, stateless per request</text>
   </g>
   <g id="n-DISPATCH">
@@ -149,6 +150,42 @@
     <text x="920.0" y="1102" font-size="11" fill="#4a4f59" text-anchor="middle">every tool call is checked before it runs</text>
     <text x="920.0" y="1116" font-size="11" fill="#4a4f59" text-anchor="middle">a refusal goes back with its reason</text>
   </g>
+  <g id="g-newagents">
+    <rect x="60" y="1196" width="1140" height="300" rx="12" fill="#f7f4ef" stroke="#8a7048" stroke-width="1.6"/>
+    <text x="76" y="1218" font-size="13.5" font-weight="bold" fill="#8a7048">Four agents added after the first three</text>
+  </g>
+  <g id="n-RESOLVE">
+    <rect x="80" y="1240" width="530" height="92" rx="8" fill="#ffffff" stroke="#8a7048" stroke-width="1.4"/>
+    <text x="345.0" y="1260" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Resolver (ADK agent)</text>
+    <text x="345.0" y="1276" font-size="11" fill="#4a4f59" text-anchor="middle">core/resolver.py, with Places in core/places.py</text>
+    <text x="345.0" y="1290" font-size="11" fill="#4a4f59" text-anchor="middle">five tools, each put to resolver.check first</text>
+    <text x="345.0" y="1304" font-size="11" fill="#4a4f59" text-anchor="middle">one question and two searches per barrier</text>
+    <text x="345.0" y="1318" font-size="11" fill="#4a4f59" text-anchor="middle">it solves the barrier, or it hands it over with its working</text>
+  </g>
+  <g id="n-STEW">
+    <rect x="660" y="1240" width="520" height="92" rx="8" fill="#ffffff" stroke="#8a7048" stroke-width="1.4"/>
+    <text x="920.0" y="1260" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Case Steward (one bounded Gemini call)</text>
+    <text x="920.0" y="1276" font-size="11" fill="#4a4f59" text-anchor="middle">core/steward.py, no tools</text>
+    <text x="920.0" y="1290" font-size="11" fill="#4a4f59" text-anchor="middle">approve, revise inside the same guards, or</text>
+    <text x="920.0" y="1304" font-size="11" fill="#4a4f59" text-anchor="middle">hold for the morning digest; never a write</text>
+    <text x="920.0" y="1318" font-size="11" fill="#4a4f59" text-anchor="middle">a danger never reaches it at all</text>
+  </g>
+  <g id="n-AUDIT">
+    <rect x="80" y="1348" width="530" height="92" rx="8" fill="#ffffff" stroke="#8a7048" stroke-width="1.4"/>
+    <text x="345.0" y="1368" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Closure Auditor (one bounded Gemini call)</text>
+    <text x="345.0" y="1384" font-size="11" fill="#4a4f59" text-anchor="middle">core/auditor.py, no tools</text>
+    <text x="345.0" y="1398" font-size="11" fill="#4a4f59" text-anchor="middle">may refuse a close with a named gap</text>
+    <text x="345.0" y="1412" font-size="11" fill="#4a4f59" text-anchor="middle">may never approve one</text>
+    <text x="345.0" y="1426" font-size="11" fill="#4a4f59" text-anchor="middle">it can never overrule the doctor's own tap</text>
+  </g>
+  <g id="n-EVID">
+    <rect x="660" y="1348" width="520" height="92" rx="8" fill="#ffffff" stroke="#8a7048" stroke-width="1.4"/>
+    <text x="920.0" y="1368" font-size="13" font-weight="bold" fill="#1c1f26" text-anchor="middle">Evidence Orchestrator (one bounded Gemini call)</text>
+    <text x="920.0" y="1384" font-size="11" fill="#4a4f59" text-anchor="middle">core/evidence.py, no tools</text>
+    <text x="920.0" y="1398" font-size="11" fill="#4a4f59" text-anchor="middle">nominates which open loop a page answers</text>
+    <text x="920.0" y="1412" font-size="11" fill="#4a4f59" text-anchor="middle">code recomputes the disposition and can refuse</text>
+    <text x="920.0" y="1426" font-size="11" fill="#4a4f59" text-anchor="middle">it attaches nothing itself</text>
+  </g>
   <g id="n-GEMINI">
     <rect x="1250" y="320" width="370" height="66" rx="8" fill="#eef2fb" stroke="#3b4f9c" stroke-width="1.4"/>
     <rect x="1254" y="324" width="362" height="58" rx="5" fill="none" stroke="#3b4f9c" stroke-width="0.9"/>
@@ -236,7 +273,19 @@
   <path d="M1180 1000 L1250 592" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
   <path d="M1180 1004 L1250 372" fill="none" stroke="#6a4fa8" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
   <path d="M660 950 L640 950 L640 962 L660 962" fill="none" stroke="#6a4fa8" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowPurple)"/>
-  <path d="M1160 1180 L1250 792" fill="none" stroke="#33363f" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
-    <text x="1150" y="1130" font-size="10.5" fill="#33363f" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">read at boot and per request</text>
-  <text x="40" y="1214" font-size="11.5" fill="#4a4f59">Node for node the mermaid block in docs/ARCHITECTURE.md. The numbers on the patient path are the order code runs the gates in; a model never decides whether a gate runs.</text>
+  <path d="M1218 1150 L1250 794" fill="none" stroke="#33363f" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="1212" y="1136" font-size="10.5" fill="#33363f" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">read at boot and per request</text>
+  <path d="M660 990 L648 990 L648 1286 L610 1286" fill="none" stroke="#8a7048" stroke-width="1.5" marker-end="url(#arrowBrown)"/>
+    <text x="656" y="1164" font-size="10.5" fill="#8a7048" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">a barrier the Coordinator classified</text>
+  <path d="M610 1394 L636 1394 L636 1040 L660 1040" fill="none" stroke="#8a7048" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowBrown)"/>
+    <text x="656" y="1186" font-size="10.5" fill="#8a7048" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">a close refused, with the gap named</text>
+  <path d="M920 1128 L920 1240" fill="none" stroke="#8a7048" stroke-width="1.5" marker-end="url(#arrowBrown)"/>
+    <text x="935" y="1222" font-size="10.5" fill="#8a7048" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">the guarded proposal, before it runs</text>
+  <path d="M1180 802 L1206 802 L1206 1394 L1180 1394" fill="none" stroke="#3b4f9c" stroke-width="1.5" marker-end="url(#arrowBlue)"/>
+    <text x="1200" y="1180" font-size="10.5" fill="#3b4f9c" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">the page a table alone cannot read</text>
+  <path d="M1180 1264 L1236 1264 L1236 340 L1250 340" fill="none" stroke="#8a7048" stroke-width="1.5" marker-end="url(#arrowBrown)"/>
+    <text x="1246" y="1120" font-size="10.5" fill="#8a7048" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">the four newer agents: one Vertex AI call each</text>
+    <text x="1246" y="1136" font-size="10.5" fill="#8a7048" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round">a call that fails leaves the code path that existed</text>
+  <text x="80" y="1470" font-size="11.5" fill="#4a4f59">None of these four can approve what the code guard in front of it refused. A model that is down, slow or unreachable means the code path that already existed runs exactly as it did, and the event names who decided.</text>
+  <text x="40" y="1534" font-size="11.5" fill="#4a4f59">Node for node the mermaid block in docs/ARCHITECTURE.md. The numbers on the patient path are the order code runs the gates in; a model never decides whether a gate runs.</text>
 </svg>

@@ -87,15 +87,28 @@ class TheDiagramNamesWhatTheSubmissionClaims(unittest.TestCase):
         self.mermaid = mermaid_block()
         self.svg = SVG.read_text(encoding="utf-8")
 
-    def test_all_three_agents_are_named_in_both(self) -> None:
-        for agent in ("Registrar", "Care Coordinator", "Concierge"):
+    def test_all_seven_agents_are_named_in_both(self) -> None:
+        """The headline says seven, so the picture has to draw seven.
+
+        Until rev 33 this asserted three, and the picture drew three, while
+        `docs/ARCHITECTURE.md` and DEVPOST both said seven: the diagram a judge
+        looks at first contradicted the sentence he read first. The four newer
+        ones are listed after the original three, in the order they shipped.
+        """
+        for agent in ("Registrar", "Care Coordinator", "Concierge",
+                      "Resolver", "Evidence Orchestrator", "Closure Auditor",
+                      "Case Steward"):
             with self.subTest(agent=agent):
                 self.assertIn(agent, self.mermaid)
                 self.assertIn(agent, self.svg)
 
+    def test_the_title_counts_the_same_agents_the_picture_draws(self) -> None:
+        self.assertIn("Sanad: seven agents, one safety kernel", self.svg)
+
     def test_the_guard_file_is_named_beside_the_agent_that_it_rules(self) -> None:
         for name in ("core/policy.py", "core/sentinel.py", "core/vitals.py",
-                     "core/intents.py", "core/verify.py"):
+                     "core/intents.py", "core/verify.py", "core/resolver.py",
+                     "core/evidence.py", "core/auditor.py", "core/steward.py"):
             with self.subTest(name=name):
                 self.assertIn(name, self.mermaid)
                 self.assertIn(name, self.svg)

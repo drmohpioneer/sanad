@@ -61,6 +61,13 @@ flowchart TB
             VERIFY["Slip verifier (code)<br/>core/verify.py: printed name, collection date,<br/>every analyte the doctor asked for"]
         end
 
+        subgraph newagents["Four agents added after the first three: no tool here that the code guard does not already own"]
+            RESOLVE["Resolver (ADK agent)<br/>core/resolver.py, with Places in core/places.py<br/>five tools, each put to resolver.check first<br/>one question and two searches per barrier"]
+            STEW["Case Steward (one bounded Gemini call)<br/>core/steward.py, no tools<br/>approve, revise inside the same guards, or<br/>hold for the morning digest; never a write"]
+            AUDIT["Closure Auditor (one bounded Gemini call)<br/>core/auditor.py, no tools<br/>may refuse a close with a named gap<br/>may never approve one"]
+            EVID["Evidence Orchestrator (one bounded Gemini call)<br/>core/evidence.py, no tools<br/>nominates which open loop a page answers<br/>code recomputes the disposition and can refuse"]
+        end
+
         subgraph chasepath["Chase path"]
             CHASER["Chaser<br/>Cloud Tasks handler<br/>run id, quiet hours, one a day<br/>ledger claimed before the agent thinks"]
             COORD["6. Care Coordinator (ADK agent)<br/>seven guarded tools, one action per wake-up<br/>templates only, never free text<br/>fails closed to the ladder"]
@@ -115,6 +122,21 @@ flowchart TB
     COORD -.no choice, or model down.-> CHASER
     CHASER --> FS
     CHASER --> ADAPT
+
+    COORD -->|a barrier it classified| RESOLVE
+    RESOLVE --> GEMINI
+    RESOLVE --> ADAPT
+    RESOLVE -.it could not solve it: the card carries what it tried.-> FS
+    COORD --> AUDIT
+    CONC -.a close proposed on the patient path.-> AUDIT
+    AUDIT --> GEMINI
+    AUDIT -.a close refused, with the gap named.-> COORD
+    POLICY -->|the guarded proposal, before it runs| STEW
+    STEW --> GEMINI
+    STEW -.approve, revise, or hold for the digest.-> COORD
+    VERIFY -->|the page a table alone cannot read| EVID
+    EVID --> GEMINI
+    EVID -.a disposition code recomputes and can refuse.-> LAB
 
     core -. reads at boot/per-request .-> SM
 ```
