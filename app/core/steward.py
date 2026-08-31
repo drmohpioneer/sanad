@@ -121,13 +121,21 @@ OUT_OF_POLICY = ("the case steward named a step the rules do not allow; the "
                  "plan stands")
 KEEPS_THE_HANDOVER = ("a decision to involve the doctor is not the case "
                       "steward's to reverse")
+# The hold branch's own refusal, and it is a different sentence because it is a
+# different refusal. KEEPS_THE_HANDOVER says the step may not be swapped;
+# this one says the step may not be sat on. Writing "not ours to reverse" on a
+# refused hold would put a sentence on the doctor's trail that does not
+# describe what happened, and rail 5 is that every line here is true.
+KEEPS_THE_TIMING = ("a decision to involve the doctor is not the case "
+                    "steward's to delay")
 NOT_ITS_CALL = "an emergency is not the case steward's to judge"
 
 LINES: dict[str, str] = {APPROVE: AGREED, REVISE: CHOSE_ANOTHER, HOLD: PARKED}
 
 # Every sentence above, as the rail reads them.
 BANK: tuple[str, ...] = (AGREED, CHOSE_ANOTHER, PARKED, STOOD_DOWN,
-                         OUT_OF_POLICY, KEEPS_THE_HANDOVER, NOT_ITS_CALL)
+                         OUT_OF_POLICY, KEEPS_THE_HANDOVER, KEEPS_THE_TIMING,
+                         NOT_ITS_CALL)
 
 
 class ModelUnavailable(Exception):
@@ -383,23 +391,35 @@ async def review(decision: Any, facts: policy_module.LoopFacts,
                     exc_info=True)
         return stands()
 
-    # The Steward may add judgment to a plan. It may not reverse the one
-    # decision that exists to put a human in the loop - and it may not delay it
-    # either, which is why this guard is read before the hold branch and not
-    # only inside the revise branch. A hold silences a handover exactly as a
-    # revise would: the patient has already been told his doctor knows, and a
-    # card parked to the morning makes that sentence false for the rest of the
-    # day. A kept action can be approved or revised into by the guards below;
-    # it can never be held.
-    if verdict in (HOLD, REVISE) and policy_module.steward_keeps(tool):
-        log.info("%s; the plan stands", KEEPS_THE_HANDOVER)
-        return stands(KEEPS_THE_HANDOVER, guard=KEEPS_THE_HANDOVER, asked=True)
-
     if verdict == HOLD:
+        # The Steward owns timing, but not all of it. A hold on a step that
+        # tells the doctor is not a delay, it is a silence: the patient has
+        # already been given a fixed sentence saying his doctor knows, and a
+        # card parked to the morning digest makes that sentence false for the
+        # rest of the day - the record says he was told, his phone says
+        # nothing. core/policy.STEWARD_NEVER_DELAYS names those steps, the hold
+        # is dropped, and the proposal is carried out now.
+        #
+        # This is a separate list from STEWARD_KEEPS on purpose. A hold names
+        # no tool (the schema at `_ask` allows one only on a revise), so there
+        # is nothing here to revise into and dropping the hold is an approve.
+        # The revise branch below is untouched by this, which is what lets
+        # `classify_barrier` be a step the Steward may still improve and never
+        # a step it may sit on.
+        if policy_module.steward_never_delays(tool):
+            log.info("%s; the plan stands", KEEPS_THE_TIMING)
+            return stands(KEEPS_THE_TIMING, guard=KEEPS_THE_TIMING, asked=True)
         return Verdict(HOLD, line=PARKED, alternatives=alternatives,
                        release_at=release_at(now or facts.now, tool, facts))
 
     if verdict == REVISE:
+        # The Steward may add judgment to a plan. It may not reverse the one
+        # decision that exists to put a human in the loop, so a revise off an
+        # escalation is refused here and the escalation stands.
+        if policy_module.steward_keeps(tool):
+            log.info("%s; the plan stands", KEEPS_THE_HANDOVER)
+            return stands(KEEPS_THE_HANDOVER, guard=KEEPS_THE_HANDOVER,
+                          asked=True)
         if named in alternatives:
             return Verdict(REVISE, tool=named, line=CHOSE_ANOTHER,
                            alternatives=alternatives)

@@ -1407,11 +1407,11 @@ class TheStewardReviewsTheResolversMoves(OneBarrierEndToEnd):
 
         The patient has already been told his doctor knows, so a card parked to
         a morning digest makes that sentence false for the rest of the day. A
-        hold off a hand-over is refused exactly the way a revise off one is,
+        hold off a hand-over is refused by core/policy.STEWARD_NEVER_DELAYS,
         and the card goes out now.
         """
         self.enrol()
-        self.assertTrue(policy.steward_keeps("escalate_barrier"))
+        self.assertTrue(policy.steward_never_delays("escalate_barrier"))
         self.search.answers.append(places.Search(query="labs"))
         self.search.answers.append(places.Search(query="labs"))
         with self.answers(steward.HOLD):
@@ -1419,7 +1419,7 @@ class TheStewardReviewsTheResolversMoves(OneBarrierEndToEnd):
         self.assertEqual(1, len(self.cards()))
         line = [meta for _, _, meta in self.written if "steward" in meta][-1]
         self.assertEqual(steward.APPROVE, line["steward"]["verdict"])
-        self.assertEqual(steward.KEEPS_THE_HANDOVER, line["steward"]["note"])
+        self.assertEqual(steward.KEEPS_THE_TIMING, line["steward"]["note"])
         self.assertNotIn("release_at", line["steward"])
 
     async def test_a_hand_over_is_never_revised_away_from(self) -> None:

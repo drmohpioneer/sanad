@@ -426,25 +426,39 @@ def _schedule(args: dict[str, Any], facts: LoopFacts, policy: Policy,
 # --------------------------------------------------------------------------- #
 # core/steward.py is judgment on top of this file and never a way around it, so
 # the limits of that judgment are written here, in the file that already owns
-# every other limit. Three entries, and the Steward reads all three:
+# every other limit. Four entries, and the Steward reads all four:
 #
 #   what it may never revise away    the handover to the doctor. Reversing a
 #                                    decision to put a human in the loop is not
-#                                    a judgment call an agent gets to make, and
-#                                    neither is delaying it. core/steward.py
-#                                    reads this list on the hold branch and on
-#                                    the revise branch, with the same answer:
-#                                    a card parked to the morning digest makes
-#                                    "your doctor has been told" false for the
-#                                    rest of the day, which is the same silence
-#                                    a revise would have produced.
+#                                    a judgment call an agent gets to make.
+#   what it may never DELAY          the handover to the doctor, and the
+#                                    barrier classification that hands over
+#                                    from inside it. Delay is its own harm and
+#                                    it is not the same harm as a revise, which
+#                                    is why it is its own list. The patient has
+#                                    already been told, in his own language and
+#                                    in a fixed sentence, that his doctor knows
+#                                    (core/templates.COST_TOLD, TOLD_DOCTOR,
+#                                    TOLD_DOCTOR_WILL_ANSWER). A card parked to
+#                                    the morning digest makes that sentence
+#                                    false for the rest of the day: the record
+#                                    says the doctor was told and his phone
+#                                    says nothing. classify_barrier is on this
+#                                    list and NOT on the one above, because it
+#                                    escalates from inside for cost, for
+#                                    "unclear" and on a second refusal
+#                                    (core/coordinator.py) while staying a
+#                                    proposal the Steward may still revise into
+#                                    another allowed step.
 #   what it may never revise INTO    a request for a missing analyte. That tool
 #                                    needs the name of one analyte, and the
 #                                    name comes off the verifier's own missing
 #                                    list in core/coordinator.py, not from a
 #                                    steward that was never shown the slip.
-#   how long it may delay            the ceilings below.
+#   how long it may delay            the ceilings below, for everything this
+#                                    file does let it delay.
 STEWARD_KEEPS: tuple[str, ...] = ("escalate_barrier",)
+STEWARD_NEVER_DELAYS: tuple[str, ...] = ("escalate_barrier", "classify_barrier")
 STEWARD_NEVER_REVISED_INTO: tuple[str, ...] = ("request_missing_evidence",)
 
 # A hold delays when the doctor is told and nothing else. Two hours on a case
@@ -461,6 +475,17 @@ STEWARD_HOLD_ORDINARY = timedelta(hours=6)
 def steward_keeps(tool: str) -> bool:
     """True for a decision the Steward may never revise away from."""
     return tool in STEWARD_KEEPS
+
+
+def steward_never_delays(tool: str) -> bool:
+    """True for a decision the Steward may never park to the digest.
+
+    Read on the hold branch of core/steward.review. It is deliberately a
+    different list from STEWARD_KEEPS: a tool can be one the Steward may still
+    revise within policy and one it may never sit on. `classify_barrier` is
+    exactly that tool.
+    """
+    return tool in STEWARD_NEVER_DELAYS
 
 
 def steward_hold_ceiling(tool: str, facts: LoopFacts) -> timedelta:
