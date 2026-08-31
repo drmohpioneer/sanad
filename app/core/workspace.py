@@ -1053,7 +1053,10 @@ def _patient_record_row(patient: Patient) -> dict[str, Any]:
     """The minimal identity row behind the true-total patient metric.
 
     Full clinical summaries live only in the requested patient page.  Keeping
-    all patient names and diagnoses here would make the page limit cosmetic.
+    all diagnoses, plans and loop histories here would make the page limit
+    cosmetic.  The caller attaches ``patient_name`` through the same scrub
+    every other row's name goes through, because a drill-down that prints an
+    id and no person is a count the doctor cannot check.
     """
     return {
         "id": f"patient:{patient.id}",
@@ -1372,6 +1375,11 @@ def build_snapshot(
     rows.update((row["id"], row) for row in loop_rows.values())
     for patient in patients:
         row = _patient_record_row(patient)
+        # The same name every other row carries, attached the same way, so the
+        # "Active patients" drill reads as a list of people rather than a list
+        # of ids.  It is the projected name and nothing else: the diagnosis and
+        # the plan still live only on the requested patient page.
+        row["patient_name"] = _wire_projection(patient.name, sensitive)
         rows[row["id"]] = row
 
     reconciled_cards = _reconciled_cards(

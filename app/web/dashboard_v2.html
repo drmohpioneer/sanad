@@ -32,11 +32,17 @@
     .patient-list{display:grid;gap:7px}.patient{width:100%;text-align:left;border:1px solid var(--line);border-radius:11px;background:#fff;padding:11px}.patient:hover{background:#f8fbfa}.patient strong{display:block}.patient span{color:var(--muted);font-size:12px}.pager{display:flex;align-items:center;justify-content:space-between;margin-top:12px;color:var(--muted);font-size:12px}
     .bp-head{display:flex;justify-content:space-between;gap:12px}.bp-value{font-size:28px;font-weight:760;margin:12px 0 4px}.bp-readings{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.reading{padding:6px 8px;background:var(--teal-soft);border-radius:8px;color:#075e57;font-variant-numeric:tabular-nums}.summary-line{margin:10px 0 0;color:var(--muted);font-size:12px}
     .event-list{display:grid;gap:0}.event{padding:10px 0;border-bottom:1px solid var(--line)}.event:last-child{border:0}.event time{font-size:11px;color:var(--muted)}.event p{margin:3px 0}.event .kind{color:var(--teal);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+    /* The words the agents wrote, printed where the doctor already looks. A proof
+       line is never a summary: it is one field the record already holds, so the
+       Auditor, the Steward and the Evidence Orchestrator are readable on the
+       card itself. Quiet on purpose - one hairline rail, 12px text, and colour
+       only on the verdict chip. */
+    .proof{margin:9px 0 0;display:grid;gap:5px;padding-left:9px;border-left:2px solid var(--line)}.proof-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 7px}.proof .who{font-size:11px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}.proof .verdict{padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;background:#eef2f1;color:#53605e;white-space:nowrap}.proof .verdict.ok{background:var(--teal-soft);color:#075e57}.proof .verdict.info{background:var(--blue-soft);color:var(--blue)}.proof .verdict.wait{background:var(--amber-soft);color:var(--amber)}.proof .verdict.stop{background:var(--red-soft);color:var(--red)}.proof .say{flex:1 1 240px;min-width:0;font-size:12px;line-height:1.4;color:#22302e;overflow-wrap:anywhere}.proof .by{display:block;font-size:11px;color:var(--muted);overflow-wrap:anywhere}.event .proof,.detail-section .proof{margin-top:7px}.event .proof .say,.detail-section .proof .say{flex-basis:100%}.proof-event{margin:0 0 11px}.proof-event:last-child{margin-bottom:0}.proof-event .said{margin:0;font-size:13px}.proof-event time{font-size:11px;color:var(--muted)}.row .rowid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
     .health{display:grid;grid-template-columns:1fr 1fr;gap:9px}.health div{padding:10px;border:1px solid var(--line);border-radius:10px}.health b{display:block;font-size:12px}.health span{font-size:11px;color:var(--muted)}
     .drawer{display:none;position:fixed;inset:0;background:rgba(12,25,23,.35);padding:5vh 18px;z-index:5}.drawer.open{display:flex;justify-content:flex-end}.drawer-card{width:min(620px,100%);height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:18px;box-shadow:0 25px 70px rgba(0,0,0,.2)}.drawer-head{display:flex;align-items:center;justify-content:space-between}.drawer-head h2{margin:0}.detail-section{border-top:1px solid var(--line);padding-top:13px;margin-top:13px}.detail-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
     @media(max-width:1180px){.hero{grid-template-columns:repeat(3,minmax(0,1fr))}.metric.danger{grid-column:1 / -1}}
     @media(max-width:900px){.hero{grid-template-columns:repeat(2,minmax(0,1fr))}.metric.danger{grid-column:1 / -1}.grid{grid-template-columns:1fr}.shell{padding:14px}.head-actions .sync{display:none}}
-    @media(max-width:520px){.hero{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric.danger{grid-column:1 / -1}.metric{padding:13px}.metric .number{font-size:25px}.metric.danger .number{font-size:30px}header{align-items:flex-start}.brand p{max-width:180px}.panel-head{align-items:flex-start}.health{grid-template-columns:1fr}.drawer{padding:0}.drawer-card{height:100vh;border-radius:0}}
+    @media(max-width:520px){.hero{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.proof .say{flex-basis:100%}.metric.danger{grid-column:1 / -1}.metric{padding:13px}.metric .number{font-size:25px}.metric.danger .number{font-size:30px}header{align-items:flex-start}.brand p{max-width:180px}.panel-head{align-items:flex-start}.health{grid-template-columns:1fr}.drawer{padding:0}.drawer-card{height:100vh;border-radius:0}}
   </style>
 </head>
 <body>
@@ -214,6 +220,90 @@
     return item ? item.count : "-";
   }
 
+  // --------------------------------------------------------------------- //
+  // The proof lines the agents wrote
+  // --------------------------------------------------------------------- //
+  // Every event in this snapshot carries the meta written by the agent that
+  // decided it (agent_events.items[*].meta, and the same meta on a card row).
+  // The page used to drop all of it and print the headline alone, so a Closure
+  // Auditor holding a close, a Case Steward parking a message and an Evidence
+  // Orchestrator choosing a lane were invisible on the cockpit that is meant to
+  // prove them. Nothing below invents a sentence: each line is a field the
+  // server already wrote, an absent field prints nothing, and the attribution
+  // the record carries is printed with it.
+  const STEWARD_SAID = {approve:"approved", revise:"revised", hold_for_digest:"held"};
+  const STEWARD_TONE = {approve:"ok", revise:"info", hold_for_digest:"wait"};
+
+  function isRecord(value){
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function proofLine(who, tone, verdict, say, by){
+    return {who:who, tone:tone, verdict:verdict, say:String(say || ""), by:String(by || "")};
+  }
+
+  function stewardProof(steward){
+    const verdict = String(steward.verdict || "");
+    const said = [String(steward.note || "")];
+    if (steward.tool) said.push("chose " + String(steward.tool) + " instead");
+    if (steward.guard) said.push(String(steward.guard));
+    if (steward.release_at) said.push("released " + displayTime(steward.release_at));
+    if (steward.asked_the_model === false) said.push("the model was not asked");
+    return proofLine("Case Steward", STEWARD_TONE[verdict] || "info",
+      STEWARD_SAID[verdict] || verdict || "answered",
+      said.filter(Boolean).join(" · "), steward.decided_by);
+  }
+
+  function evidenceProof(packet){
+    const said = [];
+    const route = String(packet.route || "");
+    said.push(String(packet.kind || "evidence") + (route ? " to " + route : " with no route"));
+    if (packet.reason) said.push(String(packet.reason));
+    if (Array.isArray(packet.missing) && packet.missing.length) said.push("missing: " + packet.missing.join(", "));
+    if (packet.agreed_with_code === false) said.push("differs from the routing table");
+    return proofLine("Evidence Orchestrator", "info", "routed",
+      said.join(" · "), packet.decided_by);
+  }
+
+  function agentProof(meta){
+    const record = isRecord(meta) ? meta : {};
+    const proof = [];
+    const auditor = record.auditor;
+    if (isRecord(auditor)){
+      proof.push(proofLine("Closure Auditor", auditor.held ? "wait" : "ok",
+        auditor.held ? "held this close" : "record complete",
+        auditor.note || auditor.gap || "", auditor.decided_by));
+    }
+    const steward = record.steward;
+    if (isRecord(steward)) proof.push(stewardProof(steward));
+    const packet = record.evidence_packet;
+    if (isRecord(packet)){
+      proof.push(evidenceProof(packet));
+      const refused = Array.isArray(packet.refused) ? packet.refused : [];
+      refused.forEach(function(refusal){
+        proof.push(proofLine("Evidence Orchestrator", "stop", "guard refused", refusal, ""));
+      });
+    }
+    const audit = record.audit;
+    if (isRecord(audit) && audit.line){
+      proof.push(proofLine("Guard clause", "quiet", String(audit.tier || "audit"),
+        audit.line, record.decided_by));
+    }
+    return proof;
+  }
+
+  function proofHtml(meta){
+    const proof = agentProof(meta);
+    if (!proof.length) return "";
+    return '<div class="proof">' + proof.map(function(item){
+      return '<div class="proof-line"><span class="who">' + escapeHtml(item.who) + '</span>'
+        + '<span class="verdict ' + escapeHtml(item.tone) + '">' + escapeHtml(item.verdict) + '</span>'
+        + '<span class="say">' + escapeHtml(item.say)
+        + (item.by ? '<span class="by">' + escapeHtml(item.by) + '</span>' : '')
+        + '</span></div>';
+    }).join("") + '</div>';
+  }
+
   function queueLink(queueName, label){
     return '<span class="queue-link" role="button" tabindex="0" data-open-queue="' + escapeHtml(queueName) + '">' + escapeHtml(label) + '</span>';
   }
@@ -304,6 +394,8 @@
         const value = String(line === null || line === undefined ? "" : line);
         return '<div class="line' + (value.indexOf("decided_by:") === 0 ? " muted" : "") + '">' + escapeHtml(value) + '</div>';
       }).join("") + '</div>' : '';
+      // What the agents decided about this row, under the values they read.
+      const proof = proofHtml(row.meta);
       const media = Array.isArray(row.media) ? row.media : [];
       const mediaNote = media.length
         ? '<div class="media-note">' + escapeHtml(media.length) + ' attachment' + (media.length === 1 ? '' : 's') + ' on this row</div>'
@@ -321,8 +413,11 @@
         return '<span class="action-wrap">' + (action.input ? '<input id="' + inputId + '" aria-label="Reply text" value="' + escapeHtml(draft) + '" data-draft-input="' + escapeHtml(draftKey) + '">' : '')
           + '<button class="action" type="button" data-action="' + escapeHtml(action.id) + '" data-input="' + inputId + '" data-draft="' + escapeHtml(draftKey) + '">' + escapeHtml(action.label || "Open") + '</button></span>';
       }).join("");
-      return '<article class="row' + className + '"><h3>' + escapeHtml(title) + '</h3><div class="meta"><span class="pill">' + escapeHtml(row.kind || "row") + '</span><span>' + escapeHtml(row.patient_name || "") + '</span><span>' + escapeHtml(row.state || row.notification_class || "") + '</span></div>'
-        + (text ? '<p class="text">' + escapeHtml(text) + '</p>' : '') + lines + mediaNote
+      const identity = row.row_type === "patient_ref"
+        ? '<span class="rowid">' + escapeHtml(row.source_id || row.id) + '</span>'
+        : '<span>' + escapeHtml(row.patient_name || "") + '</span>';
+      return '<article class="row' + className + '"><h3>' + escapeHtml(title) + '</h3><div class="meta"><span class="pill">' + escapeHtml(row.kind || row.row_type || "row") + '</span>' + identity + '<span>' + escapeHtml(row.state || row.status || row.notification_class || "") + '</span></div>'
+        + (text ? '<p class="text">' + escapeHtml(text) + '</p>' : '') + lines + proof + mediaNote
         + (actions ? '<div class="actions">' + actions + '</div>' : '')
         + (offered.length && !evidence ? '<p class="no-evidence">evidence unavailable in this snapshot</p>' : '') + '</article>';
     }).join("") : '<div class="empty">No rows in this queue.</div>';
@@ -415,7 +510,7 @@
     });
     events.sort(function(left, right){ return eventOrder(left) - eventOrder(right); });
     byId("eventRows").innerHTML = events.length ? events.slice(-20).reverse().map(function(event){
-      return '<article class="event"><span class="kind">' + escapeHtml(event.kind) + '</span><p>' + escapeHtml(event.text || "Persisted event") + '</p><time>' + escapeHtml(displayTime(event.ts || event.ts_ms)) + '</time></article>';
+      return '<article class="event"><span class="kind">' + escapeHtml(event.kind) + '</span><p>' + escapeHtml(event.text || "Persisted event") + '</p>' + proofHtml(event.meta) + '<time>' + escapeHtml(displayTime(event.ts || event.ts_ms)) + '</time></article>';
     }).join("") : '<div class="empty">No persisted events yet.</div>';
   }
 
@@ -532,6 +627,39 @@
       + '</article>';
   }
 
+  // The same events the activity panel shows, narrowed to this patient and
+  // kept only where an agent actually recorded a decision. It reads off the
+  // snapshot already committed, so the drawer cannot show a decision the board
+  // behind it has not seen.
+  function patientProof(patientId){
+    const block = S.workspaceSnapshot.agent_events || {};
+    const cursorPage = Array.isArray(block.items) ? block.items : [];
+    const tail = Array.isArray(block.recent) ? block.recent : [];
+    const seen = Object.create(null);
+    const decided = [];
+    cursorPage.concat(tail).forEach(function(event){
+      if (!event || event.patient_id !== patientId) return;
+      const key = eventKey(event);
+      if (seen[key]) return;
+      seen[key] = true;
+      if (!agentProof(event.meta).length) return;
+      decided.push(event);
+    });
+    decided.sort(function(left, right){ return eventOrder(left) - eventOrder(right); });
+    return decided.slice(-6).reverse();
+  }
+
+  function patientProofSection(patientId){
+    const decided = patientProof(patientId);
+    return '<section class="detail-section"><h3>What the agents decided</h3>'
+      + (decided.length ? decided.map(function(event){
+        return '<article class="proof-event"><p class="said">' + escapeHtml(event.text || "Persisted event") + '</p>'
+          + proofHtml(event.meta)
+          + '<time>' + escapeHtml(displayTime(event.ts || event.ts_ms)) + '</time></article>';
+      }).join("") : '<div class="empty">No agent has recorded a decision on this patient in this snapshot.</div>')
+      + '</section>';
+  }
+
   function drawerIsOpen(){
     return byId("patientDrawer").classList.contains("open");
   }
@@ -547,7 +675,8 @@
     byId("detailName").textContent = detail.patient.name;
     const loops = detail.loops || [];
     byId("detailBody").innerHTML = '<section class="detail-section"><h3>Plan</h3><p>' + escapeHtml(detail.patient.plan || "No plan text recorded") + '</p></section><section class="detail-section"><h3>Obligations</h3>'
-      + (loops.length ? loops.map(loopDetail).join("") : '<div class="empty">No obligations.</div>') + '</section>';
+      + (loops.length ? loops.map(loopDetail).join("") : '<div class="empty">No obligations.</div>') + '</section>'
+      + patientProofSection(detail.patient.id);
     byId("patientDrawer").classList.add("open");
     byId("patientDrawer").setAttribute("aria-hidden", "false");
   }
