@@ -216,15 +216,25 @@ def candidate_kinds(reading: PhotoReading, *, legible_reading: bool) -> tuple[st
     The classification the reading came back with is always first and is always
     a candidate. The others are added by code from what is actually on the
     page: rows of analytes make a lab slip possible whatever the picture was
-    called, two readable pressures make a monitor screen possible, and "other"
-    is always available because the relay exit is always available.
+    called, and two readable pressures make a monitor screen possible.
+
+    "other" is the relay exit, and it is offered only when the vision reading
+    itself found nothing on the page to read: no analyte rows and no legible
+    pressures. The relay lane does not call core/labs.assess, does not consult
+    the critical-value table and never reaches core/escalate, so a page that
+    already parsed into values must not be movable onto it by any answer. A
+    slip printing `Potassium 6.4 H` is a lab slip whatever the turn calls it.
+    Every other direction stays open: a "prescription" carrying analyte rows
+    can still be promoted to a lab slip, because that direction adds the value
+    table rather than removing it.
     """
     found: list[str] = [reading.kind]
     if reading.analytes and "lab_slip" not in found:
         found.append("lab_slip")
     if legible_reading and "bp_monitor" not in found:
         found.append("bp_monitor")
-    if "other" not in found:
+    if (not reading.analytes and not legible_reading
+            and "other" not in found):
         found.append("other")
     return tuple(found)
 

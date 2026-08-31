@@ -136,8 +136,51 @@ class TheGuardsRefuseWhatWasNotOffered(unittest.TestCase):
         self.assertEqual("test-open", decided.loop_id)
         self.assertTrue(any("candidate kinds" in why for why in decided.refusals))
 
-    def test_a_relayed_kind_never_carries_a_loop(self) -> None:
+    def test_a_page_that_parsed_into_values_is_never_offered_the_relay_exit(
+            self) -> None:
+        """The one direction the model may not move a page: off the lab lane.
+
+        The relay lane does not call core/labs.assess, does not consult the
+        critical-value table and never reaches core/escalate, so a slip whose
+        rows already parsed cannot be answered "other" at all. It is not on the
+        candidate list, and a proposal naming it is refused like any other kind
+        that was never offered.
+        """
         facts = self._facts()
+        self.assertNotIn("other", facts.kinds)
+        self.assertEqual(("lab_slip",), facts.kinds)
+        decided = self.evidence.guard(facts, _proposal("other", "test-open"))
+        self.assertEqual("lab_slip", decided.kind)
+        self.assertEqual("test-open", decided.loop_id)
+        self.assertEqual("attach_to_loop", decided.route)
+        self.assertTrue(any("candidate kinds" in why for why in decided.refusals))
+
+    def test_a_legible_monitor_screen_is_not_offered_the_relay_exit_either(self
+                                                                          ) -> None:
+        """Two readable pressures are values too, and they route the same way."""
+        reading = slip(kind="bp_monitor", systolic="118", diastolic="76",
+                       pulse="70")
+        facts = self._facts(reading=reading, code_kind="bp_monitor",
+                            code_loop_id="monitor-open",
+                            code_route="monitor_reading", legible_reading=True)
+        self.assertNotIn("other", facts.kinds)
+        self.assertEqual(("bp_monitor",), facts.kinds)
+        decided = self.evidence.guard(facts, _proposal("other", "monitor-open"))
+        self.assertEqual("bp_monitor", decided.kind)
+        self.assertEqual("monitor-open", decided.loop_id)
+        self.assertEqual("monitor_reading", decided.route)
+
+    def test_a_relayed_kind_never_carries_a_loop(self) -> None:
+        """The relay exit is still there for a page with nothing on it to read.
+
+        Nothing parsed off this one - no analyte rows, no legible pressures -
+        so "other" is a candidate, the model may take it, and a relay still
+        never carries an obligation however it was proposed.
+        """
+        facts = self._facts(reading=slip(kind="prescription"),
+                            code_kind="prescription", code_loop_id="",
+                            code_route="relay")
+        self.assertEqual(("prescription", "other"), facts.kinds)
         decided = self.evidence.guard(facts, _proposal("other", "test-open"))
         self.assertEqual("other", decided.kind)
         self.assertEqual("", decided.loop_id)
@@ -171,12 +214,17 @@ class TheGuardsRefuseWhatWasNotOffered(unittest.TestCase):
         self.assertEqual(("HDL", "Triglycerides"), decided.missing)
 
     def test_the_candidates_come_from_the_page_not_from_the_label(self) -> None:
-        """A "prescription" carrying analyte rows is still a candidate slip."""
+        """A "prescription" carrying analyte rows is still a candidate slip.
+
+        The promotion direction stays open, because it adds the value table
+        rather than removing it. The demotion direction is gone: the rows
+        parsed, so "other" is not on the list at all.
+        """
         reading = slip(kind="prescription",
                        analytes=[{"analyte": "Potassium", "value": "6.4"}])
         facts = self._facts(reading=reading, code_kind="prescription",
                             code_loop_id="", code_route="relay")
-        self.assertEqual(("prescription", "lab_slip", "other"), facts.kinds)
+        self.assertEqual(("prescription", "lab_slip"), facts.kinds)
         decided = self.evidence.guard(
             facts, _proposal("lab_slip", "test-open"))
         self.assertEqual("attach_to_loop", decided.route)
@@ -393,6 +441,46 @@ class TheDecisionIsRecordedWithItsPacket(_PhotoPath):
         self.assertTrue(packet["agreed_with_code"])
         self.assertIs(self._routing_event().meta["attached"], True)
         self.assertEqual("l1", self._routing_event().loop_id)
+
+    async def test_a_critical_slip_the_agent_calls_other_stays_on_the_lab_lane(
+            self) -> None:
+        """The blocker, driven: a diverting answer cannot take the table away.
+
+        The relay lane never calls core/labs.assess, so a potassium of 6.4 that
+        the orchestrator answered "other" for would have become a yellow
+        "passed on unread" card with no values on it and nothing said to the
+        patient. `candidate_kinds` no longer offers "other" for a page whose
+        rows parsed, so the guard refuses the kind, the lab lane runs, and the
+        critical-value table and the escalation run with it.
+        """
+        reading = slip(patient_name=self.PRINTED_NAME, taken_on="30/08/2026",
+                       analytes=[{"analyte": "Potassium", "value": "6.4",
+                                  "unit": "mmol/L", "flag": "H"}])
+        with self._read(reading), self._ask(
+                _proposal("other", "", "this looks like a pharmacy page")):
+            await self.extractor.handle_photo(self.patient, self.doctor, b"x")
+
+        packet = self._routing_event().meta["evidence_packet"]
+        self.assertEqual("lab_slip", packet["kind"])
+        self.assertIn(packet["route"], ("attach_to_loop", "unexpected_result"),
+                      "the lab lane is the only lane a parsed slip can take")
+        self.assertTrue(any("candidate kinds" in why
+                            for why in packet["refused"]),
+                        packet["refused"])
+
+        # The value table ran, and it ran on the doctor's phone and the record.
+        self.assertIn("escalation", [e.kind for e in self.fake.events])
+        self.assertTrue(any("critical" in e.text.lower()
+                            for e in self.fake.events),
+                        [e.text for e in self.fake.events])
+        self.assertTrue(any("CRITICAL LAB" in (card.card.get("title") or "")
+                            for card in self._doctor_cards()),
+                        [c.card.get("title") for c in self._doctor_cards()])
+        # And nothing anywhere was passed on unread.
+        self.assertFalse(any("unread" in (m.text or "")
+                             for _ref, m in self.out.sent))
+        told = [m.text for ref, m in self.out.sent if ref.startswith("patient:")]
+        self.assertTrue(any("123" in (t or "") for t in told), told)
 
     async def test_a_monitor_screen_carries_its_packet_too(self) -> None:
         self.fake.loops["m1"] = Loop(
