@@ -143,11 +143,24 @@ curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/settings?time_scale=86400"
 # 6. Check what the service believes about itself.
 curl -s "$U/health"
 
-# 7. Enroll the doctor you are about to film, if beats 3, 5b or 7b are in
-#    the take. Enrollment is what turns on the Resolver, the Evidence
-#    Orchestrator, the Closure Auditor, the Case Steward and the phone
-#    contract for that doctor; a doctor left unenrolled gets the exact
-#    pre-S19 behavior and none of those four beats has anything to show.
+# 7. Enroll the doctor you are about to film, if beat 5b or 7b is in the
+#    take. Enrollment turns on exactly three things for that doctor, and
+#    it is worth knowing which three, because this list used to be wrong
+#    here and it sent the camera to the wrong board:
+#      - the Closure Auditor. core/coordinator.py and core/concierge.py
+#        both call auditor.review_close inside an
+#        `if doctor.workspace_facts_enabled` branch.
+#      - the Case Steward. core/coordinator.py returns the unrevised
+#        decision on `if not turn.doctor.workspace_facts_enabled`.
+#      - the phone contract, which is the same cohort in core/adapters.py.
+#    It does NOT turn on the Resolver and it does NOT turn on the Evidence
+#    Orchestrator. The Resolver is gated on its own RESOLVER switch and on
+#    the barrier class, never on the doctor (core/resolver.py: `if not
+#    ENABLED or barrier not in ROUTES`), and the Evidence Orchestrator is
+#    called unconditionally on every photo (core/extractor.py calls
+#    evidence.decide with no doctor check in front of it). So beat 3, the
+#    cost barrier, plays the same on an unenrolled board; it is beats 5b
+#    and 7b that have nothing to show without this step.
 #    Enrolling ALSO flips /c/<token>/app to the v2 cockpit for that doctor:
 #    if you want the plain console or the legacy /app page on camera, stay
 #    on /c/<token> itself, which the flag never touches.
@@ -257,12 +270,14 @@ at them.
 4. Section 1, item 16 check: if you set a policy value for testing, confirm
    `POST /admin/reset` cleared it back to `core/policy.py`'s defaults before
    you record, from `GET /c/<token>/settings`.
-5. Section 1, step 7: enroll the doctor you are filming, if beats 3, 5b or
-   7b are in the take. Without it those beats have nothing to show: an
-   unenrolled doctor gets the exact pre-S19 behavior and no Resolver, Evidence
-   Orchestrator, Closure Auditor, Case Steward or phone contract fires for him.
-   Enrolling turns the agents on; it does not decide which page shows their
-   work. That used to be a real trap: the audit lines the Coordinator, the
+5. Section 1, step 7: enroll the doctor you are filming, if beat 5b or 7b is
+   in the take. Without it those two beats have nothing to show: the Closure
+   Auditor, the Case Steward and the phone contract are the three things
+   enrollment gates, and none of them fires for an unenrolled doctor. Beat 3
+   is not on that list. The Resolver is gated on its own switch and on the
+   barrier class, and the Evidence Orchestrator runs on every photo whoever
+   the doctor is, so both of those play the same either way. Enrolling turns
+   those three on; it does not decide which page shows any agent's work. That used to be a real trap: the audit lines the Coordinator, the
    Steward and the Auditor write (`meta.audit`, `meta.auditor`) rendered on
    the plain console and the legacy dashboard and not on cockpit v2. Since
    the proof-lines slice, cockpit v2 prints all of them as labelled chips
@@ -797,6 +812,28 @@ curl -s -X POST -H "X-Sanad-Admin: $S" "$U/admin/seed?name=Judge%20Doctor"
 curl -s -X POST -H "X-Sanad-Admin: $S" \
   "$U/admin/seed-background?name=Judge%20Doctor"
 ```
+
+Then turn the doctor features on for that board, the same call step 7
+above makes for the filming board:
+
+```bash
+JUDGE_ID=$(curl -s -X POST -H "X-Sanad-Admin: $S" \
+  "$U/admin/seed?name=Judge%20Doctor" | jq -r .doctor_id)
+curl -s -X POST -H "X-Sanad-Admin: $S" -H "Content-Type: application/json" \
+  -d "{\"doctor_id\": \"$JUDGE_ID\", \"cockpit_v2_enabled\": true}" \
+  "$U/admin/doctor-features"
+```
+
+One call sets both flags: the route writes `workspace_facts_enabled` as
+well whenever `cockpit_v2_enabled` goes true, and the answer prints both
+so you can see it happened. Do it, because a judge left on the legacy
+dashboard sees counts and cards and never once sees an agent being
+overruled. The proof lines render on the cockpit and nowhere else: the
+guard clause that refused a tool, the Evidence Orchestrator's routing, and
+the Closure Auditor holding a close with the gap named. Of those, the
+Auditor's line does not exist at all on an unenrolled board, because that
+agent is one of the three this call turns on. The overruling is the whole
+differentiator, and it is one curl away from being invisible.
 
 `seed` answers with that board's `console_url`. That URL is the one that goes in
 DEVPOST.md and README.md. The Judge Doctor has no Telegram chat bound, so
