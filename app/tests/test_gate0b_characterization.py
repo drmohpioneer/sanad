@@ -20,6 +20,12 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 GOLDENS = HERE / "gate0b" / "goldens"
 
+# The image is not the repository: app/.gcloudignore's `*.json` rule keeps
+# credentials out and takes these goldens with them. tests/_fixtures.py is
+# the one place that asks whether a fixture family is here.
+from tests._fixtures import (  # noqa: E402 - beside the path it guards
+    HAS_GOLDEN_JOURNEY, HAS_JSON_GOLDENS)
+
 BEATS = (
     "beat-01-contract",
     "beat-02-durable-future",
@@ -229,6 +235,7 @@ def _fixture_patient_id(beat: str, name: str | None) -> str:
     return matches[0]
 
 
+@HAS_JSON_GOLDENS
 class CommittedCharacterizationIsCoherent(unittest.TestCase):
     """Static checks fail quickly before the more expensive replay runs."""
 
@@ -667,6 +674,7 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
         self.assertTrue(current_tags.isdisjoint(changed_tags))
 
 
+@HAS_JSON_GOLDENS
 class ScreenshotContractRejectsFalseEvidence(unittest.TestCase):
     def _valid_receipt(self) -> tuple[str, str, str, dict[str, Any]]:
         nonce = "a" * 64
@@ -866,6 +874,7 @@ class ScreenshotContractRejectsFalseEvidence(unittest.TestCase):
             )
 
 
+@HAS_GOLDEN_JOURNEY
 class ReplayMatchesCommittedGoldens(unittest.IsolatedAsyncioTestCase):
     async def test_full_route_replay_is_byte_stable_against_every_json_golden(self) -> None:
         # Importing here keeps the static integrity checks independent of the

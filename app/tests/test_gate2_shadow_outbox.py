@@ -19,6 +19,10 @@ from unittest.mock import AsyncMock, patch
 
 from core import adapters, channel_contracts, outbox, runtime
 from core.adapters import OutboundMessage
+# The golden journey photographs a seeded lab slip from docs/, which is outside
+# the image build context. tests/_fixtures.py is the one place that asks
+# whether a fixture family is here.
+from tests._fixtures import HAS_SEED
 
 
 NOW = datetime(2026, 8, 31, 9, 0, tzinfo=timezone.utc)
@@ -757,6 +761,7 @@ class FanoutShadowContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(telegram.calls), 1)
 
 
+@HAS_SEED
 class GoldenJourneyShadowContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_shadow_mode_is_byte_neutral_across_the_golden_journey(
         self,
