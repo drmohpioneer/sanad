@@ -565,6 +565,53 @@ class PhotoReading(BaseModel):
     )
 
 
+# --------------------------------------------------------------------------- #
+# Evidence Orchestrator event metadata
+# --------------------------------------------------------------------------- #
+class EvidenceProvenance(BaseModel):
+    """Who proposed this disposition, who routed it, and what still gates it."""
+
+    proposed_by: str = ""
+    routed_by: str = ""
+    gated_by: list[str] = Field(default_factory=list)
+
+
+class CodeRoute(BaseModel):
+    """The route the table would have taken, kept beside the one that ran."""
+
+    kind: str = ""
+    loop_id: str = ""
+    route: str = ""
+
+
+class EvidencePacket(BaseModel):
+    """What one Evidence Orchestrator turn decided, as event metadata.
+
+    It rides on the routing event core/extractor.py was already writing, and it
+    exists only when a turn actually happened. A fail-open route - the model was
+    down, slow, or there was no model in this process at all - writes no packet,
+    because there is no decision to attribute. A turn whose proposal the guards
+    refused DOES write one: the refusal is the record.
+
+    `missing` and `route` are computed in code after the proposal, `refused`
+    names every guard that overruled it, and `decided_by` carries the label the
+    audit rail buckets as MODEL CHOICE · CODE GUARDS.
+    """
+
+    kind: str
+    loop_id: str = ""
+    route: str = ""
+    missing: list[str] = Field(default_factory=list)
+    reason: str = ""
+    refused: list[str] = Field(default_factory=list)
+    candidates: list[str] = Field(default_factory=list)
+    offered: list[str] = Field(default_factory=list)
+    code_route: CodeRoute = Field(default_factory=CodeRoute)
+    agreed_with_code: bool = True
+    provenance: EvidenceProvenance = Field(default_factory=EvidenceProvenance)
+    decided_by: str = ""
+
+
 DETAIL_FIELDS: dict[str, tuple[str, ...]] = {
     "TEST": ("test_name",),
     "MONITOR": ("metric", "schedule", "days"),

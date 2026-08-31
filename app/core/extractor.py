@@ -39,14 +39,15 @@ import hashlib
 import io
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.genai import types
 
 from . import (
-    bounded, coordinator, escalate, events, gender, labs, lang, media, photos,
-    provenance, sentinel, settings, storage, store, timing, verify, vitals,
+    bounded, coordinator, escalate, events, evidence, gender, labs, lang, media,
+    photos, provenance, sentinel, settings, storage, store, timing, verify,
+    vitals,
 )
 from .adapters import OutboundMessage, fanout
 from .channel_contracts import NotificationClass
@@ -146,8 +147,42 @@ DECIDED_ROUTE = "code (core/photos.py routing table)"
 DECIDED_VITALS = "code (core/vitals.py blood pressure table)"
 DECIDED_UNREAD = "code (core/photos.py routing table, nothing was acted on)"
 DECIDED_LABS = "code (core/labs.py value tables and core/verify.py slip checks)"
+# The label on the lab lane's routing EVENT, which is a different sentence from
+# the label on the doctor's card above it: the card is about what the values
+# mean and that is always the table, the event is about where the slip went.
+DECIDED_LAB_EVENT = "code (core/labs.py critical-value table)"
 DECIDED_DOCTOR_OPENED = ("code (core/extractor.py, the doctor pressed Open a "
                          "loop)")
+# S24-E. The one label on this path that names a model, and it names code in
+# the same breath, because that is what happened: the Evidence Orchestrator
+# (core/evidence.py) nominated a disposition and the routing table, the
+# verifier and the value tables all still ran over it. The string is repeated
+# here rather than imported because the audit rail reads module constants out
+# of the syntax tree of the file that writes them; tests/test_s24_evidence.py
+# asserts the two copies cannot drift apart.
+DECIDED_EVIDENCE_AGENT = ("evidence-orchestrator (gemini) + gates: model "
+                          "choice, guards in code (core/photos.py, "
+                          "core/verify.py, core/labs.py)")
+
+
+def route_decided_by(packet: Optional[dict] = None) -> str:
+    """Which decider this routing event carries.
+
+    A packet exists only when an orchestrator turn actually happened, so the
+    absence of one is not a missing label: it is the fail-open path, where the
+    routing table decided alone and says so in exactly the words it always did.
+    """
+    return DECIDED_EVIDENCE_AGENT if packet else DECIDED_ROUTE
+
+
+def lab_decided_by(packet: Optional[dict] = None) -> str:
+    """The same choice on the lab lane's routing event."""
+    return DECIDED_EVIDENCE_AGENT if packet else DECIDED_LAB_EVENT
+
+
+def unread_decided_by(packet: Optional[dict] = None) -> str:
+    """The same choice on the exit for a photo Sanad will not act on."""
+    return DECIDED_EVIDENCE_AGENT if packet else DECIDED_UNREAD
 
 
 def critical_text(speak: str, who: str) -> str:
@@ -174,6 +209,13 @@ def _reencode(raw: bytes, rotate: int = 0) -> bytes:
 
 
 ROTATION_FOR = {"sideways": 270, "upside_down": 180}
+
+# A timestamp that is never written anywhere. `core/photos.reading_row` needs an
+# instant to build a chart row with, and the routing question "are these two
+# pressures readable at all?" needs the answer and not the row. Asking
+# `store.now()` for it would move the clock, and every id and timestamp
+# downstream with it, for a question whose answer does not depend on the time.
+FIXED_INSTANT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 async def upright(raw: bytes) -> bytes:
@@ -453,25 +495,63 @@ async def _handle_photo_claimed(
     # potassium result does not land on his lipid panel (core/photos.py).
     test_loop = photos.open_test_loop(loops, [a.analyte for a in reading.analytes])
     monitor_loop = photos.open_monitor_loop(loops)
+    kind = reading.kind
     route = photos.route(
-        reading.kind,
+        kind,
         test_loop=test_loop is not None,
         monitor_loop=monitor_loop is not None,
     )
-    log.info("photo kind=%s route=%s patient=%s", reading.kind, route, patient.id)
+    # S24-E. The routing decision, re-homed under one bounded agent turn
+    # (core/evidence.py). Code builds every fact it reads and code refuses
+    # anything it answers that is not on the lists; the route still comes out of
+    # core/photos.route, and core/verify.check still runs after it, unchanged,
+    # on the lab lane. `None` is the whole of the fallback: no turn happened, so
+    # the three lines above stand exactly as they did before this agent existed,
+    # every label is the one it always was, and no packet is written.
+    #
+    # `legible_reading` is one of those facts, and it is read with a fixed
+    # instant rather than `store.now()` on purpose: asking the clock is not free
+    # (the ids and timestamps of everything downstream move with it), and
+    # whether two pressures parse off a screen does not depend on when.
+    facts = evidence.facts_for(
+        patient.name, reading, loops,
+        code_kind=kind,
+        code_loop_id=(test_loop.id if route == "attach_to_loop" and test_loop
+                      else monitor_loop.id if route == "monitor_reading"
+                      and monitor_loop else ""),
+        code_route=route,
+        legible_reading=photos.reading_row(
+            reading.systolic, reading.diastolic, reading.pulse, FIXED_INSTANT
+        ) is not None,
+    )
+    packet: Optional[dict] = None
+    disposition = await evidence.decide(facts)
+    if disposition is not None:
+        packet = evidence.packet(facts, disposition)
+        kind, route = disposition.kind, disposition.route
+        picked = evidence.chosen(loops, disposition)
+        # Belt and braces. The guard only ever returns an id off the offer
+        # list, so `picked` is None only for a route that carries no loop; if
+        # that ever stopped being true the route would be recomputed here
+        # rather than a slip being filed on nothing.
+        if picked is None and route in ("attach_to_loop", "monitor_reading"):
+            route = photos.route(kind, test_loop=False, monitor_loop=False)
+        test_loop = picked if route == "attach_to_loop" else None
+        monitor_loop = picked if route == "monitor_reading" else None
+    log.info("photo kind=%s route=%s patient=%s", kind, route, patient.id)
 
     if route in ("attach_to_loop", "unexpected_result"):
         if not reading.analytes:
             await _relay_unread(
                 patient, doctor, image_path, speak, channel,
                 "This reads as a lab report but no values could be read off it.",
-                note, synthetic=synthetic,
+                note, synthetic=synthetic, packet=packet,
             )
             return
         await _handle_lab(
             patient, doctor, reading, note, image_path, speak, who, channel,
             test_loop if route == "attach_to_loop" else None, caption=caption,
-            synthetic=synthetic,
+            synthetic=synthetic, packet=packet,
         )
         return
 
@@ -483,7 +563,7 @@ async def _handle_photo_claimed(
             await _relay_unread(
                 patient, doctor, image_path, speak, channel,
                 "This reads as a monitor screen but the numbers were not legible.",
-                note, synthetic=synthetic,
+                note, synthetic=synthetic, packet=packet,
             )
             return
         row = provenance.evidence(row, synthetic=synthetic)
@@ -508,8 +588,10 @@ async def _handle_photo_claimed(
                 {"kind": "image", "path": image_path}, synthetic=synthetic
             )],
             meta={"reading": row, "route": route,
-                  "decided_by": "code (core/photos.py routing table)",
-                  "vitals": verdict.as_meta() if verdict else None},
+                  "decided_by": route_decided_by(packet),
+                  "vitals": verdict.as_meta() if verdict else None,
+                  **({"evidence_packet": provenance.evidence(
+                      packet, synthetic=synthetic)} if packet else {})},
             synthetic=synthetic,
         )
         if verdict is not None and verdict.red:
@@ -521,14 +603,14 @@ async def _handle_photo_claimed(
         await out.send(to_patient, OutboundMessage(text=told[speak]))
         await out.send(to_doctor, OutboundMessage(
             text=f"{patient.name} sent a monitor reading.", patient_id=patient.id,
-            meta={"decided_by": DECIDED_ROUTE},
+            meta={"decided_by": route_decided_by(packet)},
             card=reading_card(patient, loop, row, image_path)))
         return
 
     await _relay_unread(
         patient, doctor, image_path, speak, channel,
-        f"Classified as {reading.kind}, so it was stored and passed on unread.",
-        note, synthetic=synthetic,
+        f"Classified as {kind}, so it was stored and passed on unread.",
+        note, synthetic=synthetic, packet=packet,
     )
 
 
@@ -617,6 +699,7 @@ async def escalate_bp(
 async def _relay_unread(
     patient: Patient, doctor: Doctor, image_path: str, speak: str, channel: str,
     why: str, note: dict, *, synthetic: bool = True,
+    packet: Optional[dict] = None,
 ) -> None:
     """The one exit for a photo Sanad will not act on: store it, hand it over."""
     out = fanout()
@@ -626,14 +709,16 @@ async def _relay_unread(
         media=[provenance.evidence(
             {"kind": "image", "path": image_path}, synthetic=synthetic
         )],
-        meta={"why": why, "note": note},
+        meta={"why": why, "note": note,
+              **({"evidence_packet": provenance.evidence(
+                  packet, synthetic=synthetic)} if packet else {})},
         synthetic=synthetic,
     )
     await out.send(f"patient:{patient.id}",
                    OutboundMessage(text=PATIENT_UNEXPECTED[speak]))
     await out.send(f"doctor:{doctor.web_token}", OutboundMessage(
         text=f"Photo from {patient.name}.", patient_id=patient.id,
-        meta={"decided_by": DECIDED_UNREAD},
+        meta={"decided_by": unread_decided_by(packet)},
         card=unexpected_card(patient, image_path, why)))
 
 
@@ -690,8 +775,16 @@ async def _handle_lab(
     patient: Patient, doctor: Doctor, reading: PhotoReading, note: dict,
     image_path: str, speak: str, who: str, channel: str, loop: Optional[Loop],
     caption: str = "", synthetic: bool = True,
+    packet: Optional[dict] = None,
 ) -> None:
-    """A lab slip, with or without an order behind it. Same reading, same table."""
+    """A lab slip, with or without an order behind it. Same reading, same table.
+
+    `packet` is the Evidence Orchestrator's decision when there was one. It is
+    metadata and nothing else: which loop this slip is being tried against was
+    settled before this function was entered, and every check below - identity,
+    date, completeness, the critical-value table - is the same code it always
+    was and still overrules whatever the packet says.
+    """
     out = fanout()
     to_patient, to_doctor = f"patient:{patient.id}", f"doctor:{doctor.web_token}"
 
@@ -815,7 +908,9 @@ async def _handle_lab(
             "orientation": note, "results": results,
             "image_path": image_path,
             "attached": loop is not None,
-            "decided_by": "code (core/labs.py critical-value table)",
+            "decided_by": lab_decided_by(packet),
+            **({"evidence_packet": provenance.evidence(
+                packet, synthetic=synthetic)} if packet else {}),
             "urgent_review": [f.analyte for f in urgent],
             "slip_text_sentinel": slip_concept or "",
             "verify": (provenance.evidence(
