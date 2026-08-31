@@ -213,6 +213,40 @@ class ATapIsCarriedOutOnceWhereverItComesFrom(OneActionPath):
 
         commit.assert_awaited_once()
 
+    async def test_a_patient_row_never_burns_the_name_it_carries(self) -> None:
+        """S24-C review. `openpatient:<patient id>` names a patient, not an
+        occasion, so the same row comes back on every future lookup list that
+        patient matches. While it was a retiring button, the first press wrote
+        a permanent action key under that name: next week's list answered
+        "already done" on that row and could never be finished. It is
+        navigation now (core/cards.SIDE_ACTIONS), so it claims nothing, burns
+        nothing, and retires no list."""
+        doctor = await self.a_doctor()
+        await self.a_card("list-1", "openpatient:p1", label="Ahmed Ali")
+
+        first = await self.press(doctor, "openpatient:p1")
+        await tg_router._callback(self.tap("openpatient:p1"), BASE_URL)
+
+        # A week later, the same patient matches a new lookup.
+        await self.a_card("list-2", "openpatient:p1", label="Ahmed Ali")
+        second = await self.press(doctor, "openpatient:p1")
+
+        self.assertEqual({"ok": True, "resolved": []}, first)
+        self.assertEqual(
+            {"ok": True, "resolved": []}, second,
+            "the second lookup list was refused on a row that opens a record")
+        self.assertEqual(
+            {}, self.memory.card_actions,
+            "navigation took a permanent action key it can never give back")
+        self.assertEqual(["open it on the board"], self.toasts)
+        for event_id in ("list-1", "list-2"):
+            with self.subTest(card=event_id):
+                event = await self.memory.get_event(event_id)
+                self.assertFalse(cards.is_resolved(event))
+                self.assertTrue(
+                    (await cards.claim(doctor.id, "openpatient:p1"))[0],
+                    "the row is no longer pressable")
+
     async def test_a_button_nothing_carries_out_is_still_an_unknown_button(
         self,
     ) -> None:
@@ -353,6 +387,36 @@ class TheWindowBelongsToTheRecordAndNotToTheChannel(OneActionPath):
         self.assertEqual("open", (await self.memory.get_relay("relay-1")).state)
         self.assertFalse(await self.resolved("card-1"))
 
+    async def test_a_window_is_spent_even_when_the_answer_lands_nowhere(
+        self,
+    ) -> None:
+        """S24-C review. The Concierge's early returns left the window open.
+
+        The relay is still open and still his, so the answer is consumed and
+        the ten-minute check passes, but the patient behind it is gone and
+        `doctor_reply` says so and stops. The window was not closed on that
+        path, so his NEXT message, an ordinary dictation, was eaten as a second
+        answer to the same dead question.
+        """
+        doctor = await self.a_doctor()
+        await self.a_relay()  # a relay whose patient was never created
+        await self.a_card("card-1", "reply:relay-1", label="Answer")
+        handle_doctor = AsyncMock()
+
+        await tg_router._callback(self.tap("reply:relay-1"), BASE_URL)
+        doctor = await self.reload(doctor)
+        await self.says(doctor, "Keep taking it.", channel="telegram")
+
+        doctor = await self.reload(doctor)
+        self.assertIsNone(doctor.awaiting_relay_id)
+        self.assertIsNone(doctor.awaiting_since)
+        self.assertEqual([], self.out.to("patient:"))
+
+        with patch.object(dispatch.registrar, "handle_doctor", handle_doctor):
+            await self.says(doctor, "New patient Mariam, 42, check HbA1c.",
+                            channel="telegram")
+        handle_doctor.assert_awaited_once()
+
     async def test_the_ten_minute_window_still_closes(self) -> None:
         doctor = await self.a_doctor()
         await self.a_patient()
@@ -384,8 +448,14 @@ class TheRouterStaysAnEdge(unittest.TestCase):
     and they will drift, which is the whole of what S24-C was for.
     """
 
-    FORBIDDEN = ("registrar", "concierge", "coordinator")
+    # extractor is on this list because attach/openloop became reachable from
+    # the phone in this slice: a specialist the router can now finish work
+    # with is exactly a specialist the router must not call itself.
+    FORBIDDEN = ("registrar", "concierge", "coordinator", "extractor")
     ALLOWED_ACTION_CALLS = {"perform", "open_answer_window"}
+    # The write `open_answer_window` exists to own. Two copies of the doctor's
+    # compose window is the duplication this whole slice was about.
+    FORBIDDEN_STORE_CALLS = {"update_doctor", "claim_action", "release_action"}
 
     def setUp(self) -> None:
         self.tree = ast.parse(ROUTER.read_text(encoding="utf-8"),
@@ -402,15 +472,21 @@ class TheRouterStaysAnEdge(unittest.TestCase):
         return found
 
     def _imported(self) -> set[str]:
+        """Every module this file names, however it spells the import.
+
+        `from . import registrar` puts it in the alias list and
+        `from .registrar import commit` puts it in `node.module`, so a rail
+        that reads only one of the two can be walked straight past.
+        """
         names: set[str] = set()
         for node in ast.walk(self.tree):
             if isinstance(node, ast.ImportFrom):
                 names.update(alias.asname or alias.name for alias in node.names)
+                if node.module:
+                    names.update(node.module.split("."))
             elif isinstance(node, ast.Import):
-                names.update(
-                    (alias.asname or alias.name).split(".")[0]
-                    for alias in node.names
-                )
+                for alias in node.names:
+                    names.update((alias.asname or alias.name).split("."))
         return names
 
     def test_the_router_imports_no_domain_specialist(self) -> None:
@@ -436,6 +512,15 @@ class TheRouterStaysAnEdge(unittest.TestCase):
             called <= self.ALLOWED_ACTION_CALLS,
             f"new entry points into the action path: "
             f"{sorted(called - self.ALLOWED_ACTION_CALLS)}")
+
+    def test_the_router_does_not_write_the_doctor_record_itself(self) -> None:
+        offenders = [call for call in self._calls_on("store")
+                     if call.split(".", 1)[1].split(" ", 1)[0]
+                     in self.FORBIDDEN_STORE_CALLS]
+        self.assertEqual(
+            [], offenders,
+            "core/tg_router.py writes what core/doctor_actions.py owns:\n"
+            + "\n".join(offenders))
 
     def test_the_action_path_speaks_no_provider(self) -> None:
         """The other half of the seam: the shared unit is not an edge either."""

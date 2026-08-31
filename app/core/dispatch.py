@@ -153,25 +153,32 @@ async def _land_answer(doctor: Doctor, msg: InboundMessage, text: str) -> None:
     """
     out = fanout()
     if doctor.awaiting_relay_id:
-        # `concierge.doctor_reply` clears the awaiting flag itself, as it did
-        # in S2, so nothing is cleared here on the path that ran.
         answered = await doctor_actions.perform(
             doctor, f"reply:{doctor.awaiting_relay_id}", text
         )
         if answered.get("already"):
-            await clear_pending(doctor)
             await out.send(msg.sender_ref, OutboundMessage(
                 text=concierge.ALREADY_ANSWERED,
                 meta={"decided_by": "code (core/doctor_actions.py, the action "
                                     "is already claimed)"}))
-        return
-    # "Send a note" is a side action: it sends the line and deliberately leaves
-    # the lab-values card open, because the review that closes the loop has not
-    # happened yet (core/cards.SIDE_ACTIONS). Running it through the same unit
-    # is what makes that a property of the button rather than of the surface.
-    await doctor_actions.perform(
-        doctor, f"note:{doctor.awaiting_note_loop_id or ''}", text
-    )
+    else:
+        # "Send a note" is a side action: it sends the line and deliberately
+        # leaves the lab-values card open, because the review that closes the
+        # loop has not happened yet (core/cards.SIDE_ACTIONS). Running it
+        # through the same unit is what makes that a property of the button
+        # rather than of the surface.
+        await doctor_actions.perform(
+            doctor, f"note:{doctor.awaiting_note_loop_id or ''}", text
+        )
+
+    # S24-C review. The window is closed here and on every outcome, not by the
+    # Concierge on the one path that reached the end of its work. Its early
+    # returns ("that patient is gone", "that loop is gone") left the window
+    # standing, so the doctor's NEXT message was eaten as an answer to a
+    # question that had just told him it could not be answered. Consuming his
+    # message is what the window is for, and it may be spent exactly once.
+    # `concierge.doctor_reply` still clears it on its own path; clearing an
+    # already clear window writes the same three nulls again.
     await clear_pending(doctor)
 
 

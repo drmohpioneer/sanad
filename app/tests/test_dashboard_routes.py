@@ -176,9 +176,19 @@ class ANoteIsNotAReview(unittest.TestCase):
     which is the one thing the Inbox exists to prevent.
     """
 
-    def test_a_note_is_the_only_action_that_finishes_nothing(self) -> None:
-        self.assertEqual(cards.SIDE_ACTIONS, ("note",))
-        self.assertFalse(cards.retires("note:l1"))
+    def test_a_note_finishes_nothing_and_neither_does_navigation(self) -> None:
+        """Two buttons finish nothing, and for two different reasons.
+
+        "Send a note" is a side message on a card that is still waiting for its
+        review. "Open the patient" (S24-C review) creates nothing at all: its
+        action id names a patient rather than one occasion, so retiring on it
+        burned a permanent action key that every future lookup list carrying
+        that same name then met as "already done".
+        """
+        self.assertEqual(cards.SIDE_ACTIONS, ("note", "openpatient"))
+        for pressed in ("note:l1", "openpatient:p1"):
+            with self.subTest(pressed=pressed):
+                self.assertFalse(cards.retires(pressed))
         for pressed in ("reviewed:l1", "confirm:c1", "cancel:c1", "attach:e1",
                         "openloop:e1", "reply:r1", "seen:e1"):
             with self.subTest(pressed=pressed):

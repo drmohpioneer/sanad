@@ -40,14 +40,25 @@ SEEN = "seen"
 
 # Buttons that do something without finishing the card they sit on.
 #
-# "Send a note" is the only one. It sits beside "Reviewed" on a lab-values card,
-# and it sends the doctor's line to the patient, which is a side message: the
-# card itself is his to-do, and the result behind it is still waiting for the
-# review that closes the loop. Retiring the card on a note would take a result
-# he has not reviewed out of the Inbox, which is exactly the thing the Inbox is
-# for. He can send as many notes as he likes and the card stays where it is
-# until he presses Reviewed.
-SIDE_ACTIONS: tuple[str, ...] = ("note",)
+# "Send a note" sits beside "Reviewed" on a lab-values card, and it sends the
+# doctor's line to the patient, which is a side message: the card itself is his
+# to-do, and the result behind it is still waiting for the review that closes
+# the loop. Retiring the card on a note would take a result he has not reviewed
+# out of the Inbox, which is exactly the thing the Inbox is for. He can send as
+# many notes as he likes and the card stays where it is until he presses
+# Reviewed.
+#
+# S24-C review. "Open the patient" is the other one, and it is here because of
+# what a retiring button costs rather than because of what this one does. A
+# retiring press takes an action key, and the key is the action id: every other
+# action id in Sanad names one occasion (a confirmation, a relay, an event),
+# but `openpatient:<patient id>` names a PATIENT and the same row appears on
+# every lookup list that patient ever matches. The first press burned that key
+# for good, so the same name on next week's list answered "already done" and
+# that list could never be finished. A row that opens a record creates nothing,
+# repeats nothing and needs no idempotency: it is navigation, and navigation
+# does not retire the list it was read from.
+SIDE_ACTIONS: tuple[str, ...] = ("note", "openpatient")
 
 
 def card_of(event: Any) -> dict[str, Any]:
