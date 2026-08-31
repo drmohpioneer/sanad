@@ -1008,6 +1008,32 @@ async def workspace_snapshot(
         raise HTTPException(422, "invalid event cursor") from exc
     except workspace.UnknownPatient as exc:
         raise HTTPException(404, "Not Found") from exc
+    except workspace.InvalidWorkspace as exc:
+        # A record bundle that fails a storage invariant is a degraded read,
+        # not a permanently broken console. A 500 here would be exactly that:
+        # every poll fails the same way and the doctor is left with a dead
+        # page. The v2 browser already treats any non-OK response as "keep the
+        # last good snapshot and show a banner", so 503 is the honest answer
+        # and the page stays usable on the last truth it had.
+        #
+        # The body and the log line carry failure kinds and counts only. The
+        # exception is built that way on purpose (core/workspace.py): link ids
+        # are bearer credentials, and no record id may reach a doctor's browser
+        # or a structured log over a validation failure.
+        failures = getattr(exc, "failures", {})
+        log.warning(
+            "workspace snapshot could not be projected for one doctor: %s",
+            ", ".join(f"{kind}={count}" for kind, count in failures.items())
+            or "unspecified",
+        )
+        raise HTTPException(
+            503,
+            {
+                "error": "workspace_unprojectable",
+                "retryable": True,
+                "failures": failures,
+            },
+        ) from exc
 
     response.headers["Cache-Control"] = "private, no-store"
     return snapshot

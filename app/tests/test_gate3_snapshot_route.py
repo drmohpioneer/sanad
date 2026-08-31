@@ -189,6 +189,51 @@ class SnapshotRoute(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["snapshot_id_kind"], "RECORD_VERSION")
         settings_read.assert_not_awaited()
 
+    async def test_unprojectable_bundle_degrades_to_503_and_leaks_no_ids(self) -> None:
+        """A failed storage invariant is a degraded read, not a dead console.
+
+        An uncaught InvalidWorkspace was a 500 on every poll: the doctor's
+        page never recovered and the body was a stack-trace-shaped error. The
+        browser already keeps its last good snapshot behind a banner on any
+        non-OK response, so 503 with a stable, id-free body is the honest
+        answer. Record ids stay out of both the body and the log line: link
+        ids are bearer credentials.
+        """
+        await self.enable()
+        bundle = await self.memory.read_workspace(self.doctor.id)
+        self.assertIsNotNone(bundle)
+        orphan = Loop(
+            id="orphan-loop-id-must-not-leak",
+            doctor_id=self.doctor.id,
+            patient_id="orphan-patient-id-must-not-leak",
+            type="TEST",
+            title="Orphan",
+            state="open",
+            created_at=NOW,
+            updated_at=NOW,
+        )
+        broken = replace(bundle, loops=(orphan,))
+
+        with (
+            patch.object(store, "read_workspace", AsyncMock(return_value=broken)),
+            self.assertLogs("sanad", level="WARNING") as logged,
+        ):
+            response = await self.client.get(
+                "/api/v2/workspace-snapshot", headers=self.auth
+            )
+
+        self.assertEqual(response.status_code, 503, response.text)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["error"], "workspace_unprojectable")
+        self.assertTrue(detail["retryable"])
+        self.assertEqual(detail["failures"], {"loop_patient": 1})
+
+        exposed = response.text + "\n".join(logged.output)
+        self.assertNotIn("orphan-loop-id-must-not-leak", exposed)
+        self.assertNotIn("orphan-patient-id-must-not-leak", exposed)
+        self.assertNotIn(self.doctor.web_token, exposed)
+        self.assertIn("loop_patient=1", "\n".join(logged.output))
+
     async def test_cursor_from_another_doctor_fails_closed(self) -> None:
         await self.enable()
         first = await self.client.get("/api/v2/workspace-snapshot", headers=self.auth)

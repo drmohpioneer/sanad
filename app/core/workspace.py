@@ -51,7 +51,24 @@ class UnknownPatient(ValueError):
 
 
 class InvalidWorkspace(ValueError):
-    """The atomic bundle crossed a tenant boundary and cannot be projected."""
+    """The atomic bundle crossed a tenant boundary and cannot be projected.
+
+    ``failures`` carries kind/count pairs and nothing else.  The route turns
+    them into a degraded 503 body and one server log line, so this value has
+    to stay free of record ids: link ids are bearer credentials, and which
+    storage invariant failed is the whole diagnosis anyway.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        failures: Optional[Mapping[str, int]] = None,
+    ) -> None:
+        super().__init__(message)
+        self.failures: dict[str, int] = {
+            str(kind): int(count)
+            for kind, count in sorted((failures or {}).items())
+        }
 
 
 def _jsonable(value: Any) -> Any:
@@ -78,15 +95,27 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-_CREDENTIAL_KEYS = (
-    "authorization",
-    "chat_id",
-    "credential",
-    "password",
-    "secret",
-    "telegram_chat_id",
-    "token",
-    "web_token",
+# Exact key names, matched case-insensitively and never as substrings.  A
+# substring test silently deleted clinical fields whose names merely contain a
+# credential word: ``{"secretions": "bloody"}`` lost the finding because
+# "secret" is inside "secretions", and the doctor read a record with a fact
+# missing and no marker saying so.  A credential that appears as a value, or
+# inside arbitrary text, is caught by the separate value pass in
+# ``_scrub_sensitive_values``; this set only removes fields whose *name* is a
+# credential field name.
+_CREDENTIAL_KEYS = frozenset(
+    {
+        "api_key",
+        "authorization",
+        "chat_id",
+        "credential",
+        "password",
+        "secret",
+        "secret_key",
+        "telegram_chat_id",
+        "token",
+        "web_token",
+    }
 )
 
 
@@ -119,7 +148,10 @@ def _scrub_sensitive_values(
                 else key
             )
             if safe_key in cleaned and safe_key != key:
-                raise InvalidWorkspace("private-value redaction key collision")
+                raise InvalidWorkspace(
+                    "private-value redaction key collision",
+                    {"redaction_key_collision": 1},
+                )
             cleaned[safe_key] = _scrub_sensitive_values(
                 item, sensitive, scrub_keys=scrub_keys
             )
@@ -204,7 +236,7 @@ def _without_private_values(
         cleaned = {
             key: _without_private_values(item, sensitive)
             for key, item in value.items()
-            if not any(part in key.lower() for part in _CREDENTIAL_KEYS)
+            if key.lower() not in _CREDENTIAL_KEYS
         }
         return _scrub_sensitive_values(cleaned, sensitive)
     if isinstance(value, list):
@@ -484,16 +516,30 @@ def _assert_scoped(records: WorkspaceRecords) -> None:
                     reject("action_loop_reference")
             elif verb == "reply":
                 target = relays_by_id.get(ident)
-                if (
-                    ":" in ident
-                    or target is None
-                    or event.patient_id is None
-                    or target.patient_id != event.patient_id
+                if ":" in ident or event.patient_id is None:
+                    reject("action_relay_reference")
+                elif target is None:
+                    # Reachable, benign history rather than a broken bundle.
+                    # Retiring a card is bookkeeping about work that already
+                    # happened (app/main.py: the answer is sent, then
+                    # ``cards.resolve`` runs outside the claim), and the
+                    # Telegram "Answer" flow closes the same relay without
+                    # touching the console card at all.  Either way the relay
+                    # leaves ``open_relays`` while the card is still flagged
+                    # open.  ``_reconciled_cards`` below projects this card as
+                    # consumed history; rejecting here would destroy an entire
+                    # workspace over one finished question.
+                    pass
+                elif (
+                    target.patient_id != event.patient_id
                     or (
                         event.loop_id is not None
                         and event.loop_id != target.loop_id
                     )
                 ):
+                    # A target that exists but belongs to another patient or
+                    # loop is a real cross-boundary reference, not a consumed
+                    # one.  That still fails closed.
                     reject("action_relay_reference")
             elif verb in {"attach", "openloop", "seen"}:
                 target = events_by_id.get(ident)
@@ -564,7 +610,10 @@ def _assert_scoped(records: WorkspaceRecords) -> None:
         detail = ", ".join(
             f"{kind}={count}" for kind, count in sorted(failures.items())
         )
-        raise InvalidWorkspace("workspace tenant/reference validation failed: " + detail)
+        raise InvalidWorkspace(
+            "workspace tenant/reference validation failed: " + detail,
+            failures,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1047,6 +1096,50 @@ def _on_cairo_day(value: Any, as_of: datetime) -> bool:
     )
 
 
+_RELAY_CONSUMED = "relay_consumed"
+_LOOP_CLOSED = "loop_closed"
+
+
+def _reconciled_cards(
+    events: Sequence[Event],
+    relays_by_id: Mapping[str, Relay],
+    loops_by_id: Mapping[str, Loop],
+) -> dict[str, str]:
+    """Open cards whose obligation was already carried out, and by what.
+
+    Retiring a card is bookkeeping about work that has already happened. The
+    card action route sends the answer or closes the loop first and calls
+    ``cards.resolve`` afterwards, deliberately outside the claim, so a failure
+    there leaves a finished obligation on a card that still says open. The
+    Telegram "Answer" flow reaches the same state from the other side: it
+    closes the relay and never touches the console card.
+
+    Both are consumed history, not a corrupt workspace. The projection marks
+    them resolved and keeps them out of every queue, because a button whose
+    target is gone is a dead obligation in a doctor's inbox. This is the only
+    tolerance: a target that still exists but belongs to another patient or
+    loop is a cross-boundary reference and still fails closed in
+    ``_assert_scoped``.
+    """
+    reconciled: dict[str, str] = {}
+    for event in events:
+        if not cards.is_open(event):
+            continue
+        for action in cards.actions_of(event):
+            verb, separator, ident = str(action.get("id") or "").partition(":")
+            if not separator or not ident:
+                continue
+            if verb == "reply" and ident not in relays_by_id:
+                reconciled[event.id] = _RELAY_CONSUMED
+                break
+            if verb == "reviewed":
+                target = loops_by_id.get(ident)
+                if target is not None and target.state == "done":
+                    reconciled[event.id] = _LOOP_CLOSED
+                    break
+    return reconciled
+
+
 def _canonical_patient(
     patient: Patient,
     patient_loops: Sequence[Loop],
@@ -1281,7 +1374,16 @@ def build_snapshot(
         row = _patient_record_row(patient)
         rows[row["id"]] = row
 
-    open_card_events = cards.open_cards(ordered_events)
+    reconciled_cards = _reconciled_cards(
+        ordered_events,
+        {relay.id: relay for relay in records.open_relays},
+        {loop.id: loop for loop in ordered_loops},
+    )
+    open_card_events = [
+        event
+        for event in cards.open_cards(ordered_events)
+        if event.id not in reconciled_cards
+    ]
     event_rows = {
         event.id: _event_row(event, sensitive)
         for event in open_card_events
@@ -1294,6 +1396,31 @@ def build_snapshot(
         )
         event_rows[event.id]["notification_class"] = _notification_class(event)
     rows.update((row["id"], row) for row in event_rows.values())
+
+    # Consumed cards stay renderable as history: the doctor should still be
+    # able to read the card whose answer was already sent.  The stored event is
+    # never rewritten, so the reconciliation lives only in this projection, and
+    # it says which obligation was consumed rather than pretending the card was
+    # pressed.  The buttons are kept as the immutable record shows them; the
+    # ``resolved`` flag is what makes them non-executable, exactly as it does
+    # for a card the doctor did press.
+    for event in ordered_events:
+        marker = reconciled_cards.get(event.id)
+        if marker is None:
+            continue
+        row = _event_row(event, sensitive)
+        owner = patients_by_id.get(event.patient_id or "")
+        row["patient_name"] = _wire_projection(
+            owner.name if owner is not None else "",
+            sensitive,
+        )
+        row["notification_class"] = _notification_class(event)
+        row["card"] = {
+            **row["card"],
+            "resolved": True,
+            "reconciled": marker,
+        }
+        rows[row["id"]] = row
     relay_rows = {
         relay.id: _relay_row(relay, sensitive) for relay in records.open_relays
     }
@@ -1354,9 +1481,23 @@ def build_snapshot(
         loop for loop in legacy_review_loops if loop.id not in review_loop_ids
     ]
     deadline_loops = [loop for loop in ordered_loops if loop.state == "unreachable"]
-    closed_today_loops = [
+    closed_on_this_day = [
         loop for loop in ordered_loops
         if loop.state == "done" and _on_cairo_day(getattr(loop, "closed_at", None), as_of)
+    ]
+    # "Closed today" is read as work that is finished and correct.  A doctor
+    # can press Reviewed on evidence the verifier did not pass, and counting
+    # that inside the same number is false reassurance in the one tile he
+    # trusts most.  Same rule as review_ready above: the verifier's own fact
+    # decides, an absent or false ``satisfies`` is never a pass, and the
+    # unverified closes stay visible in their own queue instead of vanishing.
+    closed_today_loops = [
+        loop for loop in closed_on_this_day
+        if (loop.verified or {}).get("satisfies") is True
+    ]
+    reviewed_unverified_loops = [
+        loop for loop in closed_on_this_day
+        if (loop.verified or {}).get("satisfies") is not True
     ]
 
     # A loop-backed relay is one view of the blocked loop, not a second case.
@@ -1386,6 +1527,9 @@ def build_snapshot(
         "deadline_outcomes": _queue(loop_rows[loop.id] for loop in deadline_loops),
         "terminal_waiting_review": _queue(terminal_rows),
         "closed_today": _queue(loop_rows[loop.id] for loop in closed_today_loops),
+        "reviewed_unverified": _queue(
+            loop_rows[loop.id] for loop in reviewed_unverified_loops
+        ),
     }
     active_patient_ids = [
         f"patient:{patient.id}" for patient in patients if patient.status == "active"
@@ -1400,6 +1544,7 @@ def build_snapshot(
             queues["terminal_waiting_review"]["row_ids"]
         ),
         "closed_today": _metric(queues["closed_today"]["row_ids"]),
+        "reviewed_unverified": _metric(queues["reviewed_unverified"]["row_ids"]),
         "active_patients_total": _metric(active_patient_ids),
     }
 
@@ -1518,6 +1663,14 @@ def build_snapshot(
         "closed_today_is_subset_of_legacy_green": _parity_check(
             legacy_green,
             metrics["closed_today"]["row_ids"],
+            relation="SUBSET_OF_LEGACY",
+        ),
+        # The split above must partition today's closes, not lose any: both
+        # halves together are still nothing but legacy-green loops.
+        "reviewed_closes_are_subset_of_legacy_green": _parity_check(
+            legacy_green,
+            metrics["closed_today"]["row_ids"]
+            + metrics["reviewed_unverified"]["row_ids"],
             relation="SUBSET_OF_LEGACY",
         ),
         "legacy_open_cards_covered": _parity_check(

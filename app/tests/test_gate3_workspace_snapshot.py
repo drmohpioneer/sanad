@@ -218,17 +218,23 @@ class LiteralMetricTruth(unittest.TestCase):
             "done",
             closed_at=NOW - timedelta(minutes=1),
             updated_at=NOW,
+            # A genuine close: the verifier passed the evidence behind it.
+            verified={"satisfies": True},
         )
         yesterday = loop(
             "yesterday",
             "done",
             closed_at=NOW - timedelta(days=1),
             updated_at=NOW,
+            verified={"satisfies": True},
         )
 
         snapshot = build_snapshot(records(loops=(historical, explicit, yesterday)), NOW)
 
         self.assertEqual(metric(snapshot, "closed_today"), (1, ["loop:explicit"]))
+        # A missing or older close stamp is not today's work in either half of
+        # the split, so it cannot reappear through the unverified queue.
+        self.assertEqual(metric(snapshot, "reviewed_unverified"), (0, []))
         self.assertEqual(
             snapshot["shadow"]["legacy"]["board"]["green_row_ids"],
             ["loop:explicit", "loop:historical", "loop:yesterday"],
@@ -241,7 +247,7 @@ class LiteralMetricTruth(unittest.TestCase):
             loop("received", "received", verified={"satisfies": True}),
             loop("review", "pending_review", verified={"satisfies": True}),
             loop("deadline", "unreachable"),
-            loop("closed", "done", closed_at=NOW),
+            loop("closed", "done", closed_at=NOW, verified={"satisfies": True}),
         )
 
         snapshot = build_snapshot(records(loops=all_loops), NOW)
@@ -276,6 +282,7 @@ class LiteralMetricTruth(unittest.TestCase):
             ("terminal_waiting_review", "terminal_waiting_review"),
             ("sanad_working", "sanad_working"),
             ("closed_today", "closed_today"),
+            ("reviewed_unverified", "reviewed_unverified"),
             ("active_patients_total", "active_patients"),
         ):
             with self.subTest(hero_metric=metric_name):
@@ -291,6 +298,9 @@ class LiteralMetricTruth(unittest.TestCase):
         self.assertEqual(parity["legacy_white_equals_deadline"]["status"], "MATCH")
         self.assertEqual(parity["legacy_yellow_equals_working_plus_blocked"]["status"], "MATCH")
         self.assertEqual(parity["closed_today_is_subset_of_legacy_green"]["status"], "MATCH")
+        self.assertEqual(
+            parity["reviewed_closes_are_subset_of_legacy_green"]["status"], "MATCH"
+        )
 
     def test_unknown_verification_does_not_become_review_ready(self) -> None:
         verified = loop(
@@ -311,9 +321,98 @@ class LiteralMetricTruth(unittest.TestCase):
         )
 
     def test_future_close_timestamp_is_not_closed_today(self) -> None:
-        future = loop("future", "done", closed_at=NOW + timedelta(minutes=1))
+        future = loop(
+            "future",
+            "done",
+            closed_at=NOW + timedelta(minutes=1),
+            verified={"satisfies": True},
+        )
         snapshot = build_snapshot(records(loops=(future,)), NOW)
         self.assertEqual(metric(snapshot, "closed_today"), (0, []))
+        self.assertEqual(metric(snapshot, "reviewed_unverified"), (0, []))
+
+    def test_a_reviewed_press_the_verifier_did_not_pass_is_not_closed_today(self) -> None:
+        """The doctor may close on evidence the verifier refused.
+
+        Counting that inside "closed today" is the false reassurance this
+        split exists to remove: it is still today's work, it is still legacy
+        green, and it is still visible, but in its own honest queue.
+        """
+        verified_close = loop(
+            "verified-close",
+            "done",
+            closed_at=NOW - timedelta(minutes=5),
+            verified={"satisfies": True},
+        )
+        unverified_close = loop(
+            "unverified-close",
+            "done",
+            closed_at=NOW - timedelta(minutes=4),
+        )
+        refused_close = loop(
+            "refused-close",
+            "done",
+            closed_at=NOW - timedelta(minutes=3),
+            verified={"satisfies": False, "reason": "no result was read"},
+        )
+        truthy_close = loop(
+            "truthy-close",
+            "done",
+            closed_at=NOW - timedelta(minutes=2),
+            # Only the literal boolean is a pass; a truthy string is not the
+            # verifier saying yes.
+            verified={"satisfies": "yes"},
+        )
+
+        snapshot = build_snapshot(
+            records(
+                loops=(
+                    verified_close,
+                    unverified_close,
+                    refused_close,
+                    truthy_close,
+                )
+            ),
+            NOW,
+        )
+
+        self.assertEqual(
+            metric(snapshot, "closed_today"), (1, ["loop:verified-close"])
+        )
+        self.assertEqual(
+            metric(snapshot, "reviewed_unverified"),
+            (
+                3,
+                ["loop:refused-close", "loop:truthy-close", "loop:unverified-close"],
+            ),
+        )
+        for name in ("closed_today", "reviewed_unverified"):
+            with self.subTest(queue=name):
+                self.assertEqual(
+                    snapshot["metrics"][name]["row_ids"],
+                    snapshot["queues"][name]["row_ids"],
+                )
+                self.assertEqual(
+                    snapshot["queues"][name]["row_ids"],
+                    [row["id"] for row in snapshot["queues"][name]["rows"]],
+                )
+
+        parity = snapshot["shadow"]["checks"]
+        self.assertEqual(
+            parity["closed_today_is_subset_of_legacy_green"]["status"], "MATCH"
+        )
+        self.assertEqual(
+            parity["reviewed_closes_are_subset_of_legacy_green"]["status"], "MATCH"
+        )
+        # Nothing is dropped by the split: every close made today is in
+        # exactly one of the two halves.
+        self.assertEqual(
+            sorted(
+                snapshot["metrics"]["closed_today"]["row_ids"]
+                + snapshot["metrics"]["reviewed_unverified"]["row_ids"]
+            ),
+            snapshot["shadow"]["legacy"]["board"]["green_row_ids"],
+        )
 
     def test_every_open_action_card_has_a_canonical_queue(self) -> None:
         ordinary = card_event(
@@ -756,15 +855,188 @@ class WorkspaceSafety(unittest.TestCase):
             snapshot["queues"]["doctor_actions"]["row_ids"],
         )
 
+    def test_open_card_whose_relay_was_already_answered_is_reconciled(self) -> None:
+        """The proven orphan: an open card over a relay that is already closed.
+
+        Two paths reach it. The console answers the question and then fails to
+        write the resolved flag, which app/main.py leaves deliberately outside
+        the claim; or the doctor answers the same relay from Telegram, which
+        closes it and never touches the card. Either way the answer was sent.
+        Rejecting the bundle would take his whole workspace away over one
+        finished question, and leaving the card in a queue would show him a
+        dead button.
+        """
         still_open = card_event(
             "open-reply-card",
             patient_id="p1",
             notification_class=None,
             severity="yellow",
-            actions=[{"id": "reply:missing-relay", "label": "Answer"}],
+            actions=[{"id": "reply:answered-relay", "label": "Answer"}],
+        )
+
+        snapshot = build_snapshot(records(events=(still_open,)), NOW)
+
+        for name, queue in snapshot["queues"].items():
+            with self.subTest(queue=name):
+                self.assertNotIn("event:open-reply-card", queue["row_ids"])
+        row = snapshot["rows"]["event:open-reply-card"]
+        self.assertTrue(row["card"]["resolved"])
+        self.assertEqual(row["card"]["reconciled"], "relay_consumed")
+        self.assertEqual(
+            [action["id"] for action in row["card"]["actions"]],
+            ["reply:answered-relay"],
+        )
+        self.assertEqual(
+            snapshot["shadow"]["legacy"]["open_card_row_ids"], []
+        )
+        self.assertEqual(
+            snapshot["shadow"]["checks"]["legacy_open_cards_covered"]["status"],
+            "MATCH",
+        )
+        self.assertEqual(snapshot["legacy"]["cards"]["cards"], [])
+
+    def test_reconciliation_does_not_hide_a_card_over_a_live_relay(self) -> None:
+        live = Relay(
+            id="live-relay",
+            doctor_id="d1",
+            patient_id="p1",
+            question="Did the swelling change?",
+            created_at=NOW,
+        )
+        card = card_event(
+            "live-reply-card",
+            patient_id="p1",
+            notification_class=None,
+            severity="yellow",
+            actions=[{"id": "reply:live-relay", "label": "Answer"}],
+        )
+
+        snapshot = build_snapshot(records(events=(card,), relays=(live,)), NOW)
+
+        self.assertEqual(
+            snapshot["queues"]["doctor_actions"]["row_ids"],
+            ["event:live-reply-card"],
+        )
+        self.assertNotIn(
+            "reconciled", snapshot["rows"]["event:live-reply-card"]["card"]
+        )
+
+    def test_reconciliation_never_tolerates_a_cross_boundary_relay(self) -> None:
+        """The tolerance is for a missing target only, never a foreign one."""
+        patients = (patient("p1"), patient("p2", minutes=1))
+        foreign_relay = Relay(
+            id="p2-relay",
+            doctor_id="d1",
+            patient_id="p2",
+            question="Only p2 asked this",
+            created_at=NOW,
+        )
+        cross_patient_card = card_event(
+            "cross-relay-card",
+            patient_id="p1",
+            notification_class=None,
+            severity="yellow",
+            actions=[{"id": "reply:p2-relay", "label": "Answer"}],
         )
         with self.assertRaises(InvalidWorkspace):
-            build_snapshot(records(events=(still_open,)), NOW)
+            build_snapshot(
+                records(
+                    patients=patients,
+                    events=(cross_patient_card,),
+                    relays=(foreign_relay,),
+                ),
+                NOW,
+            )
+
+        own_loop = loop("l1", "open", patient_id="p1")
+        other_loop = loop("l2", "open", patient_id="p1")
+        relay_on_other_loop = Relay(
+            id="other-loop-relay",
+            doctor_id="d1",
+            patient_id="p1",
+            loop_id="l2",
+            question="about the other obligation",
+            created_at=NOW,
+        )
+        cross_loop_card = Event(
+            id="cross-loop-relay-card",
+            doctor_id="d1",
+            patient_id="p1",
+            loop_id="l1",
+            kind="card",
+            text="fixture",
+            meta={
+                "card": {
+                    "title": "opaque fixture card",
+                    "severity": "yellow",
+                    "lines": [],
+                    "actions": [
+                        {"id": "reply:other-loop-relay", "label": "Answer"}
+                    ],
+                }
+            },
+            ts=NOW,
+        )
+        with self.assertRaises(InvalidWorkspace):
+            build_snapshot(
+                records(
+                    loops=(own_loop, other_loop),
+                    events=(cross_loop_card,),
+                    relays=(relay_on_other_loop,),
+                ),
+                NOW,
+            )
+
+    def test_open_card_over_an_already_closed_loop_is_reconciled(self) -> None:
+        """The same consumed close, reached through Reviewed.
+
+        ``concierge.mark_reviewed`` closes the loop and the resolved flag is
+        written afterwards, so the identical failure leaves a Reviewed button
+        over a loop that is already done. Pressing it again does nothing; the
+        card is history.
+        """
+        closed = loop(
+            "closed-loop",
+            "done",
+            closed_at=NOW - timedelta(minutes=1),
+            verified={"satisfies": True},
+        )
+        open_loop = loop("open-loop", "pending_review", verified={"satisfies": True})
+        consumed = card_event(
+            "consumed-review-card",
+            patient_id="p1",
+            notification_class=None,
+            severity="yellow",
+            actions=[{"id": "reviewed:closed-loop", "label": "Reviewed"}],
+        )
+        live = card_event(
+            "live-review-card",
+            patient_id="p1",
+            notification_class=None,
+            severity="yellow",
+            minute=1,
+            actions=[{"id": "reviewed:open-loop", "label": "Reviewed"}],
+        )
+
+        snapshot = build_snapshot(
+            records(loops=(closed, open_loop), events=(consumed, live)), NOW
+        )
+
+        self.assertEqual(
+            snapshot["queues"]["doctor_actions"]["row_ids"],
+            ["event:live-review-card"],
+        )
+        self.assertEqual(
+            snapshot["rows"]["event:consumed-review-card"]["card"]["reconciled"],
+            "loop_closed",
+        )
+        self.assertTrue(
+            snapshot["rows"]["event:consumed-review-card"]["card"]["resolved"]
+        )
+        self.assertEqual(
+            snapshot["shadow"]["checks"]["legacy_open_cards_covered"]["status"],
+            "MATCH",
+        )
 
     def test_malformed_actions_cannot_hide_an_unresolved_card(self) -> None:
         malformed = Event(
@@ -870,6 +1142,46 @@ class WorkspaceSafety(unittest.TestCase):
         self.assertNotIn(str(patient_chat_id), raw)
         self.assertIn("[REDACTED_CHAT_ID]", raw)
         self.assertIn('"safe": "kept"', raw)
+
+    def test_clinical_fields_are_not_deleted_by_a_credential_substring(self) -> None:
+        """Redaction removes credential field names, not words containing them.
+
+        A substring test deleted ``secretions`` because "secret" is inside it,
+        and the doctor read a finding that was silently gone. The field name
+        has to *be* a credential name, matched whole.
+        """
+        clinical = Event(
+            id="clinical-vocabulary-event",
+            doctor_id="d1",
+            patient_id="p1",
+            kind="system",
+            text="wound review",
+            meta={
+                "secretions": "bloody",
+                "tokenizer_hint": "en",
+                "chat_id_note": "patient prefers the clinic line",
+                "password_protocol": "counselled",
+                "token": "must not survive",
+                "secret": "must not survive",
+                "web_token": "must not survive",
+                "Authorization": "must not survive",
+                "CHAT_ID": 4242,
+            },
+            ts=NOW,
+        )
+
+        snapshot = build_snapshot(records(events=(clinical,)), NOW)
+        recent = {row["id"]: row for row in snapshot["agent_events"]["recent"]}
+        meta = recent["clinical-vocabulary-event"]["meta"]
+
+        self.assertEqual(meta["secretions"], "bloody")
+        self.assertEqual(meta["tokenizer_hint"], "en")
+        self.assertEqual(meta["chat_id_note"], "patient prefers the clinic line")
+        self.assertEqual(meta["password_protocol"], "counselled")
+        for removed in ("token", "secret", "web_token", "Authorization", "CHAT_ID"):
+            with self.subTest(key=removed):
+                self.assertNotIn(removed, meta)
+        self.assertNotIn("must not survive", json.dumps(snapshot))
 
     def test_private_chat_id_rotation_does_not_change_snapshot_identity(self) -> None:
         def bundle_for(doctor_chat_id: int, patient_chat_id: int) -> WorkspaceRecords:
