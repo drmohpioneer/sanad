@@ -383,18 +383,23 @@ async def review(decision: Any, facts: policy_module.LoopFacts,
                     exc_info=True)
         return stands()
 
+    # The Steward may add judgment to a plan. It may not reverse the one
+    # decision that exists to put a human in the loop - and it may not delay it
+    # either, which is why this guard is read before the hold branch and not
+    # only inside the revise branch. A hold silences a handover exactly as a
+    # revise would: the patient has already been told his doctor knows, and a
+    # card parked to the morning makes that sentence false for the rest of the
+    # day. A kept action can be approved or revised into by the guards below;
+    # it can never be held.
+    if verdict in (HOLD, REVISE) and policy_module.steward_keeps(tool):
+        log.info("%s; the plan stands", KEEPS_THE_HANDOVER)
+        return stands(KEEPS_THE_HANDOVER, guard=KEEPS_THE_HANDOVER, asked=True)
+
     if verdict == HOLD:
         return Verdict(HOLD, line=PARKED, alternatives=alternatives,
                        release_at=release_at(now or facts.now, tool, facts))
 
     if verdict == REVISE:
-        # The Steward may add judgment to a plan. It may not reverse the one
-        # decision that exists to put a human in the loop, so a revise off an
-        # escalation is refused here and the escalation stands.
-        if policy_module.steward_keeps(tool):
-            log.info("%s; the plan stands", KEEPS_THE_HANDOVER)
-            return stands(KEEPS_THE_HANDOVER, guard=KEEPS_THE_HANDOVER,
-                          asked=True)
         if named in alternatives:
             return Verdict(REVISE, tool=named, line=CHOSE_ANOTHER,
                            alternatives=alternatives)

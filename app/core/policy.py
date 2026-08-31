@@ -430,7 +430,14 @@ def _schedule(args: dict[str, Any], facts: LoopFacts, policy: Policy,
 #
 #   what it may never revise away    the handover to the doctor. Reversing a
 #                                    decision to put a human in the loop is not
-#                                    a judgment call an agent gets to make.
+#                                    a judgment call an agent gets to make, and
+#                                    neither is delaying it. core/steward.py
+#                                    reads this list on the hold branch and on
+#                                    the revise branch, with the same answer:
+#                                    a card parked to the morning digest makes
+#                                    "your doctor has been told" false for the
+#                                    rest of the day, which is the same silence
+#                                    a revise would have produced.
 #   what it may never revise INTO    a request for a missing analyte. That tool
 #                                    needs the name of one analyte, and the
 #                                    name comes off the verifier's own missing

@@ -268,6 +268,62 @@ class AHoldIsTimingAndNothingElse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(verdict.line, steward.PARKED)
         self.assertIsNotNone(verdict.release_at)
 
+    # -- the guard the hold branch used to skip ----------------------------- #
+    async def test_a_kept_action_can_never_be_held(self) -> None:
+        """A hold silences a hand-over exactly as a revise would.
+
+        The patient has already been told his doctor knows. Parking that card
+        to the morning makes the sentence false for the rest of the day, so
+        core/policy.steward_keeps is read before the hold branch and not only
+        inside the revise branch.
+        """
+        with patch.object(steward, "_ask", answers(steward.HOLD)):
+            verdict = await steward.review(proposal("escalate_barrier"),
+                                           facts(barrier="cost"),
+                                           policy.DEFAULT)
+        self.assertFalse(verdict.held)
+        self.assertTrue(verdict.approved)
+        self.assertEqual(verdict.line, steward.KEEPS_THE_HANDOVER)
+        self.assertEqual(verdict.guard, steward.KEEPS_THE_HANDOVER)
+        self.assertIsNone(verdict.release_at,
+                          "a refused hold may not leave a release moment behind")
+        self.assertTrue(verdict.asked_the_model)
+
+    async def test_the_hold_branch_reads_the_keeps_guard_the_revise_branch_reads(
+            self) -> None:
+        """Parity, driven rather than argued: one guard, two verdicts."""
+        answered = {}
+        for said in (steward.HOLD, steward.REVISE):
+            with self.subTest(said=said):
+                with patch.object(steward, "_ask",
+                                  answers(said, "schedule_next_contact")):
+                    verdict = await steward.review(proposal("escalate_barrier"),
+                                                   facts(), policy.DEFAULT)
+                answered[said] = verdict.as_meta()
+        self.assertEqual(answered[steward.HOLD], answered[steward.REVISE])
+
+    async def test_a_kept_action_is_still_approved_and_still_carried_out(self
+                                                                        ) -> None:
+        """The guard removes two verdicts from a kept action, not three."""
+        with patch.object(steward, "_ask", answers(steward.APPROVE)):
+            verdict = await steward.review(proposal("escalate_barrier"),
+                                           facts(), policy.DEFAULT)
+        self.assertTrue(verdict.approved)
+        self.assertFalse(verdict.held)
+        self.assertEqual(verdict.line, steward.AGREED)
+        self.assertEqual(verdict.guard, "")
+
+    async def test_an_unkept_action_is_still_held_the_way_it_always_was(self
+                                                                       ) -> None:
+        """The guard is read off the list, so nothing off the list moved."""
+        self.assertFalse(policy.steward_keeps("pause_loop"))
+        with patch.object(steward, "_ask", answers(steward.HOLD)):
+            verdict = await steward.review(proposal("pause_loop"),
+                                           facts(barrier="forgot"),
+                                           policy.DEFAULT)
+        self.assertTrue(verdict.held)
+        self.assertEqual(verdict.line, steward.PARKED)
+
 
 # --------------------------------------------------------------------------- #
 # R4: bounded, and every failure is today's behavior

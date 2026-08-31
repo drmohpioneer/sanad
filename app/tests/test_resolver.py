@@ -1384,18 +1384,43 @@ class TheStewardReviewsTheResolversMoves(OneBarrierEndToEnd):
         self.assertIn("The Resolver tried this before you:",
                       " ".join(card["lines"]))
 
-    async def test_a_hold_is_timing_and_never_drops_the_card(self) -> None:
+    async def test_a_hold_is_timing_and_never_drops_the_resume(self) -> None:
         """Rail 3, on this caller too: a hold delays when the doctor is told
-        and can never delete the card, the queue row or the count."""
+        and can never delete the card, the queue row or the count.
+
+        Driven on the resume, which is a `schedule_next_contact`: that is the
+        one of this caller's two guarded tools a hold is allowed to reach.
+        """
         self.enrol()
+        self.search.answers.append(places.found("Alfa Lab"))
+        with self.answers(steward.HOLD):
+            result = await self.barrier("find_places", {})
+        self.assertTrue(result["answered"])
+        self.assertEqual(1, len(self.queued))
+        line = [meta for _, _, meta in self.written if "steward" in meta][-1]
+        self.assertEqual(steward.HOLD, line["steward"]["verdict"])
+        self.assertEqual(steward.PARKED, line["steward"]["note"])
+
+    async def test_a_hand_over_is_never_held_either(self) -> None:
+        """The other half of core/policy.STEWARD_KEEPS, and the half the hold
+        branch used to skip.
+
+        The patient has already been told his doctor knows, so a card parked to
+        a morning digest makes that sentence false for the rest of the day. A
+        hold off a hand-over is refused exactly the way a revise off one is,
+        and the card goes out now.
+        """
+        self.enrol()
+        self.assertTrue(policy.steward_keeps("escalate_barrier"))
         self.search.answers.append(places.Search(query="labs"))
         self.search.answers.append(places.Search(query="labs"))
         with self.answers(steward.HOLD):
             await self.barrier("find_places", {})
         self.assertEqual(1, len(self.cards()))
         line = [meta for _, _, meta in self.written if "steward" in meta][-1]
-        self.assertEqual(steward.HOLD, line["steward"]["verdict"])
-        self.assertEqual(steward.PARKED, line["steward"]["note"])
+        self.assertEqual(steward.APPROVE, line["steward"]["verdict"])
+        self.assertEqual(steward.KEEPS_THE_HANDOVER, line["steward"]["note"])
+        self.assertNotIn("release_at", line["steward"])
 
     async def test_a_hand_over_is_never_revised_away_from(self) -> None:
         """core/policy.STEWARD_KEEPS, one file upstream, and it is why this
