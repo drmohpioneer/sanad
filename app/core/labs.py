@@ -1,4 +1,4 @@
-"""Owns the critical-lab table (specs/sentinel-list.md v2 3) and every comparison.
+"""Owns the critical-lab table documented in docs/SAFETY.md and every comparison.
 
 This is the determinism rule of S3 in one file. The model reads a slip into a
 schema - analyte, value, unit, the slip's own printed reference range, the

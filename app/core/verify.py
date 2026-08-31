@@ -25,8 +25,8 @@ what the lab printed, and labs do print slips with no name on them. Those
 attach, so the doctor sees the values, and they are reported as "not printed" on
 the card. What they never do is satisfy the contract. Until S11 they did: only
 `before_order` was refused, so an unnamed or undated slip closed the evidence
-side of an obligation on a check that was never made (reviews/
-codex-troubleshoot-1.md item 3). A check that could not be done is not a check
+side of an obligation on a check that was never made (a Codex adversarial
+finding preserved by `app/tests/test_verify.py`). A check that could not be done is not a check
 that passed, so the loop stays open, the card names which check stood down, and
 the Coordinator's request path handles it exactly as it handles a partial slip.
 

@@ -217,7 +217,7 @@ class FailsClosed(unittest.IsolatedAsyncioTestCase):
 # --------------------------------------------------------------------------- #
 # S11 wave A item 15: the immutable snapshot
 # --------------------------------------------------------------------------- #
-# reviews/codex-troubleshoot-1.md line 16:
+# Public Codex adversarial-review finding reproduced by the regression below:
 #
 #   "MEDIUM Safety-table regression coverage not mutation-complete
 #   (test_sentinel.py:16 iterates the current table; test_labs.py:53 pins

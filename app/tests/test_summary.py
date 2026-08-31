@@ -135,7 +135,7 @@ class WhatEachNumberMeans(unittest.TestCase):
 
 
 class TheDayIsTheDoctorsDay(unittest.TestCase):
-    """S11 wave A item 19, from reviews/codex-troubleshoot-1.md line 20:
+    """Public Codex adversarial regression, S11 wave A item 19:
 
     "MEDIUM Daily summary uses UTC dates not Cairo (main.py:716;
     summary.py:69,177); barrier relays double-counted as treatment questions

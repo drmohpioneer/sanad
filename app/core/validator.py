@@ -120,7 +120,8 @@ _CLASS_OF_UNIT: dict[str, str] = {
 # by the unit standing next to them, which closed "the plan's 7 days licenses a
 # reply's 7 mg". It left the other half open: a bare number was compared on its
 # value alone, so "atorvastatin 40 mg" in the plan licensed "your blood pressure
-# is 40" in a reply (reviews/codex-troubleshoot-1.md item 4). The words in front
+# is 40" in a reply (a Codex adversarial finding preserved by
+# `app/tests/test_validator.py`). The words in front
 # of a bare number say what it is about, and those words are read here.
 #
 # Only three classes are read from context, and each of them is a phrase a

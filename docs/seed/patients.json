@@ -1,5 +1,5 @@
 {
-  "_note": "Synthetic demo data for Sanad. All names, phone numbers, and clinical details are fictional. Phone numbers use the fake prefix 0100 000 00xx so nothing resolves to a real subscriber. Loop 'type' is one of TEST, MONITOR, MEDICATION, VISIT (matches specs/S1-core-web-console.md and specs/S3-lab-extractor-chaser-report.md). due_in_days is resolved to a real due_at date in code at commit time, never by the model.",
+  "_note": "Synthetic demo data for Sanad. All names, phone numbers, and clinical details are fictional. Phone numbers use the fake prefix 0100 000 00xx so nothing resolves to a real subscriber. Loop 'type' is one of TEST, MONITOR, MEDICATION, VISIT, as defined by app/core/models.py and covered by app/tests/test_contract.py. due_in_days is resolved to a real due_at date in code at commit time, never by the model.",
   "patients": [
     {
       "name": "Ahmed Ali",

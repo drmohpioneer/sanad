@@ -313,11 +313,11 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
     def test_historical_record_and_deterministic_replay_match_exactly(self) -> None:
         historical = self.manifest["historical_live_reference"]
         self.assertEqual(
-            "private frozen S18 live results, recorded 2026-08-30",
+            "historical S18 live observation, recorded 2026-08-30",
             historical["source"],
         )
         self.assertEqual(
-            "research/s18-live-results.md in the frozen private Sanad tree",
+            "original observation summarized here; checksum retained for provenance",
             historical["source_file"],
         )
         self.assertEqual(S18_LIVE_RESULTS_SHA256, historical["source_sha256"])

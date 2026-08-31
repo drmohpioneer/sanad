@@ -71,7 +71,7 @@ class TheNameOnTheSlip(unittest.TestCase):
         self.assertTrue(verdict.identity_failed)
 
     def test_a_slip_with_no_name_printed_attaches_but_never_satisfies(self) -> None:
-        """S11 wave A item 3, from reviews/codex-troubleshoot-1.md line 4:
+        """Public Codex adversarial regression, S11 wave A item 3:
 
         "HIGH Undated or unnamed evidence can satisfy a contract:
         verify.satisfies rejects only before_order; not_printed passes

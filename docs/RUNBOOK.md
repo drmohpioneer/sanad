@@ -253,8 +253,8 @@ not bump the run id: for a clean take, run all six steps.
 
 ## 1b. Rehearsal order for spine v3
 
-`specs/video-spine-v3.md` has the full beat timing and narration. This section
-is the order to run the sections above in for that spine, plus the exact
+The complete recorded-demo timing and narration are preserved in this public
+section. This is the order to run the sections above in for that spine, plus the exact
 patient phrases and slips each beat needs, so nothing is re-typed from memory
 on the day. It does not repeat what the sections below already say; it points
 at them.
@@ -358,8 +358,8 @@ to play this beat, and both are true to the code:
   Resolver hands the barrier to the doctor, and the card's `tried` field
   already says a public lab was offered and refused, before the doctor reads
   a word. Answer it with: "The hospital lab is free, go there." Rehearse
-  that exact sentence, since it is what the narration in
-  `specs/video-spine-v3.md` describes the doctor saying.
+  that exact sentence, since it is what the recorded-demo narration describes
+  the doctor saying.
 
 On a doctor who is not enrolled, or if you skip step 7 above, this beat runs
 exactly as it always has: straight to the doctor, no Resolver turn, no

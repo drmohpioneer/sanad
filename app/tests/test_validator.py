@@ -143,7 +143,7 @@ class TypedNumbers(unittest.TestCase):
 
 
 class ABareNumberStillCarriesAClass(unittest.TestCase):
-    """S11 wave A item 4, from reviews/codex-troubleshoot-1.md line 5:
+    """Public Codex adversarial regression, S11 wave A item 4:
 
     "HIGH Validator licenses bare numbers across classes: 'Your blood pressure
     is 40' passes against 'atorvastatin 40 mg' (validator.py:471,482)."

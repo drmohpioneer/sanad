@@ -1,6 +1,7 @@
 """The security audit's fixes, each with the defect it closes.
 
-Source: reviews/security-audit-2026-08-29.md, via specs/S10-security-fixes-brief.md.
+The public regression evidence is this module: each test names the defect it
+closes and drives the affected implementation path directly.
 
 H1 (the admin secret in the query string), M3 (the bind race) and M2 (unbounded
 uploads and an unbounded ffmpeg) are the three that had a way in. The rest of

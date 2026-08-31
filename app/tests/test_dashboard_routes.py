@@ -765,7 +765,7 @@ class NoUnauthenticatedModelRouteExists(unittest.TestCase):
     quota; /spike/voice took an arbitrary upload, shelled it through ffmpeg and
     called Gemini again. Neither had a check of any kind, and the module-level
     ADK session service they shared grew one session per call and dropped none.
-    The S0 proof they existed for is written down in research/s0-results.md.
+    This public regression proves neither route remains registered.
     """
 
     def test_neither_spike_route_is_registered(self) -> None:

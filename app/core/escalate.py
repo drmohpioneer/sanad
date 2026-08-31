@@ -4,7 +4,8 @@
 a patient. It tells him to stop waiting here and go, and it is the reason he
 stops typing. Until now it was said FIRST on every escalating path: the
 reassurance went out, and only then were the escalation event, the relay and the
-doctor's card written (reviews/codex-troubleshoot-1.md item 10). A Firestore
+doctor's card written (a Codex adversarial-review finding preserved by
+`app/tests/test_codex_races.py`). A Firestore
 timeout, a cold instance or a crash in between left the worst state this system
 can be in: a patient who has been told to stop waiting, and a doctor who was
 never told anything at all.

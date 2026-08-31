@@ -16,8 +16,9 @@ combination through it and asserts that sum.
 The day is Cairo's day, not UTC's. Cairo runs two or three hours ahead, so
 everything between midnight and 03:00 Cairo lands on the previous UTC date; a
 critical result escalated at 01:30 used to fall out of that morning's summary
-and reappear on the day before it happened (reviews/codex-troubleshoot-1.md
-item 19). `today()` is the helper every caller should date a summary with.
+and reappear on the day before it happened (a Codex adversarial finding
+preserved by `app/tests/test_summary.py`). `today()` is the helper every caller
+should date a summary with.
 
 Two counts are one count when they are one case. A barrier the Coordinator
 escalated opens a bucket on the loop and a card on the relay, and both used to
@@ -77,7 +78,8 @@ def today(when: Optional[datetime] = None) -> date:
     Cairo runs two or three hours ahead of UTC, so everything a patient sends
     between midnight and 03:00 Cairo lands on the previous UTC date. A critical
     result escalated at 01:30 fell out of that morning's summary and reappeared
-    on the day before it happened (reviews/codex-troubleshoot-1.md item 19).
+    on the day before it happened; `app/tests/test_summary.py` preserves the
+    public regression.
     """
     return (when or datetime.now(timezone.utc)).astimezone(timing.CAIRO).date()
 

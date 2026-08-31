@@ -368,7 +368,7 @@ class AliasesAndUnknownAnalytes(unittest.TestCase):
 
 
 class TheEctopicRuleNeedsTwoFacts(unittest.TestCase):
-    """S11 wave A item 2, from reviews/codex-troubleshoot-1.md line 3:
+    """Public Codex adversarial regression, S11 wave A item 2:
 
     "HIGH Any positive pregnancy test becomes critical without abdominal pain
     (SAFETY.md:96 requires both; labs.py:78 LabRule needs_slip_cutoff,
@@ -458,7 +458,7 @@ class TheEctopicRuleNeedsTwoFacts(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 # S11 wave A item 15: the immutable snapshot and the boundary of every rule
 # --------------------------------------------------------------------------- #
-# reviews/codex-troubleshoot-1.md line 16:
+# Public Codex adversarial-review finding reproduced by the regression below:
 #
 #   "MEDIUM Safety-table regression coverage not mutation-complete
 #   (test_sentinel.py:16 iterates the current table; test_labs.py:53 pins

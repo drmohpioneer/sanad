@@ -1,8 +1,8 @@
 """S18: a reply revives an unreachable loop, and a missing contract is named.
 
-Both halves come from `research/s17-live-results.md`, and both are about the
-same thing said twice: an obligation that exists in the doctor's sentence and
-nowhere Sanad can act on it.
+Both halves preserve observed failures as public regressions, and both are
+about the same thing said twice: an obligation that exists in the doctor's
+sentence and nowhere Sanad can act on it.
 
   1. Defect 3 of that file, whose cause is defect 1 of the reply lane. The
      patient wrote "I'm not doing the test, it's too expensive" and the barrier

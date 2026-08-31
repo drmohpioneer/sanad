@@ -87,7 +87,7 @@ def normalize(text: Optional[str]) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Net one: the must-wake table (specs/sentinel-list.md v2, verbatim)
+# Net one: the must-wake table, frozen publicly by app/tests/test_sentinel.py
 # --------------------------------------------------------------------------- #
 MUST_WAKE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("chest pain / pressure", (
@@ -329,8 +329,8 @@ def concept_net(haystack: str) -> Optional[str]:
             return concept
     return None
 
-# specs/sentinel-list.md §2. Regression fixtures for the code net and negative
-# examples for the model net, so the same six sentences guard both.
+# Regression fixtures for the code net and negative examples for the model net,
+# frozen publicly by app/tests/test_sentinel.py so the same six guard both.
 NEVER_WAKE: tuple[str, ...] = (
     "صداع خفيف من الصبح",
     "الدوا بيعملي غثيان بسيط",
@@ -340,7 +340,7 @@ NEVER_WAKE: tuple[str, ...] = (
     "sadri kan wag3ny embare7 bas ra7",
 )
 
-# The one reply an emergency ever gets. Never "متقلقش" (specs/sentinel-list.md).
+# The one reply an emergency ever gets. Never "متقلقش"; see docs/SAFETY.md.
 #
 # Arabic conjugates the imperative, so the same three lines exist in three
 # forms: to a man, to a woman, and - when the record does not say - phrased as

@@ -65,8 +65,8 @@ class TheScheduleWindow(unittest.TestCase):
     def test_a_wake_up_may_send_the_reminder_that_is_due_now(self) -> None:
         """Otherwise a scheduled task would fire and nothing would happen.
 
-        Zero days is the ladder step S3 already owns, and it is allowed only on
-        a wake-up (specs/S6-care-coordinator.md, acceptance 2).
+        Zero days is the ladder step the chaser already owns, and it is allowed
+        only on a wake-up. This test is the public acceptance evidence.
         """
         decision = policy.check(
             "schedule_next_contact", {"days_from_now": 0}, facts(wake=True)

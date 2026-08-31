@@ -69,8 +69,8 @@ def resolve(names: Sequence[str], fragment: str) -> Match:
 
 
 # --------------------------------------------------------------------------- #
-# The second question, added at S6: is the name printed on this slip the name
-# on the record? (specs/S6-care-coordinator.md item B, the verifier)
+# The second question: is the name printed on this slip the name on the record?
+# Public coverage lives in app/tests/test_names.py and app/tests/test_verify.py.
 # --------------------------------------------------------------------------- #
 # A lab prints a name the way the receptionist typed it: with a title in front
 # of it, with the father's name added or dropped, in Arabic when the record is
@@ -126,8 +126,8 @@ def same_person(printed: str, record: str) -> tuple[bool, str]:
 
 
 # --------------------------------------------------------------------------- #
-# The third question, added at rev 17: what does an Arabic sentence call him?
-# (specs/S6-fix-queue-rev17.md item 11)
+# The third question: what does an Arabic sentence call him?
+# Public coverage lives in app/tests/test_names.py.
 # --------------------------------------------------------------------------- #
 # The doctor dictates on camera in English, so the record holds "Ahmed Ali" and
 # every Arabic line Sanad sends greeted him as "يا Ahmed": Latin letters inside

@@ -100,8 +100,8 @@ INITIAL_COUNTS = {
 # these numbers into state; it derives its result through the real routes and
 # must match this independently recorded acceptance oracle exactly.
 HISTORICAL_LIVE_FINAL = {
-    "source": "private frozen S18 live results, recorded 2026-08-30",
-    "source_file": "research/s18-live-results.md in the frozen private Sanad tree",
+    "source": "historical S18 live observation, recorded 2026-08-30",
+    "source_file": "original observation summarized here; checksum retained for provenance",
     "source_sha256": "f6d17a70ac77261479eb59f52ff8d151817c337aeb140153529d89f5e7c7fe0c",
     "observed_window": "2026-08-30 05:47 to 06:15 Africa/Cairo",
     "beat_3_quiet_hours_audit": (

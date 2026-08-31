@@ -3,7 +3,8 @@
 Every dependency on the patient's lane is somebody else's service: Gemini for
 the triage vote, the reply, the transcript and the photo, Cloud Storage for the
 bytes. Each of them can be slow in a way that is indistinguishable from being
-down, and none of them had a deadline (reviews/codex-troubleshoot-1.md item 11).
+down, and none of them had a deadline (a Codex adversarial finding preserved by
+`app/tests/test_wave_c.py`).
 Two things went wrong because of that, and they are different problems:
 
   no timeout    a hung call held the request open until the Cloud Run instance

@@ -1,9 +1,10 @@
 """Wave B: what Sanad claims before it acts, and what it does when acting fails.
 
-Eight defects from reviews/codex-troubleshoot-1.md live here, and every one of
-them is the same shape: a thing that happens twice, or a thing that is written
-in the wrong order, so a retry either duplicates work or loses it. Each class
-below is one of them, and each starts from the test that reproduced it.
+Eight adversarial-review defects live here as public regressions, and every one
+of them is the same shape: a thing that happens twice, or a thing that is
+written in the wrong order, so a retry either duplicates work or loses it.
+Each class below is one of them, and each starts from the test that reproduced
+it.
 
 Nothing here asks a model anything and nothing reaches Firestore: the store is
 an in-memory double whose claims behave the way the real transactions behave

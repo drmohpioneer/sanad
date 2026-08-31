@@ -5,8 +5,9 @@ this file existed the model was its only source. When Gemini returned it empty
 the loop was committed with no deadline, no ladder was queued for it, and the
 confirm card said "no due date was dictated" about a sentence that dictated one.
 
-Measured, not assumed: research/s16-live-results.md defect 2. On revision 26 the
-runbook's own beat-1 dictation ("Lipid panel in 2 weeks. Blood pressure twice a
+Measured, not assumed; the failure and fix are preserved publicly in
+`app/tests/test_due_dates.py`. On revision 26 the runbook's own beat-1 dictation
+("Lipid panel in 2 weeks. Blood pressure twice a
 day for 7 days. Come back in 3 weeks.") came back with `due_in_days` empty on
 the TEST and the MONITOR loop, on two consecutive dictations for two different
 patients, so Confirm queued nine follow-up tasks instead of twelve and the lipid

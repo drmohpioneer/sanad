@@ -1,7 +1,8 @@
 """S17: the due date the model forgot, read back out of the doctor's sentence.
 
-research/s16-live-results.md defect 2, measured on revision 26: the runbook's
-own beat-1 dictation came back from Gemini with `due_in_days` empty on the TEST
+The measured revision-26 defect and its fix are preserved here as public
+regressions: the runbook's own beat-1 dictation came back from Gemini with
+`due_in_days` empty on the TEST
 loop and on the MONITOR loop, twice in a row, for two different patients. The
 confirm card then said "no due date was dictated" about a sentence that says
 "in 2 weeks", Confirm queued nine follow-up tasks instead of twelve, and the

@@ -15,9 +15,9 @@ the last two exceptions: POST /spike/gemini and POST /spike/voice, the S0
 spikes, had no check of any kind on a public service, so anyone with the URL
 had a free Gemini proxy and a free transcription service on this billing
 account, and the module-level ADK session service they shared grew a session
-per call and never dropped one. The S0 proof lives in research/s0-results.md,
-which is where a proof belongs; it does not need to stay reachable in
-production to count.
+per call and never dropped one. The removal is preserved as public regression
+coverage in `app/tests/test_dashboard_routes.py`; those unauthenticated routes
+do not need to stay reachable in production to prove the product path.
 """
 
 from __future__ import annotations

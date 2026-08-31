@@ -439,9 +439,11 @@ curl -fsS -X POST -H "X-Sanad-Admin: $S" -H "Content-Type: application/json" \
 - **Broad general-clinic floor, cardiology-shaped demo.** The sentinel fixtures and lab table span several specialties, and the seed set includes cardiology, endocrinology, nephrology, obstetrics and pediatrics. It is not validated for clinical use in any specialty; that is what the pilot is for.
 - **Nothing about real-patient readiness is done.** A Law 151/2020 review, a real consent flow and clinical sign-off on the thresholds all come before a single real patient touches this, and none of them exists yet.
 
-The public copy omits private planning notes and reviews; a few code comments
-cite them by name. The behaviour is defined by `app/`, its tests and these
-documents.
+Development was AI-assisted. Codex and Claude were used as adversarial
+reviewers to challenge the safety, concurrency and product claims; findings
+that changed behaviour are preserved as public regression tests. Private
+working notes are excluded. The public evidence is the implementation, tests,
+architecture, safety documentation and deployed service.
 
 ## License
 

@@ -1,7 +1,7 @@
 """Owns audio in and text out.
 
 Telegram-shaped voice notes arrive as OGG/Opus; Gemini wants 16 kHz mono WAV.
-Proven end to end in S0, Arabic transcript verbatim (research/s0-results.md).
+The bounded transcript path is covered publicly by `app/tests/test_wave_c.py`.
 The spike route that proved it was deleted at rev 17, because an unauthenticated
 transcription endpoint on a public service is somebody else's free service; the
 Registrar and the patient path go through this one code path and always did.
