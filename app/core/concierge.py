@@ -53,9 +53,9 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from . import (
-    bounded, chaser, coordinator, escalate, events, extractor, gender, intents,
-    lang, photos, provenance, report, sentinel, store, templates, validator,
-    vitals,
+    auditor, bounded, chaser, coordinator, escalate, events, extractor, gender,
+    intents, lang, photos, policy as policy_module, provenance, report,
+    sentinel, settings, store, templates, validator, vitals,
 )
 from .adapters import OutboundMessage, fanout
 from .channel_contracts import NotificationClass
@@ -1038,6 +1038,34 @@ async def mark_reviewed(doctor: Doctor, loop_id: str) -> None:
     # Coordinator's close_verified_loop tool reads it and is refused without it
     # (core/policy.py). The two-state gate is unchanged: this is still the only
     # place it is ever set, and only a doctor's tap reaches it.
+    #
+    # S24. The Closure Auditor reads the record before either write below, so a
+    # gap it names is on the trail before the loop closes rather than after it.
+    # It never holds this path up and it is not allowed to: "Reviewed" is the
+    # doctor's own tap on his own patient's card, a danger card included, and
+    # his authority is the one thing in Sanad no agent may stand in front of.
+    # What a named gap costs here is a line on the record and, when a model
+    # named it, a line on the message he gets back.
+    #
+    # Two conditions on asking at all. It is the v2 fact cohort only, so a
+    # doctor who was never enrolled taps Reviewed and gets exactly the close he
+    # has always had, with none of this turn's deadline added to his tap. And
+    # the scale comes from core/settings.py, because a MONITOR loop's slots are
+    # counted in Sanad days: at a rehearsal scale, real calendar days would
+    # count days nobody was ever asked on (wave A F11).
+    held = None
+    if doctor.workspace_facts_enabled:
+        _, scale = await settings.current()
+        held = await auditor.review_close(
+            loop, policy_module.for_doctor(doctor), time_scale=scale)
+    if held is not None:
+        await events.append_event(
+            doctor.id, "system", f"closed with a gap on the record: {held.gap}",
+            patient_id=loop.patient_id, loop_id=loop.id,
+            meta={"auditor": held.as_meta(), "note": held.closed_text,
+                  "closed_anyway": "the doctor tapped Reviewed",
+                  "decided_by": held.decided_by},
+        )
     if doctor.workspace_facts_enabled:
         # This is the doctor's close transition.  `updated_at` is not a close
         # fact: later edits can move it, and seeded historical green rows are
@@ -1054,7 +1082,14 @@ async def mark_reviewed(doctor: Doctor, loop_id: str) -> None:
         doctor.id, "system", f"{loop.title} reviewed and closed",
         patient_id=loop.patient_id, loop_id=loop.id,
     )
-    await out.send(to_doctor, OutboundMessage(text=f"{loop.title}: closed."))
+    # He is told about a gap a model found, and not about the verifier's own
+    # refusal: that one is already printed on the card he just tapped, and it
+    # fires on every slip with no name on it, which in this clinic is most of
+    # them.
+    closed = f"{loop.title}: closed."
+    tell_him = held is not None and held.by_model
+    await out.send(to_doctor, OutboundMessage(
+        text=f"{closed}\n{held.closed_text}" if tell_him else closed))
     if patient is not None:
         await report.send_if_complete(doctor, patient)
 

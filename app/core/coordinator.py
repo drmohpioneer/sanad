@@ -63,8 +63,9 @@ from datetime import datetime
 from typing import Any, Optional
 
 from . import (
-    contract, events, gender, labs, lang, names, policy as policy_module,
-    sentinel, settings, store, tasks, templates, timing,
+    auditor, contract, events, gender, labs, lang, names,
+    policy as policy_module, sentinel, settings, store, tasks, templates,
+    timing,
 )
 from .adapters import OutboundMessage, fanout
 from .models import Doctor, Loop, Patient
@@ -934,14 +935,47 @@ async def _execute(turn: Turn, decision: policy_module.Decision) -> dict[str, An
             turn.loop.id, "the evidence arrived")
 
     elif tool == "close_verified_loop":
+        # S24. The last door. core/policy.py has already allowed this close, so
+        # the Closure Auditor is asked one bounded question about a close the
+        # code path already permits: is the record finished? A named gap holds
+        # the close open and goes on the trail; the loop is left exactly as it
+        # was. A model that cannot be reached is a second opinion that is
+        # missing and not a gate that is down, so the close proceeds.
+        #
+        # It is asked on the v2 fact cohort only. A doctor who was never
+        # enrolled keeps the close he already had, byte for byte, and pays none
+        # of the deadline this turn would otherwise carry.
+        held = None
         if turn.doctor.workspace_facts_enabled:
+            held = await auditor.review_close(
+                turn.loop, turn.policy, time_scale=turn.facts.time_scale)
+        if held is not None:
+            detail["held"] = held.gap
+            detail["auditor"] = held.as_meta()
+            # A monitoring loop wakes every day and the evening missing from
+            # day 6 is missing on all of them. The doctor needs that once.
+            history = await events.last_events(turn.doctor.id)
+            said_before = auditor.already_noted(
+                held.gap, [row.text for row in history
+                           if row.loop_id == turn.loop.id])
+            detail["noted"] = not said_before
+            if not said_before:
+                await events.append_event(
+                    turn.doctor.id, "system",
+                    f"{auditor.REFUSED}{held.gap}",
+                    patient_id=turn.patient.id, loop_id=turn.loop.id,
+                    meta={"auditor": held.as_meta(), "note": held.text,
+                          "decided_by": held.decided_by},
+                )
+        elif turn.doctor.workspace_facts_enabled:
             # Gate 3's closure metric needs the close transition itself.  A
             # generic updated_at value can move later and seeded done rows are
             # historical even when they were inserted today.
             await store.close_loop(turn.loop.id, closed_at=store.now())
+            detail["state"] = "done"
         else:
             await store.update_loop(turn.loop.id, state="done")
-        detail["state"] = "done"
+            detail["state"] = "done"
 
     elif tool == "pause_loop":
         await store.update_loop(turn.loop.id, paused=True)

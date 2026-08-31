@@ -32,6 +32,12 @@ from typing import Any
 # from becoming a place a dose could appear.
 ALLOWED_FIELDS: frozenset[str] = frozenset({"patient", "doctor", "date", "analyte"})
 
+# S24, doctor-facing only, and deliberately not in TEMPLATES below: these
+# two carry a model-authored gap (core/auditor.py caps it), so they may
+# never be rendered to a patient by `render` the way a template can.
+CLOSE_HELD = "Sanad is completing the record first: {gap}"
+CLOSED_WITH_GAP = "Closed. One thing is still missing on the record: {gap}"
+
 # "we will check again on <date>"
 CHECK_AGAIN = {
     "ar": {
