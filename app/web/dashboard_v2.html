@@ -93,6 +93,7 @@
   const BASE = "/c/" + TOKEN;
   const S = {
     workspaceSnapshot:null, polling:false, failedPolls:0,
+    inflight:Promise.resolve(false),
     selectedQueue:"danger", patientOffset:0, patientId:null,
     drafts:Object.create(null), actionError:"", pollError:"", renderedQueueKey:""
   };
@@ -697,33 +698,50 @@
     showError("Patient view refreshed; reopen from the list.", false);
   }
 
+  // One snapshot load runs at a time.  What used to happen when a second call
+  // arrived mid-flight was that it returned false on the spot: the pager, the
+  // patient row and the post-action refresh all run through here, so a click
+  // that collided with the 3-second tick died with no error, no retry, and no
+  // state to catch up on the following tick.  A queue replaces the drop.  Each
+  // call takes the baton from the call ahead of it, installs its own, and runs
+  // the moment the one ahead settles, so clicks land in the order they were
+  // made.  The background tick is the only caller that still gives up, because
+  // a tick already covered by a load in flight has nothing to add.
   async function poll(request){
-    if (S.polling) return false;
     const options = request && typeof request === "object" ? request : {};
-    const requestedOffset = Number.isInteger(options.patientOffset) ? options.patientOffset : S.patientOffset;
-    const requestedPatientId = Object.prototype.hasOwnProperty.call(options, "patientId") ? options.patientId : S.patientId;
-    S.polling = true;
+    if (options.background && S.polling) return false;
+    const ahead = S.inflight;
+    let release = function(){};
+    S.inflight = new Promise(function(resolve){ release = resolve; });
     try{
-      const candidate = await loadWorkspaceSnapshot(requestedOffset, requestedPatientId);
-      validateWorkspaceSnapshot(candidate);
-      if (requestedPatientId && (!candidate.selected_patient || candidate.selected_patient.patient.id !== requestedPatientId)) throw new Error("selected patient does not match the request");
-      commitWorkspaceSnapshot(candidate);
-      S.patientOffset = requestedOffset;
-      S.patientId = requestedPatientId;
-      S.failedPolls = 0;
-      clearError();
-      render();
-      return true;
-    }catch(error){
-      S.failedPolls += 1;
-      showError(
-        S.workspaceSnapshot
-          ? "Could not refresh the complete workspace. The previous complete snapshot is still shown."
-          : "Could not load a complete workspace. No snapshot is being shown.",
-        false
-      );
-      return false;
-    }finally{ S.polling = false; }
+      // A load ahead of this one failing does not fail this call, which
+      // still gets its own turn on the network.
+      try{ await ahead; }catch(waited){ void waited; }
+      const requestedOffset = Number.isInteger(options.patientOffset) ? options.patientOffset : S.patientOffset;
+      const requestedPatientId = Object.prototype.hasOwnProperty.call(options, "patientId") ? options.patientId : S.patientId;
+      S.polling = true;
+      try{
+        const candidate = await loadWorkspaceSnapshot(requestedOffset, requestedPatientId);
+        validateWorkspaceSnapshot(candidate);
+        if (requestedPatientId && (!candidate.selected_patient || candidate.selected_patient.patient.id !== requestedPatientId)) throw new Error("selected patient does not match the request");
+        commitWorkspaceSnapshot(candidate);
+        S.patientOffset = requestedOffset;
+        S.patientId = requestedPatientId;
+        S.failedPolls = 0;
+        clearError();
+        render();
+        return true;
+      }catch(error){
+        S.failedPolls += 1;
+        showError(
+          S.workspaceSnapshot
+            ? "Could not refresh the complete workspace. The previous complete snapshot is still shown."
+            : "Could not load a complete workspace. No snapshot is being shown.",
+          false
+        );
+        return false;
+      }finally{ S.polling = false; }
+    }finally{ release(); }
   }
 
   byId("refreshButton").onclick = poll;
@@ -735,7 +753,10 @@
   byId("closeDrawer").onclick = function(){ closePatientDrawer(); S.patientId = null; };
   byId("patientDrawer").onclick = function(event){ if (event.target === byId("patientDrawer")) byId("closeDrawer").click(); };
 
-  (async function boot(){ await poll(); setInterval(poll, 3000); })();
+  (async function boot(){
+    await poll();
+    setInterval(function(){ poll({background:true}); }, 3000);
+  })();
   </script>
 </body>
 </html>
