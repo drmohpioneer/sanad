@@ -1,5 +1,7 @@
 # Sanad
 
+**An AI agent that owns a doctor's care plan after the visit ends.**
+
 **Sanad** is Arabic for "the one you lean on." A doctor dictates his plan once, in the words he would actually say, and Sanad owns everything after the visit: it chases the follow-up test on a schedule nobody has to remember, reads the lab photo that comes back and verifies the name and the date on it before it counts, answers the patient's questions only from what the doctor himself wrote, and wakes the doctor immediately when something is genuinely dangerous. Seven Gemini agents hand work to each other through code contracts, a deterministic safety kernel decides every clinical boundary, and Cloud Tasks carries the objective across days without anybody present. **The doctor gives the plan once. Sanad carries it until reality matches.**
 
 ![The Sanad cockpit: five decision queues, a critical potassium the code table graded, and the right rail printing which agent decided what](docs/img/cockpit-proof-lines.png)
@@ -7,6 +9,11 @@
 > The right-hand rail is the point of the picture. `CLOSURE AUDITOR / held this close` is a Gemini agent refusing a close that the code path had already allowed, with the gap it found printed underneath and the file that owns the decision named beside it.
 
 **Live on Google Cloud Run, `europe-west1`:** <https://sanad-854762827572.europe-west1.run.app>
+
+> **Every clinical boundary is decided by code, never by a model.** A model on the
+> safety path casts a bounded yes or no vote that can only ADD a relay or an
+> escalation, never remove one, and every one of those calls fails closed. That is
+> the one property the rest of this document is built on.
 
 `GET /health` on that URL answers with the project, the region and the exact revision serving the request. The same line runs across the top of every page in the app, read from the container's own environment rather than typed into an HTML file.
 
@@ -71,6 +78,13 @@ Facts, with the file that proves each one. The three headings are the published 
 ## The problem this comes from
 
 A doctor sees a patient, gives instructions, and the visit ends. What happens next is usually silence. The patient does not come back for the follow-up test. He forgets when to take the new medication, or stops it without saying so. Then, days or weeks later, he messages the doctor directly, at any hour, often in a panic, because the plan was never written down anywhere he could return to and nobody was chasing the loose ends on his behalf. The doctor either drops everything to answer, or the message sits unread. Neither is sustainable across a full patient panel, and both are worse for the patient.
+
+Nothing on the shelf closes it. A patient portal waits for a patient to log in. A
+reminder system sends the same message on a date and cannot read what comes back. An
+AI scribe writes the visit down and stops when the visit does. A chatbot answers when
+it is asked, which is the one thing a patient who has gone quiet will never do. Every
+one of them waits. The work here is the work nobody is doing: going out, on a
+schedule, and not stopping until the evidence exists or the doctor is told why not.
 
 Sanad exists to close that gap. The doctor dictates his instructions after a visit, the way he already talks: "get a lipid panel from Ahmed in two weeks, start him on atorvastatin, check blood pressure daily for a week." Sanad turns that into a structured record and a set of care loops, confirms it with the doctor in one tap, and then owns those loops. **The doctor becomes the exception handler, not the project manager.**
 
