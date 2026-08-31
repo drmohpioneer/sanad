@@ -8,7 +8,9 @@
 
 > The right-hand rail is the point of the picture. `CLOSURE AUDITOR / held this close` is a Gemini agent refusing a close that the code path had already allowed, with the gap it found printed underneath and the file that owns the decision named beside it.
 
-**Live on Google Cloud Run, `europe-west1`:** <https://sanad-854762827572.europe-west1.run.app>
+**Live service health, Google Cloud Run `europe-west1`:** <https://sanad-854762827572.europe-west1.run.app/health>
+
+**Demo video:** [I'm a doctor. I built an AI that follows up with patients.](https://youtu.be/kzErMU828Y8)
 
 > **Every clinical boundary is decided by code, never by a model.** A model on the
 > safety path casts a bounded yes or no vote that can only ADD a relay or an
