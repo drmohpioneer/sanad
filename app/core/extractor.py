@@ -49,6 +49,7 @@ from . import (
     provenance, sentinel, settings, storage, store, timing, verify, vitals,
 )
 from .adapters import OutboundMessage, fanout
+from .channel_contracts import NotificationClass
 from .models import Doctor, Event, Loop, Patient, PhotoReading
 
 log = logging.getLogger("sanad.extractor")
@@ -582,7 +583,14 @@ async def escalate_bp(
         )
         await out.send(to_doctor, OutboundMessage(
             text=f"Critical blood pressure for {patient.name}.",
-            patient_id=patient.id, meta={"decided_by": DECIDED_VITALS},
+            patient_id=patient.id,
+            meta={
+                "decided_by": DECIDED_VITALS,
+                **(
+                    {"notification_class": NotificationClass.DANGER.value}
+                    if doctor.workspace_facts_enabled else {}
+                ),
+            },
             card=vitals.red_card(patient.name, verdict, extra)))
 
     landed = await escalate.told_or_fail_closed(
@@ -855,7 +863,14 @@ async def _handle_lab(
             )
             await out.send(to_doctor, OutboundMessage(
                 text=f"Critical lab value for {patient.name}.",
-                patient_id=patient.id, meta={"decided_by": DECIDED_LABS},
+                patient_id=patient.id,
+                meta={
+                    "decided_by": DECIDED_LABS,
+                    **(
+                        {"notification_class": NotificationClass.DANGER.value}
+                        if doctor.workspace_facts_enabled else {}
+                    ),
+                },
                 card=card))
 
         landed = await escalate.told_or_fail_closed(
@@ -903,7 +918,13 @@ async def _handle_lab(
         headline = f"{patient.name} sent a result that needs your eyes."
     await out.send(to_doctor, OutboundMessage(
         text=headline, card=card, patient_id=patient.id,
-        meta={"decided_by": DECIDED_LABS}))
+        meta={
+            "decided_by": DECIDED_LABS,
+            **(
+                {"notification_class": NotificationClass.URGENT_SLA.value}
+                if flagged and doctor.workspace_facts_enabled else {}
+            ),
+        }))
 
     # Evidence arrived and did not satisfy the contract: a part is missing, or
     # it was collected before the doctor ordered it. That is the Coordinator's

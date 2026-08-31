@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Sanad · Doctor workspace</title>
+  <style>
+    :root{
+      --ink:#13201f;--muted:#657270;--line:#dce4e1;--paper:#f4f7f5;
+      --card:#fff;--teal:#0f766e;--teal-soft:#e7f5f2;--red:#b42318;
+      --red-soft:#fff0ee;--amber:#9a6700;--amber-soft:#fff7df;
+      --blue:#175cd3;--blue-soft:#edf4ff;--shadow:0 14px 36px rgba(22,45,41,.08)
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    .shell{max-width:1440px;margin:auto;min-height:100vh;padding:22px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:22px}
+    .brand{display:flex;align-items:center;gap:12px}.mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--teal);color:#fff;font-weight:800;font-size:18px}.brand h1{font-size:19px;margin:0}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}
+    .head-actions{display:flex;align-items:center;gap:10px}.sync{padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:12px}.sync strong{color:var(--teal)}
+    .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:9px 12px;font-weight:650}.btn:hover{border-color:#b7c6c1}.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}.btn:disabled{opacity:.55;cursor:wait}
+    .error{display:none;margin:0 0 16px;padding:11px 13px;border:1px solid #f4b7b1;background:var(--red-soft);color:var(--red);border-radius:10px}.error.show{display:block}
+    .hero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.metric{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:var(--shadow);text-align:left;color:inherit;cursor:pointer}.metric:hover,.metric:focus-visible{border-color:#9fb9b3;transform:translateY(-1px)}.metric .label{color:var(--muted);font-size:12px;letter-spacing:.03em}.metric .number{font-size:31px;line-height:1.1;font-weight:760;margin:7px 0}.metric .note{font-size:12px;color:var(--muted)}.metric.attention{border-top:3px solid var(--red)}.metric.working{border-top:3px solid var(--teal)}.metric.closed{border-top:3px solid #4b9b69}.metric.patients{border-top:3px solid #8a67c7}
+    .grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,.8fr);gap:18px}.column{display:grid;gap:18px;align-content:start}.panel{background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);overflow:hidden}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 17px;border-bottom:1px solid var(--line)}.panel-head h2{font-size:15px;margin:0}.panel-head p{font-size:12px;color:var(--muted);margin:2px 0 0}.panel-body{padding:15px 17px}
+    .tabs{display:flex;gap:7px;overflow:auto;padding:12px 16px;border-bottom:1px solid var(--line)}.tab{white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 10px;color:var(--muted);font-size:12px}.tab.active{background:var(--teal-soft);border-color:#9ed7cf;color:#075e57;font-weight:700}.tab .badge{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;margin-left:5px;border-radius:10px;background:rgba(15,118,110,.1);font-size:11px}
+    .rows{display:grid;gap:9px}.row{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff}.row.danger{border-left:4px solid var(--red)}.row.urgent{border-left:4px solid var(--amber)}.row h3{font-size:14px;margin:0 0 4px}.row .meta{display:flex;gap:7px;flex-wrap:wrap;color:var(--muted);font-size:12px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef2f1;color:#53605e;font-size:11px}.row .text{margin:9px 0;color:#34413f}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.action-wrap{display:flex;gap:6px;flex:1 1 230px}.action-wrap input{min-width:100px;flex:1;border:1px solid var(--line);border-radius:9px;padding:8px}.action{border:1px solid #a7cbc5;background:var(--teal-soft);color:#075e57;border-radius:9px;padding:7px 10px;font-weight:650}
+    .empty{padding:25px 8px;text-align:center;color:var(--muted)}
+    .patient-list{display:grid;gap:7px}.patient{width:100%;text-align:left;border:1px solid var(--line);border-radius:11px;background:#fff;padding:11px}.patient:hover{background:#f8fbfa}.patient strong{display:block}.patient span{color:var(--muted);font-size:12px}.pager{display:flex;align-items:center;justify-content:space-between;margin-top:12px;color:var(--muted);font-size:12px}
+    .bp-head{display:flex;justify-content:space-between;gap:12px}.bp-value{font-size:28px;font-weight:760;margin:12px 0 4px}.bp-readings{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.reading{padding:6px 8px;background:var(--teal-soft);border-radius:8px;color:#075e57;font-variant-numeric:tabular-nums}.summary-line{margin:10px 0 0;color:var(--muted);font-size:12px}
+    .event-list{display:grid;gap:0}.event{padding:10px 0;border-bottom:1px solid var(--line)}.event:last-child{border:0}.event time{font-size:11px;color:var(--muted)}.event p{margin:3px 0}.event .kind{color:var(--teal);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+    .health{display:grid;grid-template-columns:1fr 1fr;gap:9px}.health div{padding:10px;border:1px solid var(--line);border-radius:10px}.health b{display:block;font-size:12px}.health span{font-size:11px;color:var(--muted)}
+    .drawer{display:none;position:fixed;inset:0;background:rgba(12,25,23,.35);padding:5vh 18px;z-index:5}.drawer.open{display:flex;justify-content:flex-end}.drawer-card{width:min(620px,100%);height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:18px;box-shadow:0 25px 70px rgba(0,0,0,.2)}.drawer-head{display:flex;align-items:center;justify-content:space-between}.drawer-head h2{margin:0}.detail-section{border-top:1px solid var(--line);padding-top:13px;margin-top:13px}.detail-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+    @media(max-width:900px){.hero{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.shell{padding:14px}.head-actions .sync{display:none}}
+    @media(max-width:520px){.hero{grid-template-columns:1fr 1fr;gap:8px}.metric{padding:13px}.metric .number{font-size:25px}header{align-items:flex-start}.brand p{max-width:180px}.panel-head{align-items:flex-start}.health{grid-template-columns:1fr}.drawer{padding:0}.drawer-card{height:100vh;border-radius:0}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><div class="mark">س</div><div><h1>Sanad</h1><p id="doctorLine">One truthful doctor workspace</p></div></div>
+      <div class="head-actions"><span class="sync" id="syncState">Reading workspace…</span><button class="btn" id="refreshButton" type="button">Refresh</button></div>
+    </header>
+    <p class="error" id="errorBox" role="alert"></p>
+    <section class="hero" aria-label="Workspace metrics">
+      <button class="metric attention" type="button" data-metric-queue="terminal_waiting_review"><div class="label">Terminal, waiting for review</div><div class="number" id="terminalMetric">-</div><div class="note">Review states and deadline outcomes</div></button>
+      <button class="metric working" type="button" data-metric-queue="sanad_working"><div class="label">Sanad working</div><div class="number" id="workingMetric">-</div><div class="note">Active obligations Sanad can advance</div></button>
+      <button class="metric closed" type="button" data-metric-queue="closed_today"><div class="label">Closed today</div><div class="number" id="closedMetric">-</div><div class="note" id="closedNote">Explicit close transitions only</div></button>
+      <button class="metric patients" type="button" data-metric-queue="active_patients"><div class="label">Active patients</div><div class="number" id="patientMetric">-</div><div class="note">True total, independent of this page</div></button>
+    </section>
+    <div class="grid">
+      <div class="column">
+        <section class="panel">
+          <div class="panel-head"><div><h2>Decision queues</h2><p>Every number opens exactly the rows counted in this snapshot.</p></div><span class="pill" id="snapshotLabel">schema 2.0</span></div>
+          <nav class="tabs" id="queueTabs" aria-label="Decision queue"></nav>
+          <div class="panel-body"><div class="rows" id="queueRows"></div></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><h2>Patients</h2><p id="patientPageLabel">Loaded from this snapshot</p></div></div>
+          <div class="panel-body"><div class="patient-list" id="patientRows"></div><div class="pager"><button class="btn" id="previousPatients" type="button">Previous</button><span id="patientRange"></span><button class="btn" id="nextPatients" type="button">Next</button></div></div>
+        </section>
+      </div>
+      <aside class="column">
+        <section class="panel">
+          <div class="panel-head"><div><h2>Blood pressure</h2><p>Selected by the server projection</p></div></div>
+          <div class="panel-body" id="bpBody"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><h2>Recent persisted events</h2><p>Identity-bearing cursor, full timestamp precision</p></div></div>
+          <div class="panel-body event-list" id="eventRows"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><h2>Delivery and system</h2><p>Configuration is not presented as delivery proof.</p></div></div>
+          <div class="panel-body health" id="healthRows"></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <div class="drawer" id="patientDrawer" aria-hidden="true"><article class="drawer-card"><div class="drawer-head"><h2 id="detailName">Patient</h2><button class="btn" id="closeDrawer" type="button">Close</button></div><div id="detailBody"></div></article></div>
+  <script>
+  const TOKEN = location.pathname.split("/")[2] || "";
+  const BASE = "/c/" + TOKEN;
+  const S = {
+    workspaceSnapshot:null, polling:false, failedPolls:0,
+    selectedQueue:"danger", patientOffset:0, patientId:null,
+    drafts:Object.create(null), actionError:"", pollError:"", renderedQueueKey:""
+  };
+  const byId = function(id){ return document.getElementById(id); };
+  const escapeHtml = function(value){
+    return String(value === null || value === undefined ? "" : value).replace(/[&<>"']/g, function(char){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char];
+    });
+  };
+  const displayTime = function(value){
+    const date = new Date(value || 0);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
+  };
+
+  async function loadWorkspaceSnapshot(patientOffset, patientId){
+    const query = new URLSearchParams({patient_offset:String(patientOffset), patient_limit:"20", event_limit:"500"});
+    if (patientId) query.set("patient_id", patientId);
+    if (S.workspaceSnapshot && S.workspaceSnapshot.event_cursor) query.set("event_cursor", S.workspaceSnapshot.event_cursor);
+    const response = await fetch("/api/v2/workspace-snapshot?" + query.toString(), {
+      headers:{"Accept":"application/json", "Authorization":"Bearer " + TOKEN},
+      cache:"no-store"
+    });
+    if (!response.ok) throw new Error("workspace snapshot -> " + response.status);
+    return response.json();
+  }
+
+  function validateWorkspaceSnapshot(snapshot){
+    const isObject = function(value){ return Boolean(value) && typeof value === "object" && !Array.isArray(value); };
+    const fail = function(message){ throw new Error(message); };
+    if (!snapshot || typeof snapshot.snapshot_id !== "string" || !snapshot.snapshot_id) throw new Error("snapshot_id is missing");
+    if (!snapshot || typeof snapshot.snapshot_id_kind !== "string" || !snapshot.snapshot_id_kind) throw new Error("snapshot_id_kind is missing");
+    if (!snapshot || typeof snapshot.schema_version !== "string" || !snapshot.schema_version) throw new Error("schema_version is missing");
+    if (!snapshot || typeof snapshot.as_of !== "string" || !snapshot.as_of) throw new Error("as_of is missing");
+    if (snapshot.schema_version !== "2.0") throw new Error("unsupported workspace schema");
+    if (snapshot.snapshot_id_kind !== "RECORD_VERSION") throw new Error("unsupported snapshot identity");
+    if (Number.isNaN(Date.parse(snapshot.as_of))) throw new Error("invalid snapshot time");
+    if (!isObject(snapshot.doctor) || typeof snapshot.doctor.name !== "string" || !isObject(snapshot.doctor.permissions)) fail("doctor projection is incomplete");
+    if (!isObject(snapshot.metrics) || !isObject(snapshot.queues) || !isObject(snapshot.rows)) fail("workspace projection is incomplete");
+
+    Object.keys(snapshot.rows).forEach(function(rowId){
+      const row = snapshot.rows[rowId];
+      if (!isObject(row) || row.id !== rowId) fail("workspace row identity mismatch");
+      if (row.card !== undefined && row.card !== null){
+        if (!isObject(row.card)) fail("workspace card is malformed");
+        if (row.card.actions !== undefined && !Array.isArray(row.card.actions)) fail("workspace card actions are malformed");
+        (row.card.actions || []).forEach(function(action){
+          if (!isObject(action) || typeof action.id !== "string") fail("workspace action is malformed");
+        });
+      }
+    });
+
+    const requireCountedRefs = function(block, name, embeddedRows){
+      if (!isObject(block) || !Number.isInteger(block.count) || block.count < 0 || !Array.isArray(block.row_ids)) fail(name + " is malformed");
+      if (block.count !== block.row_ids.length || new Set(block.row_ids).size !== block.row_ids.length) fail(name + " count does not match its rows");
+      block.row_ids.forEach(function(rowId){
+        if (typeof rowId !== "string" || !snapshot.rows[rowId]) fail(name + " references an unavailable row");
+      });
+      if (embeddedRows){
+        if (!Array.isArray(block.rows) || block.rows.length !== block.row_ids.length) fail(name + " embedded rows do not match");
+        block.rows.forEach(function(row, index){
+          if (!isObject(row) || row.id !== block.row_ids[index]) fail(name + " embedded row identity mismatch");
+        });
+      }
+    };
+    const queueNames = [
+      "danger","urgent_review","unclassified_red","doctor_actions","sanad_working","blocked",
+      "review_ready","verification_unknown","deadline_outcomes","terminal_waiting_review","closed_today","active_patients"
+    ];
+    queueNames.forEach(function(name){ requireCountedRefs(snapshot.queues[name], "queue " + name, true); });
+    const metricQueues = {
+      danger_unacknowledged:"danger",review_ready:"review_ready",deadline_outcomes:"deadline_outcomes",
+      sanad_working:"sanad_working",terminal_waiting_review:"terminal_waiting_review",
+      closed_today:"closed_today",active_patients_total:"active_patients"
+    };
+    Object.keys(metricQueues).forEach(function(metricName){
+      const metric = snapshot.metrics[metricName];
+      const queue = snapshot.queues[metricQueues[metricName]];
+      requireCountedRefs(metric, "metric " + metricName, false);
+      if (metric.count !== queue.count || JSON.stringify(metric.row_ids) !== JSON.stringify(queue.row_ids)) fail("metric " + metricName + " does not match its queue");
+    });
+
+    const page = snapshot.patients;
+    if (!isObject(page) || !Array.isArray(page.items) || !Number.isInteger(page.total) || page.total < 0 || !Number.isInteger(page.offset) || page.offset < 0 || !Number.isInteger(page.limit) || page.limit < 1 || typeof page.has_more !== "boolean") fail("patient page is malformed");
+    if (page.items.length > page.limit || page.offset + page.items.length > Math.max(page.total, page.offset) || page.has_more !== (page.offset + page.items.length < page.total)) fail("patient page bounds are inconsistent");
+    page.items.forEach(function(patient){
+      if (!isObject(patient) || typeof patient.name !== "string" || typeof patient.row_id !== "string" || !snapshot.rows[patient.row_id]) fail("patient summary is malformed");
+    });
+
+    const events = snapshot.agent_events;
+    if (typeof snapshot.event_cursor !== "string" || !isObject(events) || !Array.isArray(events.items) || !Array.isArray(events.recent) || !Number.isInteger(events.count) || events.count !== events.items.length || typeof events.has_more !== "boolean" || typeof events.cursor !== "string" || events.cursor !== snapshot.event_cursor) fail("agent event page is malformed");
+    events.items.concat(events.recent).forEach(function(event){ if (!isObject(event)) fail("agent event is malformed"); });
+
+    if (!isObject(snapshot.delivery) || !isObject(snapshot.system) || !isObject(snapshot.health) || !isObject(snapshot.health.delivery) || !isObject(snapshot.health.system)) fail("health projection is incomplete");
+    if (!isObject(snapshot.bp_tile)) fail("blood pressure projection is missing");
+    if (snapshot.bp_tile.loop !== null){
+      if (!isObject(snapshot.bp_tile.loop) || !Array.isArray(snapshot.bp_tile.loop.readings)) fail("blood pressure loop is malformed");
+      snapshot.bp_tile.loop.readings.forEach(function(reading){ if (!isObject(reading)) fail("blood pressure reading is malformed"); });
+      if (snapshot.bp_tile.patient !== null && !isObject(snapshot.bp_tile.patient)) fail("blood pressure patient is malformed");
+      if (snapshot.bp_tile.summary !== null && !isObject(snapshot.bp_tile.summary)) fail("blood pressure summary is malformed");
+    }
+    if (snapshot.selected_patient !== null){
+      if (!isObject(snapshot.selected_patient) || !isObject(snapshot.selected_patient.patient) || typeof snapshot.selected_patient.patient.name !== "string" || !Array.isArray(snapshot.selected_patient.loops) || !Array.isArray(snapshot.selected_patient.contracts)) fail("selected patient projection is malformed");
+      snapshot.selected_patient.loops.forEach(function(loop){ if (!isObject(loop)) fail("selected patient loop is malformed"); });
+      snapshot.selected_patient.contracts.forEach(function(contract){ if (!isObject(contract)) fail("selected patient contract is malformed"); });
+    }
+    return snapshot;
+  }
+
+  function commitWorkspaceSnapshot(snapshot){
+    S.workspaceSnapshot = snapshot;
+  }
+
+  function valueOfMetric(name){
+    const snapshot = S.workspaceSnapshot;
+    const item = snapshot && snapshot.metrics ? snapshot.metrics[name] : null;
+    return item ? item.count : "-";
+  }
+
+  function renderHero(){
+    const snapshot = S.workspaceSnapshot;
+    const closed_today = snapshot && snapshot.metrics ? snapshot.metrics.closed_today : null;
+    byId("terminalMetric").textContent = valueOfMetric("terminal_waiting_review");
+    byId("workingMetric").textContent = valueOfMetric("sanad_working");
+    byId("closedMetric").textContent = closed_today ? closed_today.count : "-";
+    byId("patientMetric").textContent = valueOfMetric("active_patients_total");
+    byId("closedNote").textContent = closed_today && closed_today.row_ids.length
+      ? closed_today.row_ids.length + " explicit close transition" + (closed_today.row_ids.length === 1 ? "" : "s")
+      : "No explicit close transition recorded today";
+  }
+
+  const QUEUES = [
+    ["danger","Danger"],["urgent_review","Urgent review"],["review_ready","Review ready"],
+    ["verification_unknown","Verification unknown"],["deadline_outcomes","Deadline outcomes"],
+    ["blocked","Blocked"],["doctor_actions","Other doctor actions"],
+    ["unclassified_red","Legacy red · unclassified"]
+  ];
+
+  function queueRenderKey(snapshot, name){
+    const bucket = snapshot.queues[name] || {row_ids:[]};
+    return snapshot.snapshot_id + ":" + name + ":" + JSON.stringify(bucket.row_ids);
+  }
+
+  function renderQueue(name){
+    const snapshot = S.workspaceSnapshot;
+    const bucket = snapshot.queues[name] || {count:0,row_ids:[]};
+    const rows = bucket.row_ids.map(function(rowId){ return snapshot.rows[rowId]; });
+    byId("queueRows").innerHTML = rows.length ? rows.map(function(row){
+      if (!row) return '<article class="row"><p class="text">The referenced row is unavailable in this snapshot.</p></article>';
+      const card = row.card || {};
+      const title = row.title || card.title || row.patient_name || row.source_id || row.id;
+      const text = row.text || row.reason || row.state || "";
+      const className = name === "danger" ? " danger" : name === "urgent_review" ? " urgent" : "";
+      const actions = (card.actions || []).map(function(action, index){
+        const inputId = "action-" + escapeHtml(row.id) + "-" + index;
+        const draftKey = row.id + ":" + action.id;
+        const draft = S.drafts[draftKey] || "";
+        return '<span class="action-wrap">' + (action.input ? '<input id="' + inputId + '" aria-label="Reply text" value="' + escapeHtml(draft) + '" data-draft-input="' + escapeHtml(draftKey) + '">' : '')
+          + '<button class="action" type="button" data-action="' + escapeHtml(action.id) + '" data-input="' + inputId + '" data-draft="' + escapeHtml(draftKey) + '">' + escapeHtml(action.label || "Open") + '</button></span>';
+      }).join("");
+      return '<article class="row' + className + '"><h3>' + escapeHtml(title) + '</h3><div class="meta"><span class="pill">' + escapeHtml(row.kind || "row") + '</span><span>' + escapeHtml(row.patient_name || "") + '</span><span>' + escapeHtml(row.state || row.notification_class || "") + '</span></div>'
+        + (text ? '<p class="text">' + escapeHtml(text) + '</p>' : '') + (actions ? '<div class="actions">' + actions + '</div>' : '') + '</article>';
+    }).join("") : '<div class="empty">No rows in this queue.</div>';
+    byId("queueRows").querySelectorAll("[data-action]").forEach(function(button){
+      button.onclick = function(){
+        const input = byId(button.dataset.input);
+        submitAction(button.dataset.action, input || {value:""}, button);
+      };
+    });
+    byId("queueRows").querySelectorAll("[data-draft-input]").forEach(function(input){
+      input.oninput = function(){ S.drafts[input.dataset.draftInput] = input.value; };
+    });
+    S.renderedQueueKey = queueRenderKey(snapshot, name);
+  }
+
+  function renderQueueTabs(){
+    const snapshot = S.workspaceSnapshot;
+    byId("queueTabs").innerHTML = QUEUES.map(function(item){
+      const bucket = snapshot.queues[item[0]] || {count:0};
+      return '<button class="tab' + (S.selectedQueue === item[0] ? " active" : "") + '" type="button" data-queue="' + item[0] + '">' + escapeHtml(item[1]) + '<span class="badge">' + escapeHtml(bucket.count) + '</span></button>';
+    }).join("");
+    byId("queueTabs").querySelectorAll("[data-queue]").forEach(function(button){
+      button.onclick = function(){ S.selectedQueue = button.dataset.queue; renderQueueTabs(); renderQueue(S.selectedQueue); };
+    });
+  }
+
+  function renderPatients(){
+    const page = S.workspaceSnapshot.patients || {items:[],total:0,offset:0,limit:20,has_more:false};
+    byId("patientRows").innerHTML = page.items.length ? page.items.map(function(item){
+      return '<button class="patient" type="button" data-patient="' + escapeHtml(item.source_id || item.id) + '"><strong>' + escapeHtml(item.name) + '</strong><span>' + escapeHtml(item.diagnosis || "No diagnosis recorded") + ' · ' + escapeHtml(item.reachability || "UNKNOWN") + '</span></button>';
+    }).join("") : '<div class="empty">No patients on this page.</div>';
+    byId("patientRows").querySelectorAll("[data-patient]").forEach(function(button){
+      button.onclick = async function(){
+        const patientId = button.dataset.patient;
+        if (await poll({patientId:patientId})) openPatientDetail();
+      };
+    });
+    const first = page.total ? page.offset + 1 : 0;
+    const last = page.offset + page.items.length;
+    byId("patientRange").textContent = first + "-" + last + " of " + page.total;
+    byId("patientPageLabel").textContent = page.total + " total patients; " + page.items.length + " loaded";
+    byId("previousPatients").disabled = page.offset <= 0;
+    byId("nextPatients").disabled = !page.has_more;
+  }
+
+  function renderBP(){
+    const snapshot = S.workspaceSnapshot;
+    const bp_tile = snapshot ? snapshot.bp_tile : null;
+    if (!bp_tile || !bp_tile.loop){
+      byId("bpBody").innerHTML = '<div class="empty">No server-selected blood-pressure projection is available.</div>';
+      return;
+    }
+    const readings = bp_tile.loop.readings || [];
+    const latest = readings.length ? readings[readings.length - 1] : null;
+    byId("bpBody").innerHTML = '<div class="bp-head"><div><strong>' + escapeHtml(bp_tile.patient ? bp_tile.patient.name : "") + '</strong><div class="summary-line">' + escapeHtml(bp_tile.loop.title || "") + '</div></div><span class="pill">' + escapeHtml(bp_tile.loop.state || "") + '</span></div>'
+      + '<div class="bp-value">' + escapeHtml(latest ? latest.value : "No readings") + '</div>'
+      + '<div class="summary-line">' + escapeHtml(bp_tile.summary ? bp_tile.summary.line : "") + '</div>'
+      + '<div class="bp-readings">' + readings.slice(-6).map(function(reading){ return '<span class="reading">' + escapeHtml(reading.value) + '</span>'; }).join("") + '</div>';
+  }
+
+  function renderEvents(){
+    const block = S.workspaceSnapshot.agent_events || {items:[]};
+    const events = block.recent || block.items || [];
+    byId("eventRows").innerHTML = events.length ? events.slice(-12).reverse().map(function(event){
+      return '<article class="event"><span class="kind">' + escapeHtml(event.kind) + '</span><p>' + escapeHtml(event.text || "Persisted event") + '</p><time>' + escapeHtml(displayTime(event.ts || event.ts_ms)) + '</time></article>';
+    }).join("") : '<div class="empty">No persisted events yet.</div>';
+  }
+
+  function renderHealth(){
+    const delivery = S.workspaceSnapshot.delivery || {};
+    const system = S.workspaceSnapshot.system || {};
+    const web = delivery.web || {};
+    const telegram = delivery.telegram || {};
+    byId("healthRows").innerHTML = '<div><b>Web record</b><span>' + escapeHtml(web.latest_outcome || "UNKNOWN") + '</span></div>'
+      + '<div><b>Telegram</b><span>' + escapeHtml(telegram.configured ? telegram.latest_outcome || "UNKNOWN" : "not configured") + '</span></div>'
+      + '<div><b>Service revision</b><span>' + escapeHtml(system.revision || "local / unknown") + '</span></div>'
+      + '<div><b>Chaser engine</b><span>' + escapeHtml(system.chaser || "unknown") + '</span></div>';
+  }
+
+  function render(){
+    const snapshot = S.workspaceSnapshot;
+    if (!snapshot) return;
+    byId("doctorLine").textContent = snapshot.doctor.name + " · one truthful doctor workspace";
+    byId("snapshotLabel").textContent = snapshot.snapshot_id.slice(0, 17) + "…";
+    byId("syncState").innerHTML = '<strong>Snapshot</strong> · ' + escapeHtml(displayTime(snapshot.as_of));
+    renderHero();
+    renderQueueTabs();
+    if (S.renderedQueueKey !== queueRenderKey(snapshot, S.selectedQueue)) renderQueue(S.selectedQueue);
+    renderPatients(); renderBP(); renderEvents(); renderHealth();
+  }
+
+  async function postJson(path, body){
+    const response = await fetch(path, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const data = await response.json().catch(function(){ return {}; });
+    if (!response.ok) throw new Error(data.detail || data.code || path + " -> " + response.status);
+    if (data && data.ok === false) throw new Error(data.detail || data.code || "command refused");
+    return data;
+  }
+
+  async function submitAction(actionId, input, button){
+    const verb = actionId.split(":", 1)[0];
+    if ((verb === "reply" || verb === "note") && !String(input.value || "").trim()){
+      showError("Type the answer first.", true);
+      if (typeof input.focus === "function") input.focus();
+      return;
+    }
+    button.disabled = true;
+    try{
+      await postJson(BASE + "/action", {action_id:actionId, text:input.value || ""});
+      delete S.drafts[button.dataset.draft];
+      S.actionError = "";
+      input.value = "";
+      if (actionId.indexOf("openpatient:") === 0){
+        const patientId = actionId.slice("openpatient:".length);
+        if (await poll({patientId:patientId})) openPatientDetail();
+      }else{
+        await poll();
+      }
+    }catch(error){ showError(error.message || "The action did not complete.", true); }
+    finally{ button.disabled = false; }
+  }
+
+  function showError(message, sticky){
+    if (sticky) S.actionError = message;
+    else S.pollError = message;
+    paintError();
+  }
+  function paintError(){
+    const messages = [S.actionError, S.pollError].filter(Boolean);
+    if (messages.length){
+      byId("errorBox").textContent = messages.join(" ");
+      byId("errorBox").classList.add("show");
+      return;
+    }
+    byId("errorBox").classList.remove("show");
+  }
+  function clearError(){
+    S.pollError = "";
+    paintError();
+  }
+
+  function openPatientDetail(){
+    const detail = S.workspaceSnapshot.selected_patient;
+    if (!detail || !detail.patient) return;
+    byId("detailName").textContent = detail.patient.name;
+    const loops = detail.loops || [];
+    byId("detailBody").innerHTML = '<section class="detail-section"><h3>Plan</h3><p>' + escapeHtml(detail.patient.plan || "No plan text recorded") + '</p></section><section class="detail-section"><h3>Obligations</h3>'
+      + (loops.length ? loops.map(function(item){ return '<article class="row"><h3>' + escapeHtml(item.title) + '</h3><span class="pill">' + escapeHtml(item.state) + '</span></article>'; }).join("") : '<div class="empty">No obligations.</div>') + '</section>';
+    byId("patientDrawer").classList.add("open");
+    byId("patientDrawer").setAttribute("aria-hidden", "false");
+  }
+
+  async function poll(request){
+    if (S.polling) return false;
+    const options = request && typeof request === "object" ? request : {};
+    const requestedOffset = Number.isInteger(options.patientOffset) ? options.patientOffset : S.patientOffset;
+    const requestedPatientId = Object.prototype.hasOwnProperty.call(options, "patientId") ? options.patientId : S.patientId;
+    S.polling = true;
+    try{
+      const candidate = await loadWorkspaceSnapshot(requestedOffset, requestedPatientId);
+      validateWorkspaceSnapshot(candidate);
+      if (requestedPatientId && (!candidate.selected_patient || candidate.selected_patient.patient.id !== requestedPatientId)) throw new Error("selected patient does not match the request");
+      commitWorkspaceSnapshot(candidate);
+      S.patientOffset = requestedOffset;
+      S.patientId = requestedPatientId;
+      S.failedPolls = 0;
+      clearError();
+      render();
+      return true;
+    }catch(error){
+      S.failedPolls += 1;
+      showError(
+        S.workspaceSnapshot
+          ? "Could not refresh the complete workspace. The previous complete snapshot is still shown."
+          : "Could not load a complete workspace. No snapshot is being shown.",
+        false
+      );
+      return false;
+    }finally{ S.polling = false; }
+  }
+
+  byId("refreshButton").onclick = poll;
+  document.querySelectorAll("[data-metric-queue]").forEach(function(button){
+    button.onclick = function(){
+      S.selectedQueue = button.dataset.metricQueue;
+      renderQueueTabs();
+      renderQueue(S.selectedQueue);
+      byId("queueRows").scrollIntoView({behavior:"smooth", block:"nearest"});
+    };
+  });
+  byId("previousPatients").onclick = async function(){ await poll({patientOffset:Math.max(0, S.patientOffset - 20),patientId:null}); };
+  byId("nextPatients").onclick = async function(){ await poll({patientOffset:S.patientOffset + 20,patientId:null}); };
+  byId("closeDrawer").onclick = function(){ byId("patientDrawer").classList.remove("open"); byId("patientDrawer").setAttribute("aria-hidden", "true"); S.patientId = null; };
+  byId("patientDrawer").onclick = function(event){ if (event.target === byId("patientDrawer")) byId("closeDrawer").click(); };
+
+  (async function boot(){ await poll(); setInterval(poll, 3000); })();
+  </script>
+</body>
+</html>

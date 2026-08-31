@@ -934,7 +934,13 @@ async def _execute(turn: Turn, decision: policy_module.Decision) -> dict[str, An
             turn.loop.id, "the evidence arrived")
 
     elif tool == "close_verified_loop":
-        await store.update_loop(turn.loop.id, state="done")
+        if turn.doctor.workspace_facts_enabled:
+            # Gate 3's closure metric needs the close transition itself.  A
+            # generic updated_at value can move later and seeded done rows are
+            # historical even when they were inserted today.
+            await store.close_loop(turn.loop.id, closed_at=store.now())
+        else:
+            await store.update_loop(turn.loop.id, state="done")
         detail["state"] = "done"
 
     elif tool == "pause_loop":

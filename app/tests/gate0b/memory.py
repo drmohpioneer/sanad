@@ -34,6 +34,7 @@ from core.models import (
     Report,
     Send,
 )
+from core.workspace_records import WorkspaceRecords
 
 
 UTC = timezone.utc
@@ -132,6 +133,11 @@ class MemoryStore:
         self.loops: dict[str, Loop] = {}
         self.sends: dict[str, Send] = {}
         self.events: dict[str, Event] = {}
+        # Read-side storage order, deliberately kept outside Event records so
+        # Gate 0 legacy dumps remain byte-identical. Replaying an id preserves
+        # its first stamp, like Firestore DocumentSnapshot.create_time.
+        self.event_persisted_at: dict[str, datetime] = {}
+        self._last_event_persisted_at = self._clock - timedelta(microseconds=1)
         self.reports: dict[str, Report] = {}
         self.confirms: dict[str, PendingConfirm] = {}
         self.link_tokens: dict[str, LinkToken] = {}
@@ -381,6 +387,25 @@ class MemoryStore:
             values = dict(fields)
             values.setdefault("updated_at", self.now())
             self.loops[loop_id] = _updated(row, values)
+
+    async def close_loop(
+        self,
+        loop_id: str,
+        *,
+        closed_at: datetime,
+        doctor_reviewed: bool = False,
+    ) -> None:
+        async with self._lock:
+            row = self.loops.get(loop_id)
+            if row is None:
+                raise self._missing("loop", loop_id)
+            was_done = row.state == "done"
+            fields: dict[str, Any] = {"state": "done", "updated_at": self.now()}
+            if doctor_reviewed:
+                fields["doctor_reviewed"] = True
+            if not was_done and row.closed_at is None:
+                fields["closed_at"] = closed_at
+            self.loops[loop_id] = _updated(row, fields)
 
     async def add_contact(self, loop_id: str, day_index: int) -> None:
         async with self._lock:
@@ -819,6 +844,75 @@ class MemoryStore:
         async with self._lock:
             return _clone(self.settings)
 
+    async def read_workspace(self, doctor_id: str) -> Optional[WorkspaceRecords]:
+        """Clone one tenant's projection inputs under a single lock."""
+        async with self._lock:
+            doctor = self.doctors.get(doctor_id)
+            if doctor is None:
+                return None
+
+            patients = [
+                _clone(row)
+                for row in self.patients.values()
+                if row.doctor_id == doctor_id
+            ]
+            loops = [
+                _clone(row)
+                for row in self.loops.values()
+                if row.doctor_id == doctor_id
+            ]
+            events = []
+            for row in self.events.values():
+                if row.doctor_id != doctor_id:
+                    continue
+                cloned = _clone(row)
+                persisted_at = self.event_persisted_at.get(row.id)
+                if persisted_at is not None:
+                    cloned = cloned.model_copy(update={"persisted_at": persisted_at})
+                events.append(cloned)
+            reports = [
+                _clone(row)
+                for row in self.reports.values()
+                if row.doctor_id == doctor_id
+            ]
+            link_tokens = [
+                _clone(row)
+                for row in self.link_tokens.values()
+                if row.doctor_id == doctor_id
+            ]
+            relays = [
+                _clone(row)
+                for row in self.relays.values()
+                if row.doctor_id == doctor_id and row.state == "open"
+            ]
+            # Advance one deterministic read boundary while the lock is held.
+            # A later event receives a strictly newer persisted timestamp, just
+            # as a Firestore commit after a transaction snapshot does.
+            read_at = max(self.now(), self._last_event_persisted_at)
+            return WorkspaceRecords(
+                doctor=_clone(doctor),
+                patients=tuple(
+                    sorted(patients, key=lambda row: (row.created_at, row.id))
+                ),
+                loops=tuple(sorted(loops, key=lambda row: (row.created_at, row.id))),
+                events=tuple(sorted(events, key=lambda row: (row.ts, row.id))),
+                reports=tuple(
+                    sorted(
+                        reports,
+                        key=lambda row: (row.created_at, row.id),
+                        reverse=True,
+                    )
+                ),
+                link_tokens=tuple(
+                    sorted(link_tokens, key=lambda row: (row.created_at, row.id))
+                ),
+                open_relays=tuple(
+                    sorted(relays, key=lambda row: (row.created_at, row.id))
+                ),
+                settings=_clone(self.settings),
+                read_at=read_at,
+            )
+
     async def set_settings(self, **fields: Any) -> dict[str, Any]:
         async with self._lock:
             self.settings.update(
@@ -828,6 +922,13 @@ class MemoryStore:
 
     async def add_event(self, event: Event) -> Event:
         async with self._lock:
+            if event.id not in self.event_persisted_at:
+                stamp = max(
+                    self._clock,
+                    self._last_event_persisted_at + timedelta(microseconds=1),
+                )
+                self.event_persisted_at[event.id] = stamp
+                self._last_event_persisted_at = stamp
             self.events[event.id] = _clone(event)
             return _clone(event)
 
@@ -1193,6 +1294,9 @@ class MemoryStore:
             deleted["events"] = remove(
                 self.events, lambda row: row.doctor_id == doctor_id
             )
+            for ident in list(self.event_persisted_at):
+                if ident not in self.events:
+                    self.event_persisted_at.pop(ident, None)
             deleted["pending_confirms"] = remove(
                 self.confirms, lambda row: row.doctor_id == doctor_id
             )
@@ -1260,6 +1364,7 @@ _FUNCTION_NAMES = (
     "get_loop",
     "list_loops",
     "update_loop",
+    "close_loop",
     "claim_patient_turn",
     "release_patient_turn",
     "photo_claim_id",
@@ -1291,6 +1396,7 @@ _FUNCTION_NAMES = (
     "bump_schedule_version",
     "claim_resume",
     "get_settings",
+    "read_workspace",
     "set_settings",
     "add_event",
     "list_events",

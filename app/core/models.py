@@ -62,6 +62,21 @@ class Doctor(BaseModel):
     awaiting_channel: Optional[Channel] = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    # Gate 3 rollout is per doctor and server-owned.  False is omitted so the
+    # frozen legacy Doctor wire shape and Gate 0 snapshots remain byte-stable.
+    # It deliberately does not live in `policy`: board reset clears policy,
+    # while an explicit rollout must survive reset and token rotation.
+    cockpit_v2_enabled: StrictBool = Field(
+        default=False, exclude_if=lambda value: value is False
+    )
+    # Once the canonical cockpit is enabled, its typed audit facts keep being
+    # captured even if presentation rolls back to the legacy page.  Otherwise
+    # disable/re-enable would manufacture gaps in danger and closure history.
+    # The default remains omitted so doctors never enrolled in v2 retain the
+    # frozen legacy record shape and behavior.
+    workspace_facts_enabled: StrictBool = Field(
+        default=False, exclude_if=lambda value: value is False
+    )
     # The doctor's own rules for the Care Coordinator: how long the reschedule
     # window is, how many contacts a loop may cost, when the quiet hours are,
     # whether a cost barrier may be discussed with the patient at all, and the
@@ -186,6 +201,13 @@ class Loop(BaseModel):
     # The doctor's two-state review gate, as a flag the Coordinator can
     # read. Set by the "Reviewed" button, never by an agent.
     doctor_reviewed: bool = False
+    # Gate 3 needs a literal `closed_today`, not legacy green or an updated_at
+    # timestamp that any later edit can move.  Once a doctor has entered the v2
+    # fact cohort, close paths set this additive fact even after UI rollback;
+    # None is omitted to preserve every untouched legacy record dump.
+    closed_at: Optional[datetime] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     # What the verifier said about the evidence that arrived (core/verify.py).
     verified: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
@@ -263,6 +285,10 @@ class Event(BaseModel):
     media: list[dict[str, Any]] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
     ts: datetime
+    # Stable storage order for workspace cursors. The ordinary event writer
+    # does not persist this field: the atomic workspace reader supplies the
+    # Firestore document create time, so legacy event bodies remain unchanged.
+    persisted_at: Optional[datetime] = Field(default=None, exclude=True)
 
     @field_validator("media", mode="before")
     @classmethod

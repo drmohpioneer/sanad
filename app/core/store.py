@@ -36,6 +36,7 @@ from .models import (
     Report,
     Send,
 )
+from .workspace_records import WorkspaceRecords
 
 PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "sanad-506914")
 
@@ -264,6 +265,32 @@ async def update_loop(loop_id: str, **fields: Any) -> None:
     _reject_synthetic_update(fields)
     fields.setdefault("updated_at", now())
     await db().collection("loops").document(loop_id).update(fields)
+
+
+async def close_loop(
+    loop_id: str,
+    *,
+    closed_at: datetime,
+    doctor_reviewed: bool = False,
+) -> None:
+    """Close a v2-enrolled loop while preserving its first close fact."""
+    ref = db().collection("loops").document(loop_id)
+
+    @firestore.async_transactional
+    async def close(transaction: Any) -> None:
+        snap = await ref.get(transaction=transaction)
+        if not snap.exists:
+            raise ValueError("cannot close a missing loop")
+        row = snap.to_dict() or {}
+        was_done = row.get("state") == "done"
+        fields: dict[str, Any] = {"state": "done", "updated_at": now()}
+        if doctor_reviewed:
+            fields["doctor_reviewed"] = True
+        if not was_done and row.get("closed_at") is None:
+            fields["closed_at"] = closed_at
+        transaction.update(ref, fields)
+
+    await close(db().transaction())
 
 
 async def list_loops(patient_id: str) -> list[Loop]:
@@ -1158,6 +1185,84 @@ SETTINGS_DOC = "demo"
 async def get_settings() -> dict[str, Any]:
     snap = await db().collection("settings").document(SETTINGS_DOC).get()
     return snap.to_dict() or {} if snap.exists else {}
+
+
+async def read_workspace(doctor_id: str) -> Optional[WorkspaceRecords]:
+    """Read one doctor's projection inputs from one consistent snapshot.
+
+    This is the read boundary for the versioned workspace projection.  Every
+    tenant-owned collection is filtered by ``doctor_id`` inside the same
+    read-only transaction; callers never assemble a workspace from several
+    independently timed store reads.
+    """
+    client = db()
+
+    @firestore.async_transactional
+    async def read(transaction: Any) -> Optional[WorkspaceRecords]:
+        doctor_snap = await client.collection("doctors").document(doctor_id).get(
+            transaction=transaction
+        )
+        if not doctor_snap.exists:
+            return None
+
+        async def tenant_rows(collection: str) -> list[Any]:
+            query = client.collection(collection).where(
+                filter=FieldFilter("doctor_id", "==", doctor_id)
+            )
+            return [snap async for snap in query.stream(transaction=transaction)]
+
+        patient_snaps = await tenant_rows("patients")
+        loop_snaps = await tenant_rows("loops")
+        event_snaps = await tenant_rows("events")
+        report_snaps = await tenant_rows("reports")
+        link_token_snaps = await tenant_rows("link_tokens")
+        relay_snaps = await tenant_rows("relays")
+        settings_snap = await client.collection("settings").document(
+            SETTINGS_DOC
+        ).get(transaction=transaction)
+
+        patients = [Patient(id=snap.id, **snap.to_dict()) for snap in patient_snaps]
+        loops = [Loop(id=snap.id, **snap.to_dict()) for snap in loop_snaps]
+        events = []
+        for snap in event_snaps:
+            event_data = dict(snap.to_dict() or {})
+            # Storage metadata, never a caller-controlled document field, owns
+            # cursor order. Event.persisted_at is excluded from ordinary writes.
+            event_data.pop("persisted_at", None)
+            if snap.create_time is not None:
+                event_data["persisted_at"] = snap.create_time
+            events.append(Event(id=snap.id, **event_data))
+        reports = [Report(id=snap.id, **snap.to_dict()) for snap in report_snaps]
+        link_tokens = [
+            LinkToken(id=snap.id, **snap.to_dict()) for snap in link_token_snaps
+        ]
+        all_relays = [
+            Relay(id=snap.id, **snap.to_dict()) for snap in relay_snaps
+        ]
+        relays = [row for row in all_relays if row.state == "open"]
+        doctor = Doctor(id=doctor_snap.id, **doctor_snap.to_dict())
+
+        return WorkspaceRecords(
+            doctor=doctor,
+            patients=tuple(sorted(patients, key=lambda row: (row.created_at, row.id))),
+            loops=tuple(sorted(loops, key=lambda row: (row.created_at, row.id))),
+            events=tuple(sorted(events, key=lambda row: (row.ts, row.id))),
+            reports=tuple(
+                sorted(reports, key=lambda row: (row.created_at, row.id), reverse=True)
+            ),
+            link_tokens=tuple(
+                sorted(link_tokens, key=lambda row: (row.created_at, row.id))
+            ),
+            open_relays=tuple(
+                sorted(relays, key=lambda row: (row.created_at, row.id))
+            ),
+            settings=dict(settings_snap.to_dict() or {})
+            if settings_snap.exists
+            else {},
+            read_at=doctor_snap.read_time,
+        )
+
+    return await read(client.transaction(read_only=True))
 
 
 async def set_settings(**fields: Any) -> dict[str, Any]:

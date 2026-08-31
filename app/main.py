@@ -31,7 +31,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from core import (
     background,
@@ -62,6 +62,7 @@ from core import (
     timing,
     uploads,
     views,
+    workspace,
 )
 from core.adapters import (
     InboundMessage,
@@ -78,6 +79,7 @@ WEB = os.path.join(os.path.dirname(__file__), "web")
 CONSOLE_HTML = os.path.join(WEB, "console.html")
 PATIENT_HTML = os.path.join(WEB, "patient.html")
 DASHBOARD_HTML = os.path.join(WEB, "dashboard.html")
+DASHBOARD_V2_HTML = os.path.join(WEB, "dashboard_v2.html")
 
 # Cloud Run captures stdout, but an unconfigured root logger drops INFO, which
 # is where the Chaser says why it dropped a task ("stale run id", "already
@@ -515,6 +517,47 @@ async def admin_settings(
             "policy": stored}
 
 
+class DoctorFeaturesIn(BaseModel):
+    """The explicit, reversible doctor-scoped Gate 3 rollout switch."""
+
+    doctor_id: str
+    cockpit_v2_enabled: StrictBool
+
+
+@app.post("/admin/doctor-features")
+async def admin_doctor_features(
+    body: DoctorFeaturesIn,
+    _: None = Depends(require_admin),
+) -> dict:
+    """Enable or roll back the v2 cockpit for exactly one doctor.
+
+    The flag is not accepted from a console request, query string, cookie, or
+    local storage.  Reset and token rotation leave it alone; rollback is this
+    same authenticated write with ``cockpit_v2_enabled=false``.
+    """
+    doctor = await store.doctor_by_id(body.doctor_id)
+    if doctor is None:
+        raise HTTPException(404, "Not Found")
+    feature_fields = {"cockpit_v2_enabled": body.cockpit_v2_enabled}
+    if body.cockpit_v2_enabled:
+        # Fact capture is a one-way enrollment. Rolling the presentation back
+        # must not create a silent hole before a later re-enable.
+        feature_fields["workspace_facts_enabled"] = True
+    await store.update_doctor(doctor.id, **feature_fields)
+    facts_enabled = doctor.workspace_facts_enabled or body.cockpit_v2_enabled
+    log.info(
+        "doctor feature doctor_id=%s cockpit_v2_enabled=%s",
+        doctor.id,
+        body.cockpit_v2_enabled,
+    )
+    return {
+        "ok": True,
+        "doctor_id": doctor.id,
+        "cockpit_v2_enabled": body.cockpit_v2_enabled,
+        "workspace_facts_enabled": facts_enabled,
+    }
+
+
 BIND_NEEDS_CHAT_ID = (
     "chat_id is required: send /start to the bot, read the chat id off "
     "GET /admin/pending-starts or the bot's own reply, and pass it here"
@@ -873,7 +916,101 @@ async def dashboard(doctor: Doctor = Depends(current_doctor)) -> FileResponse:
     is `<token>` at both /c/<token> and /c/<token>/app, so nothing about the
     token scheme changes by serving it one level deeper.
     """
-    return FileResponse(DASHBOARD_HTML, media_type="text/html")
+    page = DASHBOARD_V2_HTML if doctor.cockpit_v2_enabled else DASHBOARD_HTML
+    return FileResponse(page, media_type="text/html")
+
+
+async def current_workspace_doctor(request: Request) -> Doctor:
+    """Authenticate the pathless v2 read without putting a token in the URL."""
+    if "token" in request.query_params:
+        raise HTTPException(404, "Not Found")
+    authorization = request.headers.get("Authorization", "")
+    scheme, separator, token = authorization.partition(" ")
+    if scheme != "Bearer" or separator != " " or not token or " " in token:
+        raise HTTPException(404, "Not Found")
+    doctor = await store.doctor_by_token(token)
+    if doctor is None or not doctor.cockpit_v2_enabled:
+        raise HTTPException(404, "Not Found")
+    return doctor
+
+
+@app.get("/api/v2/workspace-snapshot")
+async def workspace_snapshot(
+    response: Response,
+    patient_offset: int = 0,
+    patient_limit: int = 50,
+    patient_id: Optional[str] = None,
+    event_cursor: Optional[str] = None,
+    event_limit: int = 500,
+    doctor: Doctor = Depends(current_workspace_doctor),
+) -> dict:
+    """One versioned projection over one atomic, doctor-scoped record read."""
+    if patient_offset < 0 or not 1 <= patient_limit <= 100:
+        raise HTTPException(422, "invalid patient page")
+    if not 1 <= event_limit <= 1000:
+        raise HTTPException(422, "invalid event page")
+
+    records = await store.read_workspace(doctor.id)
+    # The transaction re-reads the Doctor row.  This closes the small window
+    # where an admin can disable the flag after bearer authentication but
+    # before the record bundle is read.
+    if (
+        records is None
+        or records.doctor.id != doctor.id
+        or not records.doctor.cockpit_v2_enabled
+        or not hmac.compare_digest(records.doctor.web_token, doctor.web_token)
+    ):
+        raise HTTPException(404, "Not Found")
+
+    at = store.now()
+    effective_run_id = str(records.settings.get("run_id") or settings.ENV_RUN_ID)
+    try:
+        effective_time_scale = int(
+            records.settings.get("time_scale") or settings.ENV_TIME_SCALE
+        )
+    except (TypeError, ValueError):
+        effective_time_scale = settings.ENV_TIME_SCALE
+    effective_time_scale = max(1, effective_time_scale)
+    delivery_health = {
+        "web": {"configured": True, "latest_outcome": "UNKNOWN"},
+        "telegram": {
+            "configured": telegram.enabled(),
+            "latest_outcome": "UNKNOWN",
+        },
+        "basis": (
+            "Configuration is not delivery proof; no confirmed receipt "
+            "projection exists in current records."
+        ),
+    }
+    system_health = {
+        "service": os.environ.get("K_SERVICE"),
+        "revision": os.environ.get("K_REVISION"),
+        "region": os.environ.get("TASKS_REGION"),
+        "project": store.PROJECT,
+        "chaser": tasks.engine(),
+        "labs_storage_configured": storage.enabled(),
+        "run_id": effective_run_id,
+        "time_scale": effective_time_scale,
+    }
+    try:
+        snapshot = workspace.build_snapshot(
+            records,
+            at,
+            patient_offset=patient_offset,
+            patient_limit=patient_limit,
+            selected_patient_id=patient_id,
+            event_cursor=event_cursor,
+            event_limit=event_limit,
+            delivery_health=delivery_health,
+            system_health=system_health,
+        )
+    except workspace.InvalidCursor as exc:
+        raise HTTPException(422, "invalid event cursor") from exc
+    except workspace.UnknownPatient as exc:
+        raise HTTPException(404, "Not Found") from exc
+
+    response.headers["Cache-Control"] = "private, no-store"
+    return snapshot
 
 
 @app.get("/c/{token}/board")

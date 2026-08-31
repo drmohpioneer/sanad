@@ -58,6 +58,7 @@ from . import (
     vitals,
 )
 from .adapters import OutboundMessage, fanout
+from .channel_contracts import NotificationClass
 from .models import ConciergeAnswer, Doctor, Loop, Patient, Relay, Send
 
 log = logging.getLogger("sanad.concierge")
@@ -574,7 +575,13 @@ async def handle_patient_message(
             )
             await out.send(to_doctor, OutboundMessage(
                 text=f"Emergency from {patient.name}.", patient_id=patient.id,
-                meta={"decided_by": decided_by_sentinel(gate)},
+                meta={
+                    "decided_by": decided_by_sentinel(gate),
+                    **(
+                        {"notification_class": NotificationClass.DANGER.value}
+                        if doctor.workspace_facts_enabled else {}
+                    ),
+                },
                 card=red_card(patient, text, gate)))
 
         landed = await escalate.told_or_fail_closed(
@@ -1031,7 +1038,17 @@ async def mark_reviewed(doctor: Doctor, loop_id: str) -> None:
     # Coordinator's close_verified_loop tool reads it and is refused without it
     # (core/policy.py). The two-state gate is unchanged: this is still the only
     # place it is ever set, and only a doctor's tap reaches it.
-    await store.update_loop(loop.id, state="done", doctor_reviewed=True)
+    if doctor.workspace_facts_enabled:
+        # This is the doctor's close transition.  `updated_at` is not a close
+        # fact: later edits can move it, and seeded historical green rows are
+        # created today. The store preserves the first close under races.
+        await store.close_loop(
+            loop.id, closed_at=store.now(), doctor_reviewed=True
+        )
+    else:
+        await store.update_loop(
+            loop.id, state="done", **{"doctor_reviewed": True}
+        )
     patient = await store.get_patient(loop.patient_id)
     await events.append_event(
         doctor.id, "system", f"{loop.title} reviewed and closed",
