@@ -1,16 +1,16 @@
 # Gate 0B legacy characterization
 
-This test-only package freezes the current nine-beat Sanad journey before the
-S23 reshape. It is a characterization baseline, not a new implementation.
+This test-only package freezes the public nine-beat Sanad journey before the
+cockpit architecture changed. It is a characterization baseline, not a new
+implementation.
 
 The clean public source is pinned at
 `17520ab3ff6b4b2a978f9437c2f3dd417a8770a1`; the accepted hermetic baseline is
 `f9743a2c72e0dddb012ddbac3cbbbc413b740a3d`; and the deployment observed at the
 Gate 0 freeze was `sanad-00029-g9f`. The last independently recorded live
-nine-beat run used `sanad-00028-zjm`. The active private tree was preserved
-outside this clean repository in `sanad-s23-freeze-2026-08-30` as a manifest,
-full-index binary patch, and complete subtree archive. Their exact SHA-256
-values are pinned independently in the manifest and acceptance test.
+nine-beat run used `sanad-00028-zjm`. The checked-in API snapshots, traces,
+screenshot receipts, provenance records and deterministic replay are the
+public characterization evidence.
 
 ## Run it
 
@@ -97,8 +97,7 @@ The initial seed is `31 carried / 3 completed / 17 progressing / 6 help / 1
 unreachable / 1 question / 2 critical / 11 attention / 1
 closed_without_evidence / 0 lost / 0 duplicates`.
 
-The private historical S18 observation and this deterministic replay both end
-at:
+A historical live run and this deterministic public replay both end at:
 
 | Measure | Historical | Replay |
 | --- | ---: | ---: |

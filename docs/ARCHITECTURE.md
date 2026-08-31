@@ -1,6 +1,6 @@
 # Sanad - Architecture
 
-This document describes the checked-in architecture. Where a claim is about behavior, the named file is the implementation and `app/tests/` is the reproducible evidence. Deployment history and private slice/review material are intentionally not asserted by this public document.
+This document describes the checked-in architecture. Where a claim is about behavior, the named file is the implementation and `app/tests/` is the reproducible evidence. Only checked-in implementation, documentation and public tests are asserted here.
 
 ## Positioning
 

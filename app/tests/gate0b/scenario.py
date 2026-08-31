@@ -51,23 +51,10 @@ DOCTOR_SPECIALTY = "cardiology"
 # would preserve the final counts while silently characterizing a different
 # policy branch.
 FIXED_START = "2026-08-30T02:47:00+00:00"
-DOSSIER_SHA256 = "2ab94a42b90ae16f4e7660e0c7bf92daa5824c7f501e0bb68699f7f1688d329b"
 CLEAN_PUBLIC_COMMIT = "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1"
 HERMETIC_BASELINE_COMMIT = "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d"
 DEPLOYED_REVISION_AT_GATE0_FREEZE = "sanad-00029-g9f"
 LAST_VERIFIED_NINE_BEAT_REVISION = "sanad-00028-zjm"
-PRIVATE_SOURCE_REPOSITORY_COMMIT = "4d938e3101dbae3c04995b6d4c77a7ef5f30dd2d"
-EXPERIMENTAL_TREE_FREEZE = {
-    "archive_name": "sanad-s23-freeze-2026-08-30",
-    "captured_before_s23": True,
-    "manifest_sha256": "f81ab998177f299fc3b1066b697ce70d9a462a4c9d09a9916d2e27f62a3a073f",
-    "active_tracked_patch_sha256": "1d8a3e66b3894c898072d9fb24944c32a7b812e3e823f0914c3d3711e609f922",
-    "active_tree_snapshot_sha256": "a9041e10924a55e98356384819e7e332c9faa945746680d6ec42511d243d574c",
-    "contents": (
-        "external manifest, full-index binary-capable tracked patch, and complete "
-        "subtree archive including untracked files; not merged into the clean baseline"
-    ),
-}
 
 
 BEATS: tuple[tuple[str, str], ...] = (
@@ -100,9 +87,7 @@ INITIAL_COUNTS = {
 # these numbers into state; it derives its result through the real routes and
 # must match this independently recorded acceptance oracle exactly.
 HISTORICAL_LIVE_FINAL = {
-    "source": "historical S18 live observation, recorded 2026-08-30",
-    "source_file": "original observation summarized here; checksum retained for provenance",
-    "source_sha256": "f6d17a70ac77261479eb59f52ff8d151817c337aeb140153529d89f5e7c7fe0c",
+    "source": "historical live run, recorded 2026-08-30",
     "observed_window": "2026-08-30 05:47 to 06:15 Africa/Cairo",
     "beat_3_quiet_hours_audit": (
         "moved out of quiet hours (22:00 to 09:00 Cairo)"
@@ -739,15 +724,12 @@ class GoldenJourney:
             "schema": "sanad-gate0b-characterization/v1",
             "synthetic": True,
             "baseline_commit": HERMETIC_BASELINE_COMMIT,
-            "dossier_sha256": DOSSIER_SHA256,
             "source_baseline": {
                 "clean_public_commit": CLEAN_PUBLIC_COMMIT,
                 "hermetic_baseline_commit": HERMETIC_BASELINE_COMMIT,
                 "deployed_revision_at_gate0_freeze": DEPLOYED_REVISION_AT_GATE0_FREEZE,
                 "last_verified_nine_beat_revision": LAST_VERIFIED_NINE_BEAT_REVISION,
-                "private_source_repository_commit": PRIVATE_SOURCE_REPOSITORY_COMMIT,
             },
-            "experimental_tree_freeze": EXPERIMENTAL_TREE_FREEZE,
             "fixed_start": FIXED_START,
             "timezone": "Africa/Cairo",
             "run_id": RUN_ID,

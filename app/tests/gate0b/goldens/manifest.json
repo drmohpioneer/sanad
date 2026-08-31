@@ -39,15 +39,6 @@
   },
   "baseline_commit": "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d",
   "doctor": "Test Doctor",
-  "dossier_sha256": "2ab94a42b90ae16f4e7660e0c7bf92daa5824c7f501e0bb68699f7f1688d329b",
-  "experimental_tree_freeze": {
-    "active_tracked_patch_sha256": "1d8a3e66b3894c898072d9fb24944c32a7b812e3e823f0914c3d3711e609f922",
-    "active_tree_snapshot_sha256": "a9041e10924a55e98356384819e7e332c9faa945746680d6ec42511d243d574c",
-    "archive_name": "sanad-s23-freeze-2026-08-30",
-    "captured_before_s23": true,
-    "contents": "external manifest, full-index binary-capable tracked patch, and complete subtree archive including untracked files; not merged into the clean baseline",
-    "manifest_sha256": "f81ab998177f299fc3b1066b697ce70d9a462a4c9d09a9916d2e27f62a3a073f"
-  },
   "fixed_start": "2026-08-30T02:47:00+00:00",
   "historical_live_reference": {
     "beat_3_quiet_hours_audit": "moved out of quiet hours (22:00 to 09:00 Cairo)",
@@ -67,9 +58,7 @@
     },
     "observed_window": "2026-08-30 05:47 to 06:15 Africa/Cairo",
     "serving_revision": "sanad-00028-zjm",
-    "source": "historical S18 live observation, recorded 2026-08-30",
-    "source_file": "original observation summarized here; checksum retained for provenance",
-    "source_sha256": "f6d17a70ac77261479eb59f52ff8d151817c337aeb140153529d89f5e7c7fe0c",
+    "source": "historical live run, recorded 2026-08-30",
     "used_as_replay_acceptance_oracle": true
   },
   "inference": "strict scripted outputs; no Gemini/ADK provider call",
@@ -157,8 +146,7 @@
     "clean_public_commit": "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1",
     "deployed_revision_at_gate0_freeze": "sanad-00029-g9f",
     "hermetic_baseline_commit": "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d",
-    "last_verified_nine_beat_revision": "sanad-00028-zjm",
-    "private_source_repository_commit": "4d938e3101dbae3c04995b6d4c77a7ef5f30dd2d"
+    "last_verified_nine_beat_revision": "sanad-00028-zjm"
   },
   "storage": "synthetic URI; PNG decoding and evidence logic remain real",
   "synthetic": true,

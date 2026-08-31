@@ -140,18 +140,10 @@ EXPECTED_SELECTIONS = {
 ATTESTATION_WIDTH = 16
 ATTESTATION_HEIGHT = 8
 ATTESTATION_INSET = 2
-DOSSIER_SHA256 = "2ab94a42b90ae16f4e7660e0c7bf92daa5824c7f501e0bb68699f7f1688d329b"
 CLEAN_PUBLIC_COMMIT = "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1"
 HERMETIC_BASELINE_COMMIT = "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d"
 DEPLOYED_REVISION_AT_GATE0_FREEZE = "sanad-00029-g9f"
 LAST_VERIFIED_NINE_BEAT_REVISION = "sanad-00028-zjm"
-PRIVATE_SOURCE_REPOSITORY_COMMIT = "4d938e3101dbae3c04995b6d4c77a7ef5f30dd2d"
-S18_LIVE_RESULTS_SHA256 = "f6d17a70ac77261479eb59f52ff8d151817c337aeb140153529d89f5e7c7fe0c"
-EXPERIMENTAL_FREEZE_HASHES = {
-    "manifest_sha256": "f81ab998177f299fc3b1066b697ce70d9a462a4c9d09a9916d2e27f62a3a073f",
-    "active_tracked_patch_sha256": "1d8a3e66b3894c898072d9fb24944c32a7b812e3e823f0914c3d3711e609f922",
-    "active_tree_snapshot_sha256": "a9041e10924a55e98356384819e7e332c9faa945746680d6ec42511d243d574c",
-}
 NON_CLAIMS = [
     "Gemini, ADK, transcription, OCR accuracy, or live model determinism",
     "Firestore contention or durability",
@@ -313,14 +305,9 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
     def test_historical_record_and_deterministic_replay_match_exactly(self) -> None:
         historical = self.manifest["historical_live_reference"]
         self.assertEqual(
-            "historical S18 live observation, recorded 2026-08-30",
+            "historical live run, recorded 2026-08-30",
             historical["source"],
         )
-        self.assertEqual(
-            "original observation summarized here; checksum retained for provenance",
-            historical["source_file"],
-        )
-        self.assertEqual(S18_LIVE_RESULTS_SHA256, historical["source_sha256"])
         self.assertEqual(
             "2026-08-30 05:47 to 06:15 Africa/Cairo",
             historical["observed_window"],
@@ -354,8 +341,7 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
         self.assertEqual(1, len(pending))
         self.assertTrue(pending[0]["scheduled_at"].startswith("2026-08-31T06:00:00"))
 
-    def test_gate0_source_and_non_claim_pins_cannot_move_with_regeneration(self) -> None:
-        self.assertEqual(DOSSIER_SHA256, self.manifest["dossier_sha256"])
+    def test_gate0_public_source_and_non_claim_pins_cannot_move_with_regeneration(self) -> None:
         self.assertEqual(HERMETIC_BASELINE_COMMIT, self.manifest["baseline_commit"])
         self.assertEqual(
             {
@@ -363,15 +349,9 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
                 "hermetic_baseline_commit": HERMETIC_BASELINE_COMMIT,
                 "deployed_revision_at_gate0_freeze": DEPLOYED_REVISION_AT_GATE0_FREEZE,
                 "last_verified_nine_beat_revision": LAST_VERIFIED_NINE_BEAT_REVISION,
-                "private_source_repository_commit": PRIVATE_SOURCE_REPOSITORY_COMMIT,
             },
             self.manifest["source_baseline"],
         )
-        freeze = self.manifest["experimental_tree_freeze"]
-        self.assertEqual("sanad-s23-freeze-2026-08-30", freeze["archive_name"])
-        self.assertIs(freeze["captured_before_s23"], True)
-        for field, expected in EXPERIMENTAL_FREEZE_HASHES.items():
-            self.assertEqual(expected, freeze[field])
         self.assertEqual(NON_CLAIMS, self.manifest["non_claims"])
 
     def test_exact_trace_totals_are_derived_from_the_ledgers(self) -> None:
