@@ -6,7 +6,7 @@ a patient, a loop or a date.
 
 from __future__ import annotations
 
-from . import events, store, summary
+from . import adapters, events, store, summary
 from .models import Doctor
 
 STATE_MARK = {
@@ -38,6 +38,18 @@ async def build(doctor: Doctor) -> str:
         on=summary.today(store.now()),
     )
     lines.append(summary.line(counts))
+
+    # The phone contract's morning half (S24-G, core/adapters.py). A verified
+    # result waiting for review, or a follow-up whose deadline ran out, did not
+    # ring an enrolled doctor's phone: it was parked on its own card. This is
+    # where he is told, and reading the mark is what clears it, so a card is
+    # listed in exactly one digest and then stops being owed.
+    parked = summary.parked_rows(history)
+    if parked:
+        names = {p.id: p.name for p in patients}
+        lines.append("")
+        lines.extend(summary.parked_lines(parked, names))
+        await adapters.release_parked(doctor.id, history)
 
     for patient in patients:
         lines.append("")

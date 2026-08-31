@@ -322,8 +322,98 @@ def line(counts: Counts) -> str:
     )
 
 
-def card(counts: Counts, doctor_name: str = "", when: Optional[datetime] = None) -> dict:
-    """The doctor's end-of-day card. The line, then how it was counted."""
+# --------------------------------------------------------------------------- #
+# What the phone did not say, S24-G
+# --------------------------------------------------------------------------- #
+# The phone contract (core/adapters.py) rings an enrolled doctor's phone for a
+# danger and for a time-bounded promise, and for nothing else. A message that is
+# real but not urgent - a verified result waiting for his review, a follow-up
+# whose deadline ran out - still writes its card to the cockpit exactly as it
+# always did, and is additionally marked parked. The morning digest reads those
+# marks back and lists them, which is the whole of "you were not woken, and here
+# is what you were not woken for".
+#
+# The mark lives in `meta["phone"]` on the card event itself rather than in a
+# second collection, for the same reason `meta.card.resolved` does: the record
+# that carries the obligation is the record that should say what happened to it.
+# Everything here is a pure read of that mark. Writing it, and clearing it when
+# the digest goes out, is core/adapters.py's job.
+PHONE_META = "phone"
+PARKED = "parked"
+PUSHED = "pushed"
+SUPPRESSED = "suppressed"
+PARKED_HEADING = "Parked while you were away"
+
+
+def phone_note(event: Any) -> dict[str, Any]:
+    """The phone contract's mark on an event, or {}. Never raises."""
+    meta = getattr(event, "meta", None) or {}
+    if not isinstance(meta, dict):
+        return {}
+    note = meta.get(PHONE_META)
+    return note if isinstance(note, dict) else {}
+
+
+def is_parked(event: Any) -> bool:
+    """Is this a card the phone stayed quiet for, and the digest still owes?"""
+    note = phone_note(event)
+    return note.get("decision") == PARKED and not note.get("digest_at")
+
+
+def parked_rows(events: Iterable[Any]) -> list[dict[str, Any]]:
+    """Every parked card still owed, oldest first: (id, patient, title, class).
+
+    The title is the card's own title when there is one, and the message text
+    otherwise. Nothing is re-judged and nothing is invented: the digest can only
+    say back what was already written on the card.
+    """
+    out: list[dict[str, Any]] = []
+    for event in events:
+        if not is_parked(event):
+            continue
+        note = phone_note(event)
+        card_body = (getattr(event, "meta", None) or {}).get("card") or {}
+        title = ""
+        if isinstance(card_body, dict):
+            title = str(card_body.get("title") or "").strip()
+        out.append({
+            "id": str(getattr(event, "id", "") or ""),
+            "patient_id": str(getattr(event, "patient_id", "") or ""),
+            "title": title or str(getattr(event, "text", "") or "").strip(),
+            "notification_class": str(note.get("class") or ""),
+            "release_at": str(note.get("release_at") or ""),
+        })
+    return out
+
+
+def parked_lines(
+    rows: Sequence[dict[str, Any]],
+    names: Optional[dict[str, str]] = None,
+) -> list[str]:
+    """The digest's parked block. Empty when the phone owed the doctor nothing."""
+    if not rows:
+        return []
+    lines = [f"{PARKED_HEADING} ({len(rows)}):"]
+    for row in rows:
+        who = (names or {}).get(row.get("patient_id") or "", "")
+        title = str(row.get("title") or "").strip() or "(no title)"
+        lines.append(f"  · {who + ': ' if who else ''}{title}")
+    return lines
+
+
+def card(
+    counts: Counts,
+    doctor_name: str = "",
+    when: Optional[datetime] = None,
+    *,
+    parked: Sequence[dict[str, Any]] = (),
+    names: Optional[dict[str, str]] = None,
+) -> dict:
+    """The doctor's end-of-day card. The line, then how it was counted.
+
+    `parked` is the phone contract's block (S24-G) and defaults to empty, so a
+    caller that knows nothing about it gets exactly the card it got before.
+    """
     stamp = f"{when:%Y-%m-%d}" if when else ""
     return {
         "title": f"{CARD_TITLE} · {doctor_name}".strip(" ·") + (f" · {stamp}" if stamp else ""),
@@ -335,6 +425,7 @@ def card(counts: Counts, doctor_name: str = "", when: Optional[datetime] = None)
             "(core/summary.py).",
             f"Duplicate inbound photos ignored: {counts.duplicates}.",
             "Counted from the records in code. No model was asked.",
+            *parked_lines(parked, names),
         ],
         "actions": [],
     }

@@ -18,8 +18,8 @@ from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, TypeVa
 
 from pydantic import BaseModel, Field, StrictBool
 
-from . import events, outbox, runtime, store, telegram
-from .channel_contracts import DeliveryOutcome, DeliveryReceipt
+from . import events, outbox, runtime, store, summary, telegram, timing
+from .channel_contracts import DeliveryOutcome, DeliveryReceipt, NotificationClass
 
 
 log = logging.getLogger("sanad.adapters")
@@ -37,6 +37,12 @@ class ResolvedTarget:
     doctor_id: str
     patient_id: Optional[str]
     synthetic: bool
+    # Is the recipient a doctor enrolled in the canonical cockpit? The phone
+    # contract below is his and nobody else's, and it is read here rather than
+    # with a second lookup so one resolution answers one send. It defaults to
+    # False, which is the legacy fan-out: a target that was built without it,
+    # or a patient, is never covered by the contract.
+    enrolled: bool = False
 
 
 class InboundMessage(BaseModel):
@@ -136,6 +142,278 @@ class TelegramAdapter:
         return None
 
 
+# --------------------------------------------------------------------------- #
+# The phone contract, S24-G
+# --------------------------------------------------------------------------- #
+# Whose phone is allowed to ring, and for what. Only an enrolled doctor
+# (`workspace_facts_enabled`) is covered: a doctor who is not enrolled gets the
+# legacy fan-out, byte for byte, and a patient-bound message is never touched
+# by any of this.
+#
+#   DANGER            ring the phone now. Unchanged, including the failure
+#                     behavior: TelegramAdapter raises on a provider `ok:false`
+#                     and that exception still leaves this file, because
+#                     core/escalate.told_or_fail_closed reads exactly that to
+#                     decide whether it may tell a patient his doctor knows.
+#   URGENT_SLA        ring the phone now. It exists to be time-bounded.
+#   REVIEW_READY      do not ring. The card is written to the cockpit exactly
+#   DEADLINE_OUTCOME  as today and additionally marked parked, and the 09:00
+#                     Cairo digest lists it (core/summary.parked_rows).
+#   SILENT_WORK       do not ring, do not park. The cockpit carries it; there is
+#   SOLICITED_RESPONSE  nothing for the morning to tell him that he did not
+#                     already ask for.
+#   anything else     ring the phone, and log a WARNING naming the first words
+#                     of the message. Fail open to noisy, never to silent: a
+#                     callsite nobody has classified yet is a callsite, not a
+#                     decision to stay quiet, and the warning is how it gets
+#                     classified later.
+#
+# Parking is a mark on the card event itself, not a second record: the thing
+# that carries the obligation is the thing that says what happened to it, the
+# same choice core/cards.py made for `resolved`. So a parked message has NO
+# effect on what `Fanout.send` returns - the web receipt is written and returned
+# exactly as before - and it can never be mistaken for a delivery, because the
+# only channel it skipped is the one that was never asked.
+PUSH_CLASSES: frozenset[NotificationClass] = frozenset({
+    NotificationClass.DANGER,
+    NotificationClass.URGENT_SLA,
+})
+PARK_CLASSES: frozenset[NotificationClass] = frozenset({
+    NotificationClass.REVIEW_READY,
+    NotificationClass.DEADLINE_OUTCOME,
+})
+QUIET_CLASSES: frozenset[NotificationClass] = frozenset({
+    NotificationClass.SILENT_WORK,
+    NotificationClass.SOLICITED_RESPONSE,
+})
+
+# What may be read off an OutboundMessage that carries no stamped class. Both
+# markers are written by code and by nothing else, so reading them is reading a
+# decision that was already made rather than guessing at one. Anything that is
+# not one of these stays unclassified and rings the phone.
+#
+#   the "Reviewed" button   only a verified lab result awaiting the doctor's
+#                           review carries it (core/extractor.py).
+#   the exhausted ladder    the Chaser's own `decided_by` for a follow-up whose
+#                           three nudges ran out (core/chaser.py).
+REVIEW_ACTION_PREFIX = "reviewed:"
+DEADLINE_DECIDED_MARKERS: tuple[str, ...] = ("the ladder is exhausted",)
+
+LEGACY = "legacy"
+PUSHED = summary.PUSHED
+PARKED = summary.PARKED
+SUPPRESSED = summary.SUPPRESSED
+
+# How many characters of an unclassified message the warning may name. Enough to
+# find the callsite in the source, short enough that the log is not a transcript.
+WARN_CHARS = 60
+
+
+@dataclass(frozen=True)
+class PhoneRoute:
+    """What the phone contract decided about one message, said out loud.
+
+    `decision` is the whole answer and the four values are disjoint:
+
+      legacy      not covered by the contract (patient-bound, or a doctor who is
+                  not enrolled, or the lookup failed). Every channel, as today.
+      pushed      the phone was asked to ring.
+      parked      the phone was deliberately not asked; the morning owes it.
+      suppressed  the phone was deliberately not asked and nothing owes it.
+
+    `rang_the_phone` is the only property escalation-shaped logic should ever
+    read, and it is False for `parked` on purpose: a parked message is never
+    evidence that the doctor was told anything.
+    """
+
+    decision: str
+    notification_class: str = ""
+    why: str = ""
+
+    @property
+    def push(self) -> bool:
+        return self.decision in (LEGACY, PUSHED)
+
+    @property
+    def rang_the_phone(self) -> bool:
+        """Was the phone asked at all? Never True for a parked message."""
+        return self.push
+
+    @property
+    def parked(self) -> bool:
+        return self.decision == PARKED
+
+    def mark(self, release_at: str = "") -> dict[str, Any]:
+        """The note this route leaves on the card event, or {} when it leaves none."""
+        if self.decision not in (PARKED, SUPPRESSED):
+            return {}
+        note: dict[str, Any] = {
+            "decision": self.decision,
+            "class": self.notification_class,
+        }
+        if release_at:
+            note["release_at"] = release_at
+        return note
+
+
+def classify(msg: OutboundMessage) -> tuple[Optional[NotificationClass], str]:
+    """(class, how it was known). None means nothing could be said with certainty.
+
+    The stamped class always wins, because extractor/concierge already put it
+    there for the paths that matter. A class that is stamped but unreadable, and
+    LEGACY_UNCLASSIFIED itself, are both unclassified: the point of the enum
+    member is to say "nobody has decided yet", and the answer to that is the
+    noisy one.
+    """
+    meta = msg.meta if isinstance(msg.meta, dict) else {}
+    stamped = meta.get("notification_class")
+    if isinstance(stamped, NotificationClass):
+        return (
+            (None, "stamped LEGACY_UNCLASSIFIED")
+            if stamped is NotificationClass.LEGACY_UNCLASSIFIED
+            else (stamped, "stamped by the sender")
+        )
+    raw = str(stamped or "").strip().upper()
+    if raw:
+        try:
+            known = NotificationClass(raw)
+        except ValueError:
+            return None, f"unreadable notification_class {raw!r}"
+        if known is NotificationClass.LEGACY_UNCLASSIFIED:
+            return None, "stamped LEGACY_UNCLASSIFIED"
+        return known, "stamped by the sender"
+
+    card = msg.card if isinstance(msg.card, dict) else {}
+    for action in (card.get("actions") or []):
+        if not isinstance(action, dict):
+            continue
+        if str(action.get("id") or "").startswith(REVIEW_ACTION_PREFIX):
+            return NotificationClass.REVIEW_READY, "the card carries a Reviewed button"
+
+    decided = str(meta.get("decided_by") or "").lower()
+    if any(marker in decided for marker in DEADLINE_DECIDED_MARKERS):
+        return NotificationClass.DEADLINE_OUTCOME, "the Chaser's exhausted ladder"
+
+    return None, "no class on the message"
+
+
+async def _enrolled(target_ref: str) -> bool:
+    """Is this ref an enrolled doctor? Any doubt at all answers no.
+
+    Resolved through the one function that already knows how to read a ref, so
+    a caller that replaces recipient resolution replaces this too and no second
+    lookup can disagree with the first. A store that is down, a token that
+    resolves to nothing, a target built without the field: all of them mean the
+    legacy fan-out, which is the behavior that was there before this contract
+    existed and is never the quieter one.
+    """
+    kind, _, value = target_ref.partition(":")
+    if kind != "doctor" or not value:
+        return False
+    try:
+        target = await resolve_target(target_ref)
+    except Exception:  # noqa: BLE001 - the contract never breaks a send
+        log.exception("phone contract could not read the doctor; legacy fan-out")
+        return False
+    return bool(getattr(target, "enrolled", False))
+
+
+def _first_words(text: str) -> str:
+    body = " ".join(str(text or "").split())
+    return body[:WARN_CHARS] + ("…" if len(body) > WARN_CHARS else "")
+
+
+# One warning per distinct unclassified message, per process. The warning exists
+# so a callsite gets classified, and a callsite only has to be named once for
+# that; repeating it on every send would bury it in its own noise. Bounded, so a
+# long-lived instance cannot grow a set out of it.
+_WARNED: set[str] = set()
+WARN_MEMORY = 256
+
+
+def _warn_once(message: str, *args: Any) -> None:
+    key = message % args if args else message
+    if key in _WARNED:
+        return
+    if len(_WARNED) >= WARN_MEMORY:
+        _WARNED.clear()
+    _WARNED.add(key)
+    log.warning("%s", key)
+
+
+async def route_for(target_ref: str, msg: OutboundMessage) -> PhoneRoute:
+    """The phone contract's decision for one message. Never raises.
+
+    Read the order: every branch that ends in a push answers BEFORE the
+    recipient is looked up, because enrollment cannot change a push into
+    anything else and a doctor who is not enrolled is pushed to anyway. So the
+    DANGER path costs exactly what it cost yesterday: no extra read, no new
+    failure mode, no new dependency between "the doctor was told" and a store
+    that might be down. Only a message that is about to go quiet pays for a
+    lookup, and only there can a wrong answer be the dangerous one, which is
+    why a failed lookup there falls back to the legacy fan-out.
+
+    The unclassified warning is therefore emitted for any doctor-bound message
+    with no class on it, enrolled or not. That is deliberate and it is said out
+    loud rather than hidden: scoping the warning to enrolled doctors would cost
+    a recipient lookup on the fail-open path, and the callsite that needs
+    classifying is the same callsite whoever is receiving.
+    """
+    kind, _, value = target_ref.partition(":")
+    if kind != "doctor" or not value:
+        return PhoneRoute(LEGACY, why="not a doctor-bound message")
+
+    known, why = classify(msg)
+    if known is None:
+        _warn_once(
+            "doctor-bound message with no notification class was pushed to the "
+            "phone (fail open); classify this callsite (%s): %s",
+            why, _first_words(msg.text),
+        )
+        return PhoneRoute(PUSHED, "", why)
+    if known in PUSH_CLASSES:
+        return PhoneRoute(PUSHED, known.value, why)
+    if known not in PARK_CLASSES and known not in QUIET_CLASSES:
+        # A member nobody routed yet is unrouted, not silent.
+        _warn_once(
+            "unrouted notification class %s on a doctor-bound message; "
+            "pushed to the phone: %s",
+            known.value, _first_words(msg.text),
+        )
+        return PhoneRoute(PUSHED, known.value, "unrouted class")
+
+    if not await _enrolled(target_ref):
+        return PhoneRoute(LEGACY, known.value, "not an enrolled doctor")
+    if known in PARK_CLASSES:
+        return PhoneRoute(PARKED, known.value, why)
+    return PhoneRoute(SUPPRESSED, known.value, why)
+
+
+async def release_parked(
+    doctor_id: str, history: Any, *, at: Optional[Any] = None
+) -> list[str]:
+    """Mark every parked card in `history` as delivered by the digest.
+
+    Idempotent by construction: a card that already carries `digest_at` is
+    skipped, so running the morning twice lists the item once and clears it
+    once. Returns the event ids it cleared, which is what a caller reports.
+    """
+    stamp = (at or store.now()).isoformat()
+    cleared: list[str] = []
+    for event in history or ():
+        if str(getattr(event, "doctor_id", "") or "") != doctor_id:
+            continue
+        if not summary.is_parked(event):
+            continue
+        meta = dict(getattr(event, "meta", None) or {})
+        note = dict(summary.phone_note(event))
+        note["digest_at"] = stamp
+        meta[summary.PHONE_META] = note
+        await store.update_event(str(event.id), meta=meta)
+        cleared.append(str(event.id))
+    return cleared
+
+
 class Fanout:
     """Every reply goes to the console feed, and to Telegram when it is bound.
 
@@ -155,6 +433,11 @@ class Fanout:
     def __init__(self) -> None:
         self.channels: tuple[ChannelAdapter, ...] = (WebAdapter(), TelegramAdapter())
         self._delivered: set[tuple[str, str, str]] = set()
+        # What the phone contract decided, per send, in order (S24-G). It is an
+        # observation and never a return value: nothing above this file has to
+        # read it, and the escalation ordering in core/escalate.py deliberately
+        # still reads only whether the send raised.
+        self.phone_routes: list[PhoneRoute] = []
         # Receiptless legacy messages have no durable idempotency key. Keep a
         # process-local observation key so calling this same Fanout twice does
         # not invent two shadow intents for one suppressed legacy delivery.
@@ -295,6 +578,16 @@ class Fanout:
         Only the web channel writes an event, so only it can answer with an id.
         Telegram is a delivery and not a record, and a phone that is not bound
         is a silent no-op, so neither ever changes what comes back from here.
+
+        The phone contract does not change that either, and that is the point.
+        A parked message still writes its console event and still returns that
+        event's id, so no caller can tell the difference in the return value and
+        no caller has to. What it must never do is look like a delivery, so the
+        Telegram channel is skipped outright rather than marked done, and the
+        explicit outcome is on `self.phone_routes` for anything that wants it.
+        A DANGER push is byte-for-byte the path it was before, exception and
+        all: core/escalate.told_or_fail_closed decides "the doctor was told"
+        from whether this call raised, and a raise here still reaches it.
         """
         if not runtime.legacy_runtime():
             raise RuntimeError(
@@ -315,12 +608,36 @@ class Fanout:
             key = ticket or msg.text
             done = await store.channels_done(ticket) if ticket else frozenset()
 
+            # The phone contract (S24-G). `LEGACY` is every patient-bound send
+            # and every doctor who is not enrolled, and it changes nothing at
+            # all: same channels, same order, same message object.
+            route = await route_for(target_ref, msg)
+            self.phone_routes.append(route)
+            written_msg = msg
+            note = route.mark(
+                timing.next_digest_at(store.now()).isoformat()
+                if route.parked else ""
+            )
+            if note:
+                # Only the console copy carries the note, and only when the
+                # phone stayed quiet. The Telegram copy and the shadow intent
+                # keep the message the caller wrote.
+                written_msg = msg.model_copy(
+                    update={"meta": {**(msg.meta or {}), summary.PHONE_META: note}}
+                )
+
             receipt: Optional[str] = None
             for channel in self.channels:
                 name = self._name(channel)
                 if name in done or (target_ref, key, name) in self._delivered:
                     continue
-                written = await channel.send(target_ref, msg)
+                if name == TelegramAdapter.name and not route.push:
+                    # Not delivered, and deliberately not recorded as delivered:
+                    # the channel is skipped rather than marked done, so nothing
+                    # downstream can read this as a phone that rang.
+                    continue
+                body = written_msg if name == WebAdapter.name else msg
+                written = await channel.send(target_ref, body)
                 self._delivered.add((target_ref, key, name))
                 if ticket:
                     await store.mark_channel_done(ticket, name)
@@ -445,6 +762,7 @@ async def resolve_target(ref: str) -> Optional[ResolvedTarget]:
             doctor_id=doctor.id,
             patient_id=None,
             synthetic=doctor.synthetic,
+            enrolled=bool(getattr(doctor, "workspace_facts_enabled", False)),
         )
     if kind == "patient":
         patient = await store.get_patient(value)

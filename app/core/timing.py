@@ -30,6 +30,12 @@ REAL_DAY_SECONDS = 86400
 LADDER_DAYS: tuple[int, ...] = (-2, 0, 3)
 QUIET_FROM_HOUR = 22  # 22:00 Cairo, inclusive
 QUIET_UNTIL_HOUR = 9  # 09:00 Cairo, exclusive
+# The doctor's morning. It is the same 09:00 Cairo the quiet hours end at, and
+# it is deliberately the same constant rather than a second nine: the moment
+# Sanad is allowed to speak again is the moment the digest is read, and two
+# independent nines would be two clocks to keep in step (S24-G, the phone
+# contract). A message parked off the phone is released here.
+DIGEST_HOUR = QUIET_UNTIL_HOUR
 
 
 def seconds(days: float, time_scale: int) -> float:
@@ -52,6 +58,24 @@ def next_allowed(when: datetime, time_scale: int = REAL_DAY_SECONDS) -> datetime
     local = when.astimezone(CAIRO)
     target = local.replace(hour=QUIET_UNTIL_HOUR, minute=0, second=0, microsecond=0)
     if local.hour >= QUIET_FROM_HOUR:  # late evening: 09:00 is tomorrow morning
+        target += timedelta(days=1)
+    return target.astimezone(timezone.utc)
+
+
+def next_digest_at(when: datetime) -> datetime:
+    """The next 09:00 Cairo at or after `when`: when a parked item is released.
+
+    S24-G. A doctor-bound message that is real but not urgent (a verified result
+    waiting for review, a deadline that ran out) does not ring his phone. It is
+    parked on its own card and listed in the morning digest, and this is the
+    moment "the morning" means. Pure, like everything else here: the caller
+    stamps the answer on the record so the record says when it comes back.
+    """
+    local = when.astimezone(CAIRO)
+    target = local.replace(
+        hour=DIGEST_HOUR, minute=0, second=0, microsecond=0
+    )
+    if local > target:
         target += timedelta(days=1)
     return target.astimezone(timezone.utc)
 
