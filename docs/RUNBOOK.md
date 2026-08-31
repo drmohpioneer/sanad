@@ -935,5 +935,5 @@ Everything else in the working folder this was built in is planning material,
 slice specs, verification results and reviews. None of it ships: the public
 repository is the five entries above and nothing else.
 
-Creating and pushing that repository is a separate gate. Nothing in this build
-does it, and no commit has been made from this tree.
+That repository is published at https://github.com/drmohpioneer/sanad, and
+`main` is the branch a judge reads and clones.
