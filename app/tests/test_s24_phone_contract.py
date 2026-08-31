@@ -29,8 +29,9 @@ from __future__ import annotations
 import os
 import unittest
 from contextlib import ExitStack
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from typing import Optional
 from unittest.mock import AsyncMock, patch
 
 from core import adapters, digest, escalate, summary, timing
@@ -616,6 +617,224 @@ class TheEndOfDayCardIsUnchangedByDefault(unittest.TestCase):
             f"{summary.PARKED_HEADING} (1):", card["lines"]
         )
         self.assertIn("  · Ahmed Ali: 🧪 Lab results", card["lines"])
+
+
+# --------------------------------------------------------------------------- #
+# S24-F: a Case Steward hold, and the one direction it is allowed to move
+# --------------------------------------------------------------------------- #
+# The hold is a mark a sender puts on a message it is already sending. It can
+# make that message quieter and it can bring a card that was already parked back
+# sooner. Every other thing it might be imagined to do is a test below.
+HELD_UNTIL = (NOW + timedelta(hours=2)).isoformat()
+LATE = (NOW + timedelta(days=5)).isoformat()
+
+
+def routine_card() -> dict:
+    """A card the Coordinator writes: no class on it, so it rings today."""
+    return {"title": "Barrier needs you · Ahmed", "severity": "yellow",
+            "lines": ["Barrier: cost."], "actions": []}
+
+
+def held(text: str = "Ahmed's follow-up is blocked.", *, until: object = HELD_UNTIL,
+         extra: Optional[dict] = None, card: Optional[dict] = None
+         ) -> OutboundMessage:
+    meta: dict = {adapters.STEWARD_HOLD: until}
+    meta.update(extra or {})
+    return OutboundMessage(text=text, patient_id="p1", meta=meta,
+                           card=card if card is not None else routine_card())
+
+
+class AHoldOnlyEverMakesAMessageQuieter(Harness):
+    async def test_a_routine_card_is_parked_with_the_holds_own_moment(self
+                                                                     ) -> None:
+        out, receipt = await self.fan(held(), target=enrolled())
+
+        self.assertEqual(adapters.PARKED, out.phone_routes[0].decision)
+        self.assertFalse(out.phone_routes[0].rang_the_phone)
+        self.send_card.assert_not_awaited()
+        self.assertEqual("event-1", receipt,
+                         "the cockpit copy is written exactly as before")
+
+        note = self.phone_note()
+        self.assertEqual(summary.PARKED, note["decision"])
+        self.assertEqual(HELD_UNTIL, note["release_at"])
+        self.assertEqual("steward", note["held_by"])
+
+        rows = summary.parked_rows([_event(self.appended[0])])
+        self.assertEqual(1, len(rows))
+        self.assertEqual(HELD_UNTIL, rows[0]["release_at"])
+        self.assertEqual("steward", rows[0]["held_by"])
+
+    async def test_the_morning_is_the_ceiling_and_a_hold_cannot_reach_past_it(
+            self) -> None:
+        """A hold that asks for five days gets the morning. Code decides."""
+        await self.fan(held(until=LATE), target=enrolled())
+        self.assertEqual(timing.next_digest_at(NOW).isoformat(),
+                         self.phone_note()["release_at"])
+
+    async def test_an_already_parked_card_can_be_brought_back_sooner(self
+                                                                    ) -> None:
+        await self.fan(
+            held(card=review_card(),
+                 extra={"notification_class": "REVIEW_READY"}),
+            target=enrolled())
+        note = self.phone_note()
+        self.assertEqual(HELD_UNTIL, note["release_at"])
+        self.assertLess(note["release_at"],
+                        timing.next_digest_at(NOW).isoformat())
+        self.assertEqual("REVIEW_READY", note["class"])
+
+    # -- the two it may never touch ----------------------------------------- #
+    async def test_danger_during_a_hold_still_rings_instantly(self) -> None:
+        """The mark is not even read: the push branch answers before it."""
+        out, _ = await self.fan(
+            held("Critical potassium for Ahmed.", card=None,
+                 extra={"notification_class": NotificationClass.DANGER.value}),
+            target=enrolled())
+        self.send_card.assert_awaited_once()
+        self.assertEqual(adapters.PUSHED, out.phone_routes[0].decision)
+        self.assertTrue(out.phone_routes[0].rang_the_phone)
+        self.assertEqual({}, self.phone_note(),
+                         "a held danger card must be stored exactly as before")
+
+    async def test_urgent_sla_during_a_hold_still_rings(self) -> None:
+        out, _ = await self.fan(
+            held("Ahmed has not answered the critical callback.", card=None,
+                 extra={"notification_class": "URGENT_SLA"}),
+            target=enrolled())
+        self.send_card.assert_awaited_once()
+        self.assertEqual(adapters.PUSHED, out.phone_routes[0].decision)
+
+    async def test_the_hold_is_read_after_the_pushing_branches_in_the_source(
+            self) -> None:
+        """The ordering above is the rail, so it is asserted as ordering."""
+        from pathlib import Path
+
+        source = (Path(adapters.__file__)).read_text(encoding="utf-8")
+        body = source.split("async def route_for(", 1)[1]
+        self.assertLess(body.index("if known in PUSH_CLASSES:"),
+                        body.index("held = held_until(msg)"))
+
+    # -- the two it may never make louder ------------------------------------ #
+    async def test_a_hold_never_wakes_a_message_a_sender_marked_quiet(self
+                                                                     ) -> None:
+        """Parking silent work would put it in a digest. That is louder."""
+        for quiet in ("SILENT_WORK", "SOLICITED_RESPONSE"):
+            with self.subTest(quiet=quiet):
+                self.setUp()
+                out, _ = await self.fan(
+                    held(card=None, extra={"notification_class": quiet}),
+                    target=enrolled())
+                self.assertEqual(adapters.SUPPRESSED,
+                                 out.phone_routes[0].decision)
+                self.assertEqual(summary.SUPPRESSED,
+                                 self.phone_note()["decision"])
+                self.assertEqual([], summary.parked_rows(
+                    [_event(self.appended[0])]))
+
+    async def test_a_hold_never_quiets_a_doctor_who_is_not_enrolled(self
+                                                                    ) -> None:
+        """Off the cohort a hold is not refused, it is not covered.
+
+        The route says LEGACY rather than PUSHED, which is the more honest of
+        the two labels for the same thing and is the label every other quiet
+        branch already uses off the cohort. What matters is underneath it and
+        is asserted below: the phone rings, every channel runs, and the card is
+        stored with exactly the bytes it would have carried with no Steward.
+        """
+        out, _ = await self.fan(held(), target=enrolled(False))
+        self.assertEqual(adapters.LEGACY, out.phone_routes[0].decision)
+        self.assertTrue(out.phone_routes[0].push)
+        self.assertTrue(out.phone_routes[0].rang_the_phone)
+        self.send_card.assert_awaited_once()
+        self.assertEqual({}, self.phone_note())
+
+        held_note = self.phone_note()
+        self.setUp()
+        await self.fan(
+            OutboundMessage(text="Ahmed's follow-up is blocked.",
+                            patient_id="p1", card=routine_card()),
+            target=enrolled(False))
+        self.assertEqual(self.phone_note(), held_note,
+                         "an unenrolled doctor's card changed under a hold")
+
+    # -- fail open ----------------------------------------------------------- #
+    async def test_an_unreadable_hold_routes_as_if_it_were_not_there(self
+                                                                    ) -> None:
+        for bad in ("", "   ", "tomorrow morning", "the case steward", 5,
+                    None, {"at": HELD_UNTIL}, [HELD_UNTIL], True):
+            with self.subTest(bad=bad):
+                self.setUp()
+                out, _ = await self.fan(held(until=bad), target=enrolled())
+                self.assertEqual(adapters.PUSHED,
+                                 out.phone_routes[0].decision)
+                self.send_card.assert_awaited_once()
+                self.assertEqual({}, self.phone_note())
+
+    def test_the_reader_never_raises_on_anything_at_all(self) -> None:
+        for meta in ({}, {adapters.STEWARD_HOLD: object()}, {"other": 1}):
+            with self.subTest(meta=meta):
+                self.assertEqual(
+                    "", adapters.held_until(
+                        OutboundMessage(text="x", meta=meta)))
+        self.assertEqual(HELD_UNTIL, adapters.held_until(held()))
+
+    def test_the_clamp_never_raises_and_never_returns_nothing(self) -> None:
+        morning = timing.next_digest_at(NOW).isoformat()
+        for asked in ("", "not a time", "2026-08-31", HELD_UNTIL, LATE):
+            with self.subTest(asked=asked):
+                answer = adapters.release_moment(
+                    adapters.PhoneRoute(adapters.PARKED, release_at=asked), NOW)
+                self.assertTrue(answer)
+                self.assertLessEqual(answer, morning)
+
+
+class AHeldCardIsOwedByExactlyOneMorning(unittest.IsolatedAsyncioTestCase):
+    """The digest half: a held card is listed once and then stops being owed."""
+
+    def setUp(self) -> None:
+        self.updates: list[tuple[str, dict]] = []
+
+    async def _update_event(self, event_id, **fields):
+        self.updates.append((event_id, fields))
+        for event in self.history:
+            if event.id == event_id:
+                event.meta = fields.get("meta", event.meta)
+
+    def held_card(self) -> SimpleNamespace:
+        note = {"decision": summary.PARKED, "class": "",
+                "release_at": HELD_UNTIL, "held_by": "steward"}
+        return SimpleNamespace(
+            id="event-1", doctor_id="d1", patient_id="p1", ts=NOW, kind="card",
+            text="Barrier needs you", meta={"card": routine_card(),
+                                            summary.PHONE_META: note})
+
+    async def test_the_morning_releases_a_held_card_exactly_once(self) -> None:
+        self.history = [self.held_card()]
+        self.assertEqual(1, len(summary.parked_rows(self.history)))
+
+        cleared: list[list[str]] = []
+        for _ in range(2):
+            with patch.object(adapters.store, "now", lambda: NOW), \
+                    patch.object(adapters.store, "update_event",
+                                 self._update_event):
+                cleared.append(await adapters.release_parked("d1",
+                                                             self.history))
+        self.assertEqual([["event-1"], []], cleared)
+        self.assertEqual([ident for ident, _ in self.updates], ["event-1"])
+        self.assertEqual([], summary.parked_rows(self.history),
+                         "a released card is not owed by a second morning")
+
+    async def test_releasing_it_keeps_who_parked_it_on_the_record(self) -> None:
+        self.history = [self.held_card()]
+        with patch.object(adapters.store, "now", lambda: NOW), \
+                patch.object(adapters.store, "update_event",
+                             self._update_event):
+            await adapters.release_parked("d1", self.history)
+        note = summary.phone_note(self.history[0])
+        self.assertEqual("steward", note["held_by"])
+        self.assertEqual(HELD_UNTIL, note["release_at"])
+        self.assertTrue(note["digest_at"])
 
 
 if __name__ == "__main__":

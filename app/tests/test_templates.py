@@ -32,7 +32,20 @@ class TheFiveSentences(unittest.TestCase):
             "told_doctor", "plan_again", "send_it_here",
             # rev 17, items 6, 9 and 11.
             "told_doctor_will_answer", "welcome", "welcome_next",
-            "doctor_says"})
+            "doctor_says",
+            # S19, the Resolver. Two questions it may ask and two lead lines
+            # over a block of real places built in code (core/places.py).
+            "ask_area", "ask_public_lab", "places_found", "places_cheap"})
+
+    def test_the_s19_block_is_one_block_a_reviewer_can_read(self) -> None:
+        """Same rule as the rev 17 block below: one place to read the Arabic."""
+        from pathlib import Path
+        source = (Path(templates.__file__).read_text(encoding="utf-8")
+                  .split("# S19: the four sentences", 1)[1])
+        for name in ("ASK_AREA", "ASK_PUBLIC_LAB", "PLACES_FOUND",
+                     "PLACES_CHEAP"):
+            with self.subTest(name=name):
+                self.assertIn(f"{name} = {{", source)
 
     def test_the_rev_17_block_is_one_block_a_reviewer_can_read(self) -> None:
         """Mohamed reads the Arabic in one place, so it is written in one place."""

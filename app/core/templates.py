@@ -1,15 +1,24 @@
-"""Owns the words the Care Coordinator is allowed to send a patient.
+"""Owns the words the Care Coordinator and the Resolver may send a patient.
 
-Twelve sentences, that is the whole vocabulary: the five the Coordinator's
+Sixteen sentences, that is the whole vocabulary: the five the Coordinator's
 tools needed at S6, three more the administrative tier needed at S6++ item G,
-and four added at rev 17, which sit together at the bottom of this file under a
-marked block so a reviewer reading the Arabic has one place to read. The
-Coordinator is an agent with tools and it never writes a line: it picks a tool,
-and the tool sends one of these, gendered by core/gender.py and in the patient's
-own language. The only variable parts are a date, the doctor's name, the
-patient's first name and the name of a missing analyte, and `render` refuses
-anything else, so a template can never grow a number or a dose the doctor did
-not write.
+four added at rev 17, and four added at S19 for the Resolver. The last two
+groups sit together at the bottom of this file under marked blocks so a
+reviewer reading the Arabic has one place to read. The Coordinator is an agent
+with tools and it never writes a line: it picks a tool, and the tool sends one
+of these, gendered by core/gender.py and in the patient's own language. The
+only variable parts are a date, the doctor's name, the patient's first name and
+the name of a missing analyte, and `render` refuses anything else, so a template
+can never grow a number or a dose the doctor did not write.
+
+The Resolver has one thing to say that no fixed sentence can carry: three real
+laboratories with their addresses and opening hours. That block is not a
+template and it is not generated either. It is assembled in code out of the
+fields the Places API returned (core/places.Search.block) and sent underneath
+one of the S19 sentences below, exactly as the doctor's own plan text is sent
+underneath `plan_again`. No field of any template below carries an address, an
+area or a count, so nothing a patient or a listing wrote can reach the inside
+of a Sanad sentence.
 
 The Chaser's ladder templates stay where they are (core/chaser.py): those are
 the reminders S3 owns. These are the sentences the Coordinator needs and S3 had
@@ -261,6 +270,91 @@ DOCTOR_SAYS = {
 }
 
 
+# =========================================================================== #
+# S19: the four sentences the Resolver needs, in one block for the same reason
+# the rev 17 block exists. Same rules as every line above: three genders, two
+# languages, no field at all, and nothing a model wrote. Two of them are lead
+# lines: the places the search actually returned are sent as a code-built block
+# underneath, never inside the sentence.
+# =========================================================================== #
+
+# The one question the Resolver may ask about where somebody lives, asked at
+# most once per barrier and enforced in code (core/resolver.py).
+ASK_AREA = {
+    "ar": {
+        "m": "أنت ساكن في أي منطقة؟ عشان أدور على أقرب مكان ليك.",
+        "f": "أنتي ساكنة في أي منطقة؟ عشان أدور على أقرب مكان ليكي.",
+        "u": "المنطقة إيه؟ عشان يتم البحث عن أقرب مكان.",
+    },
+    "en": {
+        "m": "Which area are you in? I will look for the nearest place to you.",
+        "f": "Which area are you in? I will look for the nearest place to you.",
+        "u": "Which area is it? The nearest place will be looked up.",
+    },
+}
+
+# The cost question, and it is a yes or a no. It never asks a patient for a
+# number, which is the doctor's own rule about his own system: Sanad does not
+# interview somebody about his money, and a figure it was told would be a
+# figure it could not use anyway, because Maps carries no price to compare it
+# with. So the one thing worth knowing is asked instead, and it is the thing
+# the search can act on: would the public sector do?
+ASK_PUBLIC_LAB = {
+    "ar": {
+        "m": "معمل مستشفى حكومي ينفع معاك؟ عادةً بيكون أرخص بكتير.",
+        "f": "معمل مستشفى حكومي ينفع معاكي؟ عادةً بيكون أرخص بكتير.",
+        "u": "معمل مستشفى حكومي ينفع؟ عادةً بيكون أرخص بكتير.",
+    },
+    "en": {
+        "m": "Would a public hospital lab work for you? They are usually much "
+             "cheaper.",
+        "f": "Would a public hospital lab work for you? They are usually much "
+             "cheaper.",
+        "u": "Would a public hospital lab work? They are usually much cheaper.",
+    },
+}
+
+# The lead line over an ordinary search result. The places follow it as their
+# own block, built in code from what the API returned.
+PLACES_FOUND = {
+    "ar": {
+        "m": "دي أقرب أماكن لقيتها ليك. ابعتلي النتيجة أول ما تجهز.",
+        "f": "دي أقرب أماكن لقيتها ليكي. ابعتيلي النتيجة أول ما تجهز.",
+        "u": "دي أقرب الأماكن اللي ظهرت في البحث. برجاء إرسال النتيجة أول ما تجهز.",
+    },
+    "en": {
+        "m": "These are the nearest places I found. Send me the result as soon "
+             "as you have it.",
+        "f": "These are the nearest places I found. Send me the result as soon "
+             "as you have it.",
+        "u": "These are the nearest places found. Please send the result as "
+             "soon as it is ready.",
+    },
+}
+
+# The lead line over a cheaper-options search, and the honest sentence that
+# has to go with it: Maps has no prices, so Sanad quotes none.
+PLACES_CHEAP = {
+    "ar": {
+        "m": "أنا مش شايف الأسعار، فمش هقولك رقم. دي أماكن حكومية عادةً أرخص، "
+             "اسأل المكان نفسه على السعر.",
+        "f": "أنا مش شايف الأسعار، فمش هقولك رقم. دي أماكن حكومية عادةً أرخص، "
+             "اسألي المكان نفسه على السعر.",
+        "u": "الأسعار مش ظاهرة، وبالتالي مفيش رقم. دي أماكن حكومية عادةً أرخص، "
+             "والسعر بيتسأل عليه في المكان نفسه.",
+    },
+    "en": {
+        "m": "I cannot see prices, so I will not quote one. These are public "
+             "places that are usually cheaper. Ask the place what it costs.",
+        "f": "I cannot see prices, so I will not quote one. These are public "
+             "places that are usually cheaper. Ask the place what it costs.",
+        "u": "Prices are not visible, so none is quoted. These are public "
+             "places that are usually cheaper. The price has to be asked for "
+             "at the place itself.",
+    },
+}
+
+
 TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
     "check_again": CHECK_AGAIN,
     "cost_told": COST_TOLD,
@@ -275,6 +369,11 @@ TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
     "welcome": WELCOME,
     "welcome_next": WELCOME_NEXT,
     "doctor_says": DOCTOR_SAYS,
+    # S19, the Resolver
+    "ask_area": ASK_AREA,
+    "ask_public_lab": ASK_PUBLIC_LAB,
+    "places_found": PLACES_FOUND,
+    "places_cheap": PLACES_CHEAP,
 }
 
 

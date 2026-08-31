@@ -17,6 +17,12 @@ SA=sanad-run@${PROJECT}.iam.gserviceaccount.com
 SECRET=sanad-admin-secret
 TG_SECRET=sanad-tg-webhook-secret
 BOT_SECRET=sanad-bot-token
+# S19. The Places API (New) key the Resolver searches with. Created out of
+# band, exactly like the bot token, and optional in exactly the same way: with
+# no secret the service deploys without MAPS_API_KEY, every search comes back
+# unavailable and the barrier is handed to the doctor saying so. Nothing
+# crashes and nothing is invented.
+MAPS_SECRET=sanad-maps-key
 QUEUE=sanad-chase
 BUCKET=${PROJECT}-labs
 # Demo knobs. Both can be changed at run time through POST /admin/settings, so
@@ -141,6 +147,21 @@ if gcloud secrets describe "$BOT_SECRET" --project "$PROJECT" >/dev/null 2>&1; t
   echo "Bot token found: Telegram is enabled."
 else
   echo "No ${BOT_SECRET} secret: deploying web-only (Telegram pending token)."
+fi
+
+# 6b. Maps key, if it exists. Same shape as the bot token above and the same
+#     rule: the value never reaches a shell variable here. Create it out of
+#     band once the key exists:
+#       printf %s 'AIza...' | gcloud secrets create sanad-maps-key \
+#         --project "$PROJECT" --replication-policy=automatic --data-file=-
+#     Cloud Console -> APIs & Services -> Library -> "Places API (New)" ->
+#     Enable, then Credentials -> Create API key -> restrict it to that one API.
+if gcloud secrets describe "$MAPS_SECRET" --project "$PROJECT" >/dev/null 2>&1; then
+  SECRETS="${SECRETS},MAPS_API_KEY=${MAPS_SECRET}:latest"
+  echo "Maps key found: the Resolver can search for labs and pharmacies."
+else
+  echo "No ${MAPS_SECRET} secret: the Resolver runs without Maps. Every search"
+  echo "answers 'unavailable' and the barrier goes to the doctor saying so."
 fi
 
 # 7. The service's own URL. Cloud Tasks calls it back, and the OIDC token it

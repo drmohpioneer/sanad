@@ -95,6 +95,16 @@ class Patient(BaseModel):
     age: Optional[int] = None
     sex: Optional[str] = None
     diagnosis: str = ""
+    # Where this person lives, in his own words or the doctor's: "Nasr City",
+    # "Zagazig" (S19). It is the only thing the Resolver needs in order to look
+    # for a laboratory or a pharmacy he can actually reach, and it is the one
+    # thing the Resolver is allowed to ask him for, once per barrier. It is an
+    # area name and never a coordinate: Sanad does not hold anybody's location.
+    #
+    # An empty area is omitted from every dump, so a record that has never met
+    # the Resolver serializes exactly as it did before this field existed and
+    # the Gate 0B replay stays byte stable.
+    area: str = Field(default="", exclude_if=lambda value: not value)
     baseline: dict[str, str] = Field(default_factory=dict)
     targets: dict[str, str] = Field(default_factory=dict)
     plan_text: str = ""
@@ -210,6 +220,28 @@ class Loop(BaseModel):
     )
     # What the verifier said about the evidence that arrived (core/verify.py).
     verified: dict[str, Any] = Field(default_factory=dict)
+    # What the Resolver did about `barrier`, and how far it got (S19). It is
+    # the barrier's own memory across turns, written by core/resolver.py and
+    # read by nothing that decides anything clinical:
+    #
+    #   barrier      which class this record is about, so a later barrier gets
+    #                its one question back rather than inheriting a spent one
+    #   asks         the question waiting on the patient ("area",
+    #                "public_lab"), and empty when nothing is outstanding
+    #   asked        how many questions this barrier has cost him (cap: one)
+    #   public_lab   his yes or no to a public laboratory, on a cost barrier
+    #   searched     how many searches this barrier has spent (cap: two)
+    #   tried        what was attempted, in order, and what each came back
+    #                with. It is what the hand-over card prints.
+    #   solved       the Resolver sent the patient a way forward
+    #   handed_over  the Resolver ran out of moves and the doctor has it
+    #
+    # An empty record is omitted from every dump, for the same reason `area`
+    # is: a loop the Resolver never touched serializes exactly as it did
+    # before this field existed.
+    resolver: dict[str, Any] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
     created_at: datetime
     updated_at: datetime
 

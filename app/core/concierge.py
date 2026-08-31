@@ -55,7 +55,7 @@ from google.genai import types
 from . import (
     auditor, bounded, chaser, coordinator, escalate, events, extractor, gender,
     intents, lang, photos, policy as policy_module, provenance, report,
-    sentinel, settings, store, templates, validator, vitals,
+    resolver, sentinel, settings, store, templates, validator, vitals,
 )
 from .adapters import OutboundMessage, fanout
 from .channel_contracts import NotificationClass
@@ -675,6 +675,23 @@ async def handle_patient_message(
 
     if not text:
         return
+
+    # S19. An answer to the one question the Resolver asked is claimed before
+    # anything else in this function reads the message, and that position is
+    # the whole of it. "no" is a refusal of a public laboratory here and reads
+    # as a refusal of the treatment itself further down, where it becomes a
+    # card on the doctor's board; "Nasr City" matches no intent, no
+    # obligation's own words and no gate at all, so it would reach the
+    # Concierge as a question about nothing. A reply to a question Sanad asked
+    # belongs to the thing that asked it. Only a loop actually waiting for an
+    # answer claims a message (core/resolver.waiting_for), so a patient with
+    # nothing outstanding is never intercepted here.
+    if not change_reason:
+        answered = await resolver.on_answer(
+            patient, doctor, await store.list_loops(patient.id), text,
+            said=said_id)
+        if answered is not None:
+            return
 
     # The Care Coordinator, on a reply about an obligation Sanad is carrying.
     # It sits here, after every gate above and before any generation, because

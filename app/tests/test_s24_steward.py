@@ -50,7 +50,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core import bounded, policy, steward, timing
+from core import adapters, bounded, policy, steward, timing
 from core.models import Doctor, Loop, Patient
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -525,7 +525,8 @@ class TheCoordinatorPutsItsPlanUpForReview(unittest.IsolatedAsyncioTestCase):
 
         class Sender:
             async def send(self, ref, msg):
-                outer.sent.append((ref, msg.text, msg.card))
+                outer.sent.append((ref, msg.text, msg.card,
+                                   dict(msg.meta or {})))
                 return f"s{len(outer.sent)}"
 
         self.patches = [
@@ -553,12 +554,27 @@ class TheCoordinatorPutsItsPlanUpForReview(unittest.IsolatedAsyncioTestCase):
         return await coordinator._execute(turn, decision)
 
     def record(self) -> tuple:
-        """Everything this turn wrote, minus what the Steward is allowed to add."""
+        """Everything this turn wrote, minus what the Steward is allowed to add.
+
+        Two keys are stripped and no others, and they are the two the Steward is
+        allowed to author: the trail note on its own event, and the hold mark on
+        the card it is asking core/adapters.py to park. Everything else - every
+        store write, every event, every message, every field of the loop - has
+        to come back identical, which is what makes R3 a test and not a claim.
+        """
         events = [(kind, text, {k: v for k, v in meta.items()
                                 if k not in ("steward", "decided_by")})
                   for kind, text, meta in self.written]
-        return (tuple(self.writes), tuple(events), tuple(self.sent),
+        sent = [(ref, text, card,
+                 {k: v for k, v in meta.items() if k != adapters.STEWARD_HOLD})
+                for ref, text, card, meta in self.sent]
+        return (tuple(self.writes), tuple(events), tuple(sent),
                 self.loop.model_dump(mode="json"))
+
+    def hold_marks(self) -> list:
+        """The hold mark on each doctor-bound message this turn sent."""
+        return [meta.get(adapters.STEWARD_HOLD)
+                for ref, _t, _c, meta in self.sent if ref.startswith("doctor:")]
 
     # -- approve ----------------------------------------------------------- #
     async def test_approve_is_byte_identical_except_the_trail_line(self
@@ -637,6 +653,50 @@ class TheCoordinatorPutsItsPlanUpForReview(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(released - NOW, timedelta(hours=6))
         self.assertLessEqual(released, timing.next_digest_at(NOW))
         self.assertNotIn("tool", note, "a hold may not name an action")
+
+    async def test_a_hold_marks_the_doctors_card_with_its_release_moment(
+            self) -> None:
+        """The hold reaches core/adapters.py as a mark, and as nothing else."""
+        answer = await self.act(steward.HOLD)
+        self.assertEqual([answer["steward"]["release_at"]], self.hold_marks())
+        stamped = datetime.fromisoformat(self.hold_marks()[0])
+        self.assertLessEqual(stamped - NOW, timedelta(hours=6))
+        self.assertLessEqual(stamped, timing.next_digest_at(NOW))
+
+    async def test_no_hold_means_no_mark_at_all(self) -> None:
+        """An approve, a revise and a doctor off the cohort leave none."""
+        for said, named, enrolled in ((steward.APPROVE, "", True),
+                                      (steward.REVISE, "pause_loop", True),
+                                      (steward.HOLD, "", False)):
+            with self.subTest(said=said, enrolled=enrolled):
+                self.reset()
+                await self.act(said, named, enrolled=enrolled,
+                               tool="classify_barrier" if named else "pause_loop")
+                self.assertEqual([None], self.hold_marks())
+
+    async def test_the_mark_is_the_only_thing_a_hold_adds_to_a_message(self
+                                                                      ) -> None:
+        """R3, on the wire: same text, same card, same everything else."""
+        await self.act(steward.APPROVE)
+        unheld = [(ref, text, card) for ref, text, card, _m in self.sent]
+        self.reset()
+        await self.act(steward.HOLD)
+        self.assertEqual(unheld,
+                         [(ref, text, card) for ref, text, card, _m in self.sent])
+
+    async def test_a_mark_that_cannot_be_written_falls_open_to_no_mark(self
+                                                                      ) -> None:
+        """Fail-open: a card the doctor needs beats a mark he does not see."""
+        turn = self.turn()
+
+        class Unwritable:
+            def isoformat(self):
+                raise ValueError("not a moment")
+
+        turn.steward = steward.Verdict(steward.HOLD, line=steward.PARKED,
+                                       release_at=Unwritable())
+        with self.assertLogs("sanad.coordinator", level="WARNING"):
+            self.assertEqual({}, coordinator._hold_mark(turn))
 
     async def test_a_hold_never_deletes_the_line_it_delays(self) -> None:
         answer = await self.act(steward.HOLD)

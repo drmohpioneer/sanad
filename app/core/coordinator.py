@@ -67,7 +67,7 @@ from . import (
     policy as policy_module, sentinel, settings, store,
     steward as steward_module, tasks, templates, timing,
 )
-from .adapters import OutboundMessage, fanout
+from .adapters import STEWARD_HOLD, OutboundMessage, fanout
 from .models import Doctor, Loop, Patient
 
 log = logging.getLogger("sanad.coordinator")
@@ -685,6 +685,25 @@ async def _counted(turn: Turn, contact_kind: str) -> None:
     await store.update_loop(turn.loop.id, last_attempt_at=now)
 
 
+def _hold_mark(turn: Turn) -> dict[str, str]:
+    """The Steward's hold, as the one mark core/adapters.py reads, or {}.
+
+    Empty for every turn there was no Steward on, every verdict that was not a
+    hold, and every hold whose release moment did not survive being written
+    down. An absent mark is the whole of the fail-open: the card routes exactly
+    as it routed before this agent existed.
+    """
+    verdict = turn.steward
+    if verdict is None or not verdict.held or verdict.release_at is None:
+        return {}
+    try:
+        return {STEWARD_HOLD: verdict.release_at.isoformat()}
+    except Exception:  # noqa: BLE001 - a card the doctor needs beats a mark
+        log.warning("the steward's hold could not be written onto the card; "
+                    "it routes as it would have without one", exc_info=True)
+        return {}
+
+
 async def _card(turn: Turn, title: str, severity: str, lines: list[str],
                 actions: Optional[list[dict]] = None,
                 decided_by: str = DECIDED_BY_AGENT) -> None:
@@ -695,11 +714,17 @@ async def _card(turn: Turn, title: str, severity: str, lines: list[str],
     administrative intent that core/intents.py named in code. A card that said
     "model choice" for a chore matched by a pattern list would be a false
     label, and the badge on the board is only worth drawing if it is true.
+
+    S24-F. This is the only doctor-bound send in this file, so it is the one
+    place a Steward hold is acted on. The mark is put on the message and the
+    message is sent exactly as it was: what the mark means, and whether it is
+    allowed to mean anything at all, is decided by core/adapters.route_for,
+    which is still the only thing here that knows what a phone is.
     """
     await fanout().send(f"doctor:{turn.doctor.web_token}", OutboundMessage(
         text=f"{turn.patient.name}: {title}",
         patient_id=turn.patient.id,
-        meta={"decided_by": decided_by},
+        meta={"decided_by": decided_by, **_hold_mark(turn)},
         card={"title": f"{title} · {turn.patient.name}", "severity": severity,
               "lines": lines, "actions": actions or []}))
 
@@ -715,7 +740,8 @@ def _reason_line(turn: Turn) -> str:
 
 async def _escalate(turn: Turn, decision: policy_module.Decision,
                     barrier: str, extra: Optional[list[str]] = None,
-                    decided_by: str = DECIDED_BY_AGENT) -> str:
+                    decided_by: str = DECIDED_BY_AGENT,
+                    extra_meta: Optional[dict[str, Any]] = None) -> str:
     """One barrier card the doctor can answer, and the escalation behind it.
 
     The card is not a notice. It opens a Relay carrying this loop's id and
@@ -741,14 +767,23 @@ async def _escalate(turn: Turn, decision: policy_module.Decision,
         "Your answer goes to the patient and this obligation starts again.",
         decision.audit(),
     ]
+    # `extra_meta` is how the Resolver's hand-over puts its own tool loop on
+    # this event (S19): the card already prints what was tried, in `extra`, and
+    # the feed needs the same thing as a record it can render rather than as
+    # lines of text it would have to parse back. It defaults to nothing, so an
+    # escalation from any of the callers that existed before it writes the
+    # event it always wrote, byte for byte.
+    meta: dict[str, Any] = {
+        "coordinator": decision.as_meta(), "barrier": barrier,
+        "relay_id": relay.id,
+        "audit": {"tier": "coordinator", "coordinator": decision.as_meta()},
+        "decided_by": decided_by,
+    }
+    meta.update(extra_meta or {})
     await events.append_event(
         turn.doctor.id, "escalation",
         f"barrier escalated on {turn.loop.title}: {barrier or 'unclear'}",
-        patient_id=turn.patient.id, loop_id=turn.loop.id,
-        meta={"coordinator": decision.as_meta(), "barrier": barrier,
-              "relay_id": relay.id,
-              "audit": {"tier": "coordinator", "coordinator": decision.as_meta()},
-              "decided_by": decided_by},
+        patient_id=turn.patient.id, loop_id=turn.loop.id, meta=meta,
     )
     await _card(turn, "Barrier needs you", "yellow", lines,
                 [{"id": f"reply:{relay.id}", "label": "Answer", "input": True}],
@@ -837,10 +872,23 @@ async def _execute(turn: Turn, decision: policy_module.Decision) -> dict[str, An
         answered = True
 
     elif tool == "classify_barrier":
+        from . import resolver  # here, not at import time: resolver imports us
+
         barrier = str(args.get("barrier") or "unclear").lower()
         await store.update_loop(turn.loop.id, barrier=barrier,
                                 barrier_note=decision.reason)
-        if barrier in turn.policy.escalate_only():
+        # S19. A barrier the Resolver can work is worked before it is moved.
+        # It answers the patient with somewhere he can actually go, an offer of
+        # another day, or one question, and it is the only thing in this branch
+        # that can end without a card on the doctor's board. None means it was
+        # switched off, the class is not one of its five, the doctor's own
+        # policy keeps that class for himself, or its model could not be used:
+        # every one of those falls through to the S6 branches below, unchanged.
+        worked = await resolver.handoff(turn, decision, barrier)
+        if worked is not None:
+            detail["resolver"] = worked
+            answered = bool(worked.get("answered"))
+        elif barrier in turn.policy.escalate_only():
             # Escalate-only: the doctor is told, the reminders stop, and the
             # patient hears one line that says exactly that and nothing more.
             await store.update_loop(turn.loop.id, paused=True)
@@ -1467,8 +1515,19 @@ async def _execute_intent(turn: Turn, intent: str,
                           decision: policy_module.Decision,
                           decided_by: str = DECIDED_BY_INTENT_CODE
                           ) -> dict[str, Any]:
-    """The effect of one accepted intent. Templates only, guards already passed."""
-    from . import intents
+    """The effect of one accepted intent. Templates only, guards already passed.
+
+    S19b. Two of these four used to end at the doctor or at a fixed delay,
+    which is the thing the Resolver exists to stop: "the pharmacy does not have
+    it" was a card and nothing else, and "I forgot" was a date and nothing
+    else. Both now ask the Resolver first, with the barrier class the intent
+    already named, and both keep exactly what they did before as the answer to
+    a Resolver that returned None. RESCHEDULE_VISIT does not ask: a day change
+    is not a barrier class the routing table has, the intent already moves the
+    date through the same policy guard `reschedule_visit` would pass, and
+    inventing a class for it would put a wrong word on the doctor's board.
+    """
+    from . import intents, resolver
 
     detail: dict[str, Any] = {"intent": intent}
     when = decision.when or store.now()
@@ -1491,42 +1550,63 @@ async def _execute_intent(turn: Turn, intent: str,
                    date=_on_day(turn, when))
 
     elif intent == intents.FORGOT_MEASURE:
-        # The barrier is "forgot" and the gap is on the record. The reminder it
-        # moves is a second decision through the same schedule guard, exactly as
-        # a model-chosen classify_barrier reschedule is: the barrier class does
-        # not buy anyone a contact the policy would refuse.
+        # The barrier is "forgot" and the gap is on the record. The Resolver's
+        # own row for "forgot" is resume_chase and nothing else, so this is the
+        # same move made by the agent that owns barriers rather than by a
+        # second copy of it here. What follows the `if` is that copy, unchanged,
+        # and it is what runs when the Resolver stood down.
         await store.update_loop(turn.loop.id, barrier="forgot",
                                 barrier_note=decision.reason)
         detail["barrier"] = "forgot"
         detail["gap"] = {"at": store.now().isoformat(timespec="minutes"),
                          "said": " ".join((turn.message or "").split())[:200]}
-        second = policy_module.check(
-            "schedule_next_contact",
-            {"days_from_now": int(decision.args.get("resume_in_days") or 1)},
-            turn.facts, turn.policy, reason=decision.reason,
-        )
-        if second.allowed and second.when is not None:
-            detail["task"] = await _schedule_task(turn, second.when)
-            detail["reschedule"] = second.as_meta()
-            await _say(turn, "check_again", patient=_greeting(turn),
-                       date=_on_day(turn, second.when))
+        worked = await resolver.handoff(turn, decision, "forgot")
+        if worked is not None:
+            detail["resolver"] = worked
         else:
-            detail["reschedule_refused"] = second.why
-            await _say(turn, "send_when_ready")
+            # The reminder it moves is a second decision through the same
+            # schedule guard, exactly as a model-chosen classify_barrier
+            # reschedule is: the barrier class does not buy anyone a contact
+            # the policy would refuse.
+            second = policy_module.check(
+                "schedule_next_contact",
+                {"days_from_now": int(decision.args.get("resume_in_days") or 1)},
+                turn.facts, turn.policy, reason=decision.reason,
+            )
+            if second.allowed and second.when is not None:
+                detail["task"] = await _schedule_task(turn, second.when)
+                detail["reschedule"] = second.as_meta()
+                await _say(turn, "check_again", patient=_greeting(turn),
+                           date=_on_day(turn, second.when))
+            else:
+                detail["reschedule_refused"] = second.why
+                await _say(turn, "send_when_ready")
 
     elif intent == intents.MEDICINE_UNAVAILABLE:
-        # A substitute is a treatment decision, so there is no tool for one and
-        # no sentence for one: the barrier is recorded, the doctor gets the card
-        # he can answer, and the patient is told exactly that.
+        # A substitute is still a treatment decision and there is still no tool
+        # for one. What changed at S19b is what happens before the card: "the
+        # pharmacy does not have it" is an availability barrier, which is the
+        # Resolver's first row, so it looks for a pharmacy that does have it
+        # and the doctor is never woken for a stock problem somebody else can
+        # solve. Nothing here suggests a different drug, because nothing here
+        # can: `find_places` searches for a pharmacy and there is no tool that
+        # names a medicine at all.
         await store.update_loop(turn.loop.id, barrier="availability",
                                 barrier_note=decision.reason)
         detail["barrier"] = "availability"
-        detail["relay_id"] = await _escalate(
-            turn, decision, "availability",
-            ["No substitute was suggested to the patient."],
-            decided_by=decided_by,
-        )
-        await _say(turn, "told_doctor", doctor=turn.doctor.name)
+        worked = await resolver.handoff(turn, decision, "availability")
+        if worked is not None:
+            # It answered the patient, or it handed the barrier over itself
+            # with what it tried on the card. Either way the escalation below
+            # would be a second card about the same thing.
+            detail["resolver"] = worked
+        else:
+            detail["relay_id"] = await _escalate(
+                turn, decision, "availability",
+                ["No substitute was suggested to the patient."],
+                decided_by=decided_by,
+            )
+            await _say(turn, "told_doctor", doctor=turn.doctor.name)
 
     await events.append_event(
         turn.doctor.id, "system",

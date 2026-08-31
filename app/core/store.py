@@ -773,8 +773,14 @@ async def release_send(send_id: str) -> None:
 # The doctor's own relay answers are not contacts, because they are his words
 # to a patient who asked him a question, and neither is the onboarding hello,
 # which is the patient opening his own link.
-LADDER, COORDINATOR, RELUCTANCE, INTENT = (
-    "ladder", "coordinator", "reluctance", "intent")
+#
+# S19 adds a fifth kind: the Resolver's own messages, which are the question it
+# asks about an area or a public laboratory and the places it found. They are
+# messages Sanad started, so they are counted like every other one, and the
+# label is what lets a doctor read that the day's message went on removing a
+# barrier rather than on another reminder.
+LADDER, COORDINATOR, RELUCTANCE, INTENT, RESOLVER = (
+    "ladder", "coordinator", "reluctance", "intent", "resolver")
 
 
 def contact_id(patient_id: str, day_index: int) -> str:

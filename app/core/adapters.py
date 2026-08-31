@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, TypeVar
 
 from pydantic import BaseModel, Field, StrictBool
@@ -199,6 +200,29 @@ QUIET_CLASSES: frozenset[NotificationClass] = frozenset({
 REVIEW_ACTION_PREFIX = "reviewed:"
 DEADLINE_DECIDED_MARKERS: tuple[str, ...] = ("the ladder is exhausted",)
 
+# S24-F. The Case Steward's hold, as a mark a sender puts on the message it is
+# already sending. It is an instant and nothing else: the moment core/steward.py
+# says the doctor may be told, already bounded by the ceilings in core/policy.py.
+#
+# It is read here and acted on here, because this file is the only thing in
+# Sanad that decides what reaches a phone and that has not changed. What the
+# mark can do is exactly one thing and it is written as a one-way street:
+#
+#   it can make a message that would have rung QUIETER, by parking it for the
+#   morning with its own release moment instead of ringing now;
+#   it can bring a message that was ALREADY parked back sooner, because the
+#   release moment is clamped to the digest and the earlier of the two wins;
+#
+# and it can do nothing else. A DANGER or an URGENT_SLA is answered before the
+# mark is ever looked at, so a hold cannot reach one even by accident. A message
+# a sender deliberately marked as quiet work is left quiet, because parking it
+# would put it in a digest the doctor was never going to be shown. A doctor who
+# is not enrolled is not covered by this contract at all and is not covered by
+# this either. And a mark that is missing, malformed, or not an instant is no
+# mark: the message routes exactly as it would have with no Steward anywhere.
+STEWARD_HOLD = "steward_hold"
+STEWARD_HELD = "the case steward is holding this for the morning"
+
 LEGACY = "legacy"
 PUSHED = summary.PUSHED
 PARKED = summary.PARKED
@@ -229,6 +253,9 @@ class PhoneRoute:
     decision: str
     notification_class: str = ""
     why: str = ""
+    # When a parked card comes back, if something asked for a moment of its own
+    # (S24-F). Empty everywhere else, and the default release is unchanged.
+    release_at: str = ""
 
     @property
     def push(self) -> bool:
@@ -253,7 +280,55 @@ class PhoneRoute:
         }
         if release_at:
             note["release_at"] = release_at
+        if self.why == STEWARD_HELD:
+            # Who parked it, on the card itself. A doctor reading his own record
+            # should not have to infer which agent made his phone stay quiet.
+            note["held_by"] = "steward"
         return note
+
+
+def held_until(msg: OutboundMessage) -> str:
+    """The instant a Steward hold asks for on this message, or "". Never raises.
+
+    Total on purpose. This is the one place a value written by a caller of an
+    agent turn is read by the code that decides what rings a doctor's phone, so
+    every way of getting it wrong - absent, the wrong type, a sentence, a date
+    that is not a date - has the same answer, and that answer is the answer the
+    message would have had if no Steward had ever looked at it.
+    """
+    try:
+        meta = msg.meta if isinstance(msg.meta, dict) else {}
+        raw = str(meta.get(STEWARD_HOLD) or "").strip()
+        if not raw:
+            return ""
+        datetime.fromisoformat(raw)   # an instant, or it is not a hold
+        return raw
+    except Exception:  # noqa: BLE001 - a broken mark is no mark
+        log.warning("unreadable steward hold on a doctor-bound message; it "
+                    "routes as if it were not there", exc_info=True)
+        return ""
+
+
+def release_moment(route: PhoneRoute, now: datetime) -> str:
+    """When a parked card comes back: the morning, or sooner. Never later.
+
+    The digest is the default and the ceiling at the same time. A hold that asks
+    for a moment before it gets that moment; a hold that asks for one after it -
+    which core/policy.py's ceilings already forbid - gets the morning anyway,
+    because this file will not keep a doctor waiting longer than the contract
+    said it would. The clamp is here rather than in the agent for the ordinary
+    reason: the guard belongs on the side of the seam that cannot be persuaded.
+    """
+    default = timing.next_digest_at(now)
+    if not route.release_at:
+        return default.isoformat()
+    try:
+        asked = datetime.fromisoformat(route.release_at)
+        return min(asked, default).isoformat()
+    except Exception:  # noqa: BLE001 - an unusable moment is the default one
+        log.warning("unusable release moment on a parked card; the morning "
+                    "gives it back", exc_info=True)
+        return default.isoformat()
 
 
 def classify(msg: OutboundMessage) -> tuple[Optional[NotificationClass], str]:
@@ -364,6 +439,28 @@ async def route_for(target_ref: str, msg: OutboundMessage) -> PhoneRoute:
         return PhoneRoute(LEGACY, why="not a doctor-bound message")
 
     known, why = classify(msg)
+    # Every pushing branch that can carry an emergency is answered first, and
+    # the Steward's mark is not read until after them. That ordering is the
+    # whole of rail R1 on this side of the seam: a DANGER cannot be held, not
+    # because a check refuses it but because nothing has looked at the mark yet.
+    if known in PUSH_CLASSES:
+        return PhoneRoute(PUSHED, known.value, why)
+
+    held = held_until(msg)
+    if held and known not in QUIET_CLASSES:
+        # A hold may only make a message quieter, so it is applied where the
+        # message would otherwise ring (unclassified, or a class nobody has
+        # routed) and where it is already parked (it moves the moment, and
+        # `release_moment` will not move it later than the morning). Quiet work
+        # is left alone: parking it would put it in a digest, which is louder.
+        # And it costs the same recipient lookup every quiet answer costs, so a
+        # doctor who is not enrolled keeps the legacy fan-out he already had.
+        if await _enrolled(target_ref):
+            return PhoneRoute(PARKED, known.value if known else "",
+                              STEWARD_HELD, release_at=held)
+        return PhoneRoute(LEGACY, known.value if known else "",
+                          "not an enrolled doctor")
+
     if known is None:
         _warn_once(
             "doctor-bound message with no notification class was pushed to the "
@@ -371,8 +468,6 @@ async def route_for(target_ref: str, msg: OutboundMessage) -> PhoneRoute:
             why, _first_words(msg.text),
         )
         return PhoneRoute(PUSHED, "", why)
-    if known in PUSH_CLASSES:
-        return PhoneRoute(PUSHED, known.value, why)
     if known not in PARK_CLASSES and known not in QUIET_CLASSES:
         # A member nobody routed yet is unrouted, not silent.
         _warn_once(
@@ -615,8 +710,7 @@ class Fanout:
             self.phone_routes.append(route)
             written_msg = msg
             note = route.mark(
-                timing.next_digest_at(store.now()).isoformat()
-                if route.parked else ""
+                release_moment(route, store.now()) if route.parked else ""
             )
             if note:
                 # Only the console copy carries the note, and only when the

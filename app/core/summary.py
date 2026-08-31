@@ -186,14 +186,51 @@ def duplicate_events(events: Iterable[Any], on: Optional[date] = None) -> int:
     )
 
 
+def resolver_holds(loop: Any) -> bool:
+    """Is the Resolver still carrying this barrier, rather than the doctor? (S19)
+
+    Read off the loop's own `resolver` record, which core/resolver.py writes.
+    Three of its fields answer this and nothing else does:
+
+      solved       the patient was sent a way forward
+      asks         a question is outstanding and the patient is expected to
+                   answer it, so the barrier is being worked right now
+      handed_over  the tools came back empty and the doctor has the card
+
+    A loop carrying none of them is a barrier nobody worked, which is every
+    barrier before S19 and every barrier on a deployment with the Resolver
+    switched off, so the answer there is False and the bucket is the one it
+    always was. This file reads the field rather than importing core/resolver.py
+    on purpose: the summary has no I/O and no cloud SDK behind it, and that is
+    what lets it be counted anywhere.
+    """
+    state = getattr(loop, "resolver", None) or {}
+    if not isinstance(state, dict) or state.get("handed_over"):
+        return False
+    return bool(state.get("solved") or state.get("asks"))
+
+
 def classify(loop: Any, criticals: set[str]) -> str:
-    """One loop -> exactly one bucket. Total by construction: the last is else."""
+    """One loop -> exactly one bucket. Total by construction: the last is else.
+
+    S19 changed exactly one branch. A barrier used to mean the doctor was
+    needed, because a barrier had nowhere else to go: the reminders stopped and
+    a card was written. A barrier the Resolver is carrying is a patient who has
+    been given somewhere to go, or who has been asked one question and is about
+    to answer it, and either way it is an obligation Sanad is still working, so
+    it is `progressing`. `needs_help` now means what it says: it is waiting on
+    the doctor. A paused loop is still `needs_help` whatever else it carries,
+    because a paused loop is one nothing is chasing.
+    """
     if str(getattr(loop, "id", "")) in criticals:
         return "critical"
     state = str(getattr(loop, "state", "open"))
     if state == "unreachable":
         return "unreachable"
-    if getattr(loop, "paused", False) or (getattr(loop, "barrier", "") or ""):
+    paused = bool(getattr(loop, "paused", False))
+    if paused or (getattr(loop, "barrier", "") or ""):
+        if not paused and resolver_holds(loop):
+            return "progressing"
         return "needs_help"
     if state == "done":
         return ("completed_with_evidence" if _has_evidence(loop)
@@ -338,6 +375,15 @@ def line(counts: Counts) -> str:
 # that carries the obligation is the record that should say what happened to it.
 # Everything here is a pure read of that mark. Writing it, and clearing it when
 # the digest goes out, is core/adapters.py's job.
+#
+# S24-F. A parked card can now have been parked for two different reasons, and
+# the mark says which: the phone contract's own table (a verified result waiting
+# for review, a deadline that ran out), or the Case Steward holding a routine
+# card for the morning, which writes `held_by`. The digest treats them the same
+# - it lists what is owed and clears it once - and the difference is on the
+# record so that a doctor reading his own trail can see which agent made his
+# phone stay quiet. `release_at` is the moment either way, and core/adapters.py
+# has already clamped it: never later than the next digest.
 PHONE_META = "phone"
 PARKED = "parked"
 PUSHED = "pushed"
@@ -382,6 +428,8 @@ def parked_rows(events: Iterable[Any]) -> list[dict[str, Any]]:
             "title": title or str(getattr(event, "text", "") or "").strip(),
             "notification_class": str(note.get("class") or ""),
             "release_at": str(note.get("release_at") or ""),
+            # Empty for a card the phone contract's own table parked.
+            "held_by": str(note.get("held_by") or ""),
         })
     return out
 
