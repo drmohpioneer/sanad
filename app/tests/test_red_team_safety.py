@@ -1,8 +1,8 @@
-"""Intentionally failing safety invariants found by the Sunday red team.
+"""Twenty-nine adversarial regression cases from independent review.
 
-These are characterization tests for confirmed bypasses.  They describe the
-behaviour Sanad needs before patient use; they must stay red until application
-code is hardened.  No model call is required to reproduce any of them.
+These cases reproduce confirmed historical bypasses found during Codex and
+Claude review.  The implementation has been hardened and every case is now a
+passing public release gate.  No model call is required to exercise them.
 """
 
 from __future__ import annotations

@@ -37,12 +37,10 @@
     "traces/models.json": "3eaa639f0e6bc647721dc424c7b9819a01a3a1f506e050b573e5728247665fce",
     "traces/tasks.json": "cb784ddac9f5e986a2de6a756799a23b011271bd23a80bb4b86633bcfc9f44dd"
   },
-  "baseline_commit": "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d",
   "doctor": "Test Doctor",
   "fixed_start": "2026-08-30T02:47:00+00:00",
   "historical_live_reference": {
     "beat_3_quiet_hours_audit": "moved out of quiet hours (22:00 to 09:00 Cairo)",
-    "clean_public_commit": "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1",
     "counts": {
       "attention": 13,
       "carried": 35,
@@ -143,9 +141,7 @@
   "screenshot_provenance": "screenshot-provenance.json",
   "screenshot_receipts": "screenshot-receipts.json",
   "source_baseline": {
-    "clean_public_commit": "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1",
     "deployed_revision_at_gate0_freeze": "sanad-00029-g9f",
-    "hermetic_baseline_commit": "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d",
     "last_verified_nine_beat_revision": "sanad-00028-zjm"
   },
   "storage": "synthetic URI; PNG decoding and evidence logic remain real",

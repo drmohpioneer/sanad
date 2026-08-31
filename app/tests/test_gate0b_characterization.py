@@ -140,8 +140,6 @@ EXPECTED_SELECTIONS = {
 ATTESTATION_WIDTH = 16
 ATTESTATION_HEIGHT = 8
 ATTESTATION_INSET = 2
-CLEAN_PUBLIC_COMMIT = "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1"
-HERMETIC_BASELINE_COMMIT = "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d"
 DEPLOYED_REVISION_AT_GATE0_FREEZE = "sanad-00029-g9f"
 LAST_VERIFIED_NINE_BEAT_REVISION = "sanad-00028-zjm"
 NON_CLAIMS = [
@@ -318,7 +316,6 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
         )
         self.assertEqual(FIXED_START, self.manifest["fixed_start"])
         self.assertEqual(LAST_VERIFIED_NINE_BEAT_REVISION, historical["serving_revision"])
-        self.assertEqual(CLEAN_PUBLIC_COMMIT, historical["clean_public_commit"])
         self.assertEqual(FINAL_COUNTS, historical["counts"])
         self.assertIs(historical["used_as_replay_acceptance_oracle"], True)
         self.assertEqual(FINAL_COUNTS, _core_counts(self.manifest["replay_final_counts"]))
@@ -342,11 +339,10 @@ class CommittedCharacterizationIsCoherent(unittest.TestCase):
         self.assertTrue(pending[0]["scheduled_at"].startswith("2026-08-31T06:00:00"))
 
     def test_gate0_public_source_and_non_claim_pins_cannot_move_with_regeneration(self) -> None:
-        self.assertEqual(HERMETIC_BASELINE_COMMIT, self.manifest["baseline_commit"])
+        self.assertNotIn("baseline_commit", self.manifest)
+        self.assertNotIn("clean_public_commit", self.manifest["historical_live_reference"])
         self.assertEqual(
             {
-                "clean_public_commit": CLEAN_PUBLIC_COMMIT,
-                "hermetic_baseline_commit": HERMETIC_BASELINE_COMMIT,
                 "deployed_revision_at_gate0_freeze": DEPLOYED_REVISION_AT_GATE0_FREEZE,
                 "last_verified_nine_beat_revision": LAST_VERIFIED_NINE_BEAT_REVISION,
             },

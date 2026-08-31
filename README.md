@@ -2,7 +2,7 @@
 
 **An AI agent that owns a doctor's care plan after the visit ends.**
 
-**Sanad** is Arabic for "the one you lean on." A doctor dictates his plan once, in the words he would actually say, and Sanad owns everything after the visit: it chases the follow-up test on a schedule nobody has to remember, reads the lab photo that comes back and verifies the name and the date on it before it counts, answers the patient's questions only from what the doctor himself wrote, and wakes the doctor immediately when something is genuinely dangerous. Seven Gemini agents hand work to each other through code contracts, a deterministic safety kernel decides every clinical boundary, and Cloud Tasks carries the objective across days without anybody present. **The doctor gives the plan once. Sanad carries it until reality matches.**
+**Sanad** is Arabic for "the one you lean on." A doctor dictates his plan once, in the words he would actually say, and Sanad owns everything after the visit: it chases the follow-up test on a schedule nobody has to remember, reads the lab photo that comes back and verifies the name and the date on it before it counts, answers plan-specific questions only from what the doctor wrote while keeping general education bounded and clearly labelled, and wakes the doctor immediately when something is genuinely dangerous. Seven Gemini agents hand work to each other through code contracts, a deterministic safety kernel retains final authority over every clinical boundary, and Cloud Tasks carries the objective across days without anybody present. **The doctor gives the plan once. Sanad carries it until reality matches.**
 
 ![The Sanad cockpit: five decision queues, a critical potassium the code table graded, and the right rail printing which agent decided what](docs/img/cockpit-proof-lines.png)
 
@@ -12,9 +12,10 @@
 
 **Demo video:** [I'm a doctor. I built an AI that follows up with patients.](https://youtu.be/kzErMU828Y8)
 
-> **Every clinical boundary is decided by code, never by a model.** A model on the
-> safety path casts a bounded yes or no vote that can only ADD a relay or an
-> escalation, never remove one, and every one of those calls fails closed. That is
+> **Code owns every clinical threshold and can escalate without a model.** A model
+> on the safety path casts a bounded yes or no vote that can only ADD a relay or
+> an escalation, never remove one; if that call fails, code relays or escalates
+> rather than silently clearing the case. Final authority stays in code. That is
 > the one property the rest of this document is built on.
 
 `GET /health` on that URL answers with the project, the region and the exact revision serving the request. The same line runs across the top of every page in the app, read from the container's own environment rather than typed into an HTML file.
@@ -67,10 +68,10 @@ Facts, with the file that proves each one. The three headings are the published 
 |---|---|
 | Seven agents with disjoint toolsets, and no agent-to-agent chat anywhere: no `sub_agent`, no `AgentTool`, no `transfer_to_agent`. They hand typed values to each other through code that checks them. | `app/core/`, and the table in `docs/ARCHITECTURE.md` |
 | Any single agent can die and the system degrades to its code path, with the event naming who decided. | `app/core/resolver.py`, `app/core/auditor.py`, `app/core/steward.py` |
-| Every doctor-facing surface renders one canonical, atomic, doctor-scoped record read, so no two panels can disagree mid-render. | `app/core/workspace.py`, `GET /api/v2/workspace-snapshot` |
-| A test fails the build when the architecture diagram drifts from the diagram it is supposed to match, node for node, and asserts all seven agents are named in both. | `app/tests/test_architecture_diagram.py` |
-| The test suite is the container's own build step, not a CI nicety. On a clean clone with node installed it runs 1,867 tests and finishes OK with 10 expected failures. | `app/Dockerfile`, one `RUN` line |
-| Twenty-nine adversarial tests written by an independent reviewer against this build shipped as gates: paraphrased emergencies, a triage outage that returned a clean bill of health, unlisted drug brands, Franco-Arabic reassurance, unit-conversion tricks. | `app/tests/test_sentinel.py`, `app/tests/test_validator.py` |
+| The enrolled cockpit renders one canonical, atomic, doctor-scoped record read, so its panels cannot disagree mid-render. The legacy console retains its older read paths. | `app/core/workspace.py`, `GET /api/v2/workspace-snapshot` |
+| The complete clean-clone suite fails when the architecture diagram drifts from the document it is supposed to match, node for node, and asserts all seven agents are named in both. | `app/tests/test_architecture_diagram.py` |
+| A clean clone with Node runs 1,867 tests and finishes OK with 10 expected failures. The narrower Cloud Build context reruns the same discovery inside the image but skips 56 repository-only documentation, architecture and golden-evidence checks whose inputs are deliberately excluded by `app/.gcloudignore`; the complete clean-clone suite is the release gate for those checks. | `app/Dockerfile`, `app/.gcloudignore` |
+| Twenty-nine adversarial regression cases derived from independent Codex and Claude review shipped as public gates: paraphrased emergencies, a triage outage that returned a clean bill of health, unlisted drug brands, Franco-Arabic reassurance and unit-conversion tricks. | `app/tests/test_red_team_safety.py` |
 | A deploy that does not end up serving the revision it just built exits non-zero and prints both names. It used to exit 0 and lie. | `app/deploy.sh` |
 
 ### Demo and production readiness (30 percent)
@@ -78,7 +79,7 @@ Facts, with the file that proves each one. The three headings are the published 
 | Claim | Where it is |
 |---|---|
 | Live Cloud Run service in `europe-west1`, reachable now, with the serving revision printed on every page. | <https://sanad-854762827572.europe-west1.run.app/health> |
-| A three-hour log sweep over the reviewed revision `sanad-00031-64t` found 0 entries at WARNING or above, 0 responses at HTTP 500 or above, 0 tracebacks, and 0 console or page errors across five cockpit loads at two viewport sizes. | Cloud Logging, revision `sanad-00031-64t` |
+| A fresh log review of the live revision `sanad-00033-678` found 0 HTTP 5xx responses and 0 tracebacks; its WARNING-severity request rows were expected 401/403/404/405 rejections, not application failures. | Cloud Logging, revision `sanad-00033-678` |
 | The redesigned cockpit is behind a per-doctor flag, and a doctor who is not enrolled gets the previous dashboard byte for byte at the same URL. A new surface earns its place by being provably identical in the truth it shows. | `POST /admin/doctor-features`, `app/web/dashboard.html` |
 | The admin secret travels in a header, never a query string, because Cloud Run logs every query string for thirty days. A request carrying `?secret=` is refused with 401. | `app/main.py` |
 | Uploaded images live in a private bucket with uniform access and public access prevention enforced. There is no public-object and no signed-URL surface. | `app/deploy.sh` |
@@ -119,7 +120,7 @@ It is not a diagnosis tool, it does not decide on dose changes, and it does not 
 
 One Cloud Run service (FastAPI, Python 3.12, ADK 2.8.0) is the entire agent core. It talks to `gemini-3.5-flash` over Vertex AI with service-account credentials and no API key, stores records in Firestore and images in Cloud Storage, and wakes itself on a schedule through Cloud Tasks. ADK sessions are built per turn and discarded; all durable state lives outside the process.
 
-The diagram below is the overview. The full one, every gate in the order code runs it, is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), with a rendered copy at [`docs/architecture.svg`](docs/architecture.svg); a test fails the build if those two ever stop matching node for node.
+The diagram below is the overview. The full one, every gate in the order code runs it, is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), with a rendered copy at [`docs/architecture.svg`](docs/architecture.svg); the complete clean-clone suite fails if those two ever stop matching node for node.
 
 ```mermaid
 flowchart TB
@@ -194,7 +195,7 @@ flowchart TB
 - **Six administrative chores are matched in code before the administrative model vote.** "I did the test", "I lost the prescription", "can I come Thursday instead", "where do I send it", "the medicine is not available", "I forgot to measure": a pattern list in Egyptian Arabic, English and Franco-Arabic runs after the Sentinel and treatment-change gates. One bounded vote may add only either of the two answer-only matches. The four that change the plan of work require a code pattern and go through the Coordinator's guarded tools (`core/intents.py`).
 - **Cloud Tasks wakes the agent.** A care loop with a due date does not need a doctor or a patient present to make progress. The task handler is the same code path a doctor's manual `/force_due` command hits, so a demo can compress days into seconds honestly, showing the real handler on a short timer rather than a separate demo-only code path.
 - **Two-state review gate.** A loop that receives evidence never marks itself finished. It moves to "pending doctor review," and only an explicit doctor action closes it. Sanad files and flags; it does not sign off on its own findings.
-- **One canonical read behind every surface.** Every doctor-facing page renders the same atomic, doctor-scoped snapshot (`core/workspace.py`, `store.read_workspace`), never a per-widget query that could disagree with its neighbour mid-render. That guarantee is live behind the cockpit at `/api/v2/workspace-snapshot`; the legacy console keeps its own older read paths until it is retired.
+- **One canonical read behind the enrolled cockpit.** The cockpit renders one atomic, doctor-scoped snapshot (`core/workspace.py`, `store.read_workspace`), never a per-widget query that could disagree with its neighbour mid-render. That guarantee is live at `/api/v2/workspace-snapshot`; the legacy console keeps its own older read paths until it is retired.
 - **Deterministic where it matters, model where it helps.** Routing, emergency phrase and critical-lab tables, date arithmetic, reply validation, reports and idempotency are code. Models transcribe, extract structured candidates, cast bounded add-only votes and phrase patient replies. `app/core/validator.py` enforces number and medication provenance on generated patient replies. Text the doctor wrote himself is the trusted path and goes to the patient as his.
 
 ### Request lifecycle, in brief (full detail in `docs/ARCHITECTURE.md`)

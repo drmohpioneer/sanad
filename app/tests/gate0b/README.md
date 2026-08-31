@@ -4,13 +4,11 @@ This test-only package freezes the public nine-beat Sanad journey before the
 cockpit architecture changed. It is a characterization baseline, not a new
 implementation.
 
-The clean public source is pinned at
-`17520ab3ff6b4b2a978f9437c2f3dd417a8770a1`; the accepted hermetic baseline is
-`f9743a2c72e0dddb012ddbac3cbbbc413b740a3d`; and the deployment observed at the
-Gate 0 freeze was `sanad-00029-g9f`. The last independently recorded live
-nine-beat run used `sanad-00028-zjm`. The checked-in API snapshots, traces,
-screenshot receipts, provenance records and deterministic replay are the
-public characterization evidence.
+The deployment observed at the Gate 0 freeze was `sanad-00029-g9f`. The last
+independently recorded live nine-beat run used `sanad-00028-zjm`. The checked-in
+API snapshots, traces, screenshot receipts, provenance records and deterministic
+replay are the complete public characterization evidence; no unpublished or
+detached source commit is required to reproduce it.
 
 ## Run it
 

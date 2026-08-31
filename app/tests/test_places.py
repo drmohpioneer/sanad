@@ -245,9 +245,8 @@ class TheSearchFailsSoft(unittest.IsolatedAsyncioTestCase):
     def test_the_key_is_mounted_by_the_deploy_script(self) -> None:
         """The Resolver's key reaches the service the way the bot token does.
 
-        The `/health` "maps" flag the private tree also carries is deliberately
-        NOT in this tree: tests/gate0b refuses an added key on any replayed
-        payload, and `/health` is one of them.
+        This test checks the deployment boundary directly rather than changing
+        the frozen Gate 0B `/health` payload.
         """
         deploy = (APP_ROOT / "deploy.sh").read_text(encoding="utf-8")
         self.assertIn("MAPS_SECRET=sanad-maps-key", deploy)

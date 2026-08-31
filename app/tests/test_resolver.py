@@ -172,14 +172,11 @@ class TheRoutingTable(unittest.TestCase):
 
     def test_cost_is_a_route_the_resolver_has_and_the_flag_still_decides(
             self) -> None:
-        """Adapted for this tree. In the private tree S19 also flipped
-        `cost_escalate_only` to False, so a cost barrier reached the Resolver
-        by default. That default is a field of core/policy.Policy.as_meta, it
-        is on 192 lines of the committed Gate 0B goldens as `true`, and moving
-        it would move every one of them, so it is NOT flipped here. The flag
-        itself is what S19 says it is either way: the doctor who clears it
-        hands his cost barriers to the Resolver, and the doctor who leaves it
-        keeps every one of them for himself, in code, in `handoff`."""
+        """The conservative default escalates cost; a doctor may opt in.
+
+        The default remains part of the frozen Gate 0B characterization. The
+        policy flag still gives each doctor an explicit, tested choice.
+        """
         self.assertIn("cost", resolver.ROUTES)
         self.assertEqual(("cost",), policy.DEFAULT.escalate_only())
         self.assertEqual(
@@ -447,16 +444,11 @@ class ASolvedBarrierIsProgressingAndOnlyAHandOverNeedsTheDoctor(
         self.assertEqual(counts.lost, 0)
 
     def test_a_board_that_has_never_met_the_resolver_reads_as_it_did(self) -> None:
-        """core/background.py is NOT part of this port, on purpose.
+        """Resolver integration does not silently rewrite frozen seed data.
 
-        The private tree gives its twenty seeded patients Egyptian areas and
-        four of its seeded barriers a finished Resolver record, so its board
-        shows solved barriers out of the box. Writing those here would put a
-        non-empty `area` and a non-empty `resolver` into records the Gate 0B
-        replay serializes, and tests/gate0b refuses an added key on a replayed
-        payload. So the seeds are left exactly as they are, and what is
-        asserted instead is that leaving them alone changes nothing: every
-        seeded loop classifies today as it classified before this file existed.
+        The Gate 0B replay serializes these records, so seeded areas and solved
+        Resolver records must be introduced only through an explicit baseline
+        review. Every existing seeded loop therefore keeps its classification.
         """
         from core import background
 
@@ -473,15 +465,10 @@ class ASolvedBarrierIsProgressingAndOnlyAHandOverNeedsTheDoctor(
 # The area, which the patient answers for himself in this tree
 # --------------------------------------------------------------------------- #
 class TheAreaIsAskedForAndNeverInvented(unittest.TestCase):
-    """core/registrar.py is NOT part of this port, on purpose.
+    """An area has one implemented source: the patient's own answer.
 
-    The private tree teaches the Registrar to read "lives in Zagazig" off the
-    doctor's dictation and checks the word actually appears in it
-    (`registrar.checked_area`). That is a change to the dictation prompt, the
-    proposed-record shape and the confirmation card, none of which is Resolver
-    or Places code, and all of which the Gate 0B dictation replay reads. So the
-    area has exactly one source in this tree, and it is the one the Resolver
-    owns: it asks the patient, once, and stores what he answered.
+    The Resolver asks once and stores that response. It does not invent an
+    area, and this build does not extract one from doctor dictation.
     """
 
     def test_the_only_writer_of_an_area_is_the_answer_to_the_question(self
@@ -1027,12 +1014,10 @@ class OneBarrierEndToEnd(unittest.IsolatedAsyncioTestCase):
     async def ask_about_the_public_lab(self) -> None:
         """The one question the cost barrier gets, and the words it is sent in.
 
-        Adapted for this tree: the doctor has cleared `cost_escalate_only`,
-        which is the switch S19 flipped by default in the private tree and
-        which is left at its committed default here (see
+        This doctor has explicitly cleared `cost_escalate_only`, which remains
+        conservative by default (see
         TheRoutingTable.test_cost_is_a_route_the_resolver_has_and_the_flag_
-        still_decides). Everything below this line is the ported behaviour,
-        unchanged.
+        still_decides).
         """
         self.doctor = self.doctor.model_copy(
             update={"policy": {"cost_escalate_only": False}})
@@ -1228,15 +1213,10 @@ class TheHandoffIsFailSoft(unittest.IsolatedAsyncioTestCase):
 
     async def test_no_model_client_at_all_is_the_s6_path_and_writes_nothing(
             self) -> None:
-        """Adapted for this tree, and it is the reason the goldens do not move.
+        """No model client takes the explicit no-action path.
 
-        The private tree writes a "resolver stood down" event whenever a turn
-        produced no action, including a process where no model exists at all.
-        Every run of this suite is such a process and so is every beat of the
-        Gate 0B replay, and an event on a turn where nothing was proposed,
-        chosen or refused would be Resolver traffic inside a golden that has
-        none. So the probe is read in `handoff`, before an Attempt exists, and
-        the silence is a log line exactly as core/evidence.py's is.
+        The probe runs before an Attempt exists, so a turn where nothing was
+        proposed, chosen or refused does not manufacture a Resolver event.
         """
         self.assertFalse(resolver._model_ready())
         self.assertIsNone(

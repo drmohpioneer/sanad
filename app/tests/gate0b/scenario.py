@@ -51,8 +51,6 @@ DOCTOR_SPECIALTY = "cardiology"
 # would preserve the final counts while silently characterizing a different
 # policy branch.
 FIXED_START = "2026-08-30T02:47:00+00:00"
-CLEAN_PUBLIC_COMMIT = "17520ab3ff6b4b2a978f9437c2f3dd417a8770a1"
-HERMETIC_BASELINE_COMMIT = "f9743a2c72e0dddb012ddbac3cbbbc413b740a3d"
 DEPLOYED_REVISION_AT_GATE0_FREEZE = "sanad-00029-g9f"
 LAST_VERIFIED_NINE_BEAT_REVISION = "sanad-00028-zjm"
 
@@ -93,7 +91,6 @@ HISTORICAL_LIVE_FINAL = {
         "moved out of quiet hours (22:00 to 09:00 Cairo)"
     ),
     "serving_revision": LAST_VERIFIED_NINE_BEAT_REVISION,
-    "clean_public_commit": CLEAN_PUBLIC_COMMIT,
     "counts": {
         "carried": 35,
         "completed_with_evidence": 4,
@@ -723,10 +720,7 @@ class GoldenJourney:
         manifest = {
             "schema": "sanad-gate0b-characterization/v1",
             "synthetic": True,
-            "baseline_commit": HERMETIC_BASELINE_COMMIT,
             "source_baseline": {
-                "clean_public_commit": CLEAN_PUBLIC_COMMIT,
-                "hermetic_baseline_commit": HERMETIC_BASELINE_COMMIT,
                 "deployed_revision_at_gate0_freeze": DEPLOYED_REVISION_AT_GATE0_FREEZE,
                 "last_verified_nine_beat_revision": LAST_VERIFIED_NINE_BEAT_REVISION,
             },
