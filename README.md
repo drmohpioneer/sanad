@@ -42,7 +42,7 @@ Start with the console. It is three numbered panels and a live event feed.
 3. **Send it a critical result.** Still as the patient, attach `docs/seed/lab-slip-2.png` with the file picker in panel 2 and send. The potassium on that slip is 6.4 mmol/L. The critical-value table in `app/core/labs.py` grades it, the patient gets the emergency instruction, and a red card lands on the board. No model decided that.
 4. **Read what the agents actually did.** Add `/app` to the end of the console URL. That is the cockpit: five decision queues over one canonical snapshot, where every number opens exactly the rows it counted. Scroll to **Patients** and press **Next** once: the twenty background patients fill the first page, and the ones you just worked with (Ahmed Ali, Hany Fouad) are at the end of the list. Click one of those. The drawer's last section is **"What the agents decided"**: one line per agent decision, each labelled with the agent that made it and the file that could have overruled it. A background patient nobody has touched says so instead, which is the honest empty state and not the thing to look at.
 
-If you want the whole rehearsed sequence instead, including the multi-day chase compressed into a minute, `docs/RUNBOOK.md` is the operator's document and it is written to be followed at 2 a.m.
+If you want the full sequence instead, including the multi-day chase compressed into a minute against a scaled clock, `docs/RUNBOOK.md` is the operator's document and it is written to be followed at 2 a.m.
 
 ---
 
@@ -225,7 +225,7 @@ The two-minute path at the top is the short version. This is the longer one, on 
 8. **Photograph a prescription and send it as the doctor.** It goes through the Registrar exactly like a voice note, into the same structured proposal, the same code validation and the same confirm card. Voice, text and photo are one path.
 9. **The Firestore and Cloud Tasks consoles show the same state live:** the loop closes in the backend, not only on screen.
 
-`docs/RUNBOOK.md` is the sequence to run before a rehearsal or a recorded take, and what to do if a beat fails while the camera is running.
+`docs/RUNBOOK.md` is the operator's sequence: what to run before a demonstration, and what to do if a step fails while it is running.
 
 ---
 
