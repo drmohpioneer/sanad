@@ -262,13 +262,16 @@ at them.
    unenrolled doctor gets the exact pre-S19 behavior and no Resolver, Evidence
    Orchestrator, Closure Auditor, Case Steward or phone contract fires for him.
    Enrolling turns the agents on; it does not decide which page shows their
-   work. A live check of this revision found the audit line the Coordinator,
-   the Steward and the Auditor write (`meta.audit`, `meta.auditor`) rendered
-   on the plain console and the legacy dashboard, not on cockpit v2. Default
-   to `/c/<token>` for any beat where the point is reading a specific line
-   off the feed (2's steward line, 7's guard clause, 7b's gap), whether or
-   not that doctor is enrolled; cockpit v2 is its own beat, for the visual
-   check in section 1c, not the surface these lines are proven on tonight.
+   work. That used to be a real trap: the audit lines the Coordinator, the
+   Steward and the Auditor write (`meta.audit`, `meta.auditor`) rendered on
+   the plain console and the legacy dashboard and not on cockpit v2. Since
+   the proof-lines slice, cockpit v2 prints all of them as labelled chips
+   with the deciding sentence and the `decided_by` line under each, read
+   live on this revision at both 1440x900 and 375x812. Any beat whose point
+   is reading a specific line off the feed (2's steward line, 7's guard
+   clause, 7b's gap) can be filmed on `/c/<token>` or on the cockpit; the
+   cockpit is the stronger picture, because it shows each line beside the
+   agent that produced it.
 6. Rehearse once, off camera, with the phone in your hand: tap Attach once
    before you photograph a slip (the verb was dead code before S24-C and now
    actually does something); if any Telegram card button gets tapped mid take,
@@ -432,14 +435,21 @@ Read the guard clause off the screen: "6 contacts already on this loop and the p
 
 This is a natural patient interaction and does not depend on the filming hour.
 
-**Which surface shows this beat's proof, measured live on rev 30.** The
-guard clause above is written into `meta.audit.line` on the event, and only
-the plain console / legacy dashboard renders that line today; cockpit v2
-does not print it. Film beat 7 on `/c/<token>` or the legacy `/app` page,
-not on an enrolled doctor's flagged cockpit, or the line you are pointing at
-will not be on screen. The same is true of every guard clause in this
-runbook: check which surface you are recording before you rehearse the
-beat, not after.
+**Which surface shows this beat's proof, measured live on rev 31.** The
+guard clause above is written into `meta.audit.line` on the event, and
+cockpit v2 now prints it, which is where this beat should be filmed. It
+renders as a `GUARD CLAUSE` chip with the tier beside it, the guard sentence
+under it and the `decided_by` line under that, in three places: the
+"Recent persisted events" panel, Amany Roushdy's patient drawer under "What
+the agents decided", and the card row itself when the event carries a card.
+Read live at both 1440x900 and 375x812.
+
+The plain console and the legacy `/app` page still print the line too, so
+either surface is truthful. Film the cockpit: it is the stronger picture,
+and it shows the guard next to the other three agent chips (CLOSURE AUDITOR,
+EVIDENCE ORCHESTRATOR, CASE STEWARD) rather than on its own. Whichever you
+choose, check which surface you are recording before you rehearse the beat,
+not after.
 
 **Beat 7b, the auditor genuinely holds a close, enrolled doctor only.** The
 Coordinator's own `close_verified_loop` attempt is the one path the Closure
