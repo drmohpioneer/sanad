@@ -22,18 +22,21 @@
     .head-actions{display:flex;align-items:center;gap:10px}.sync{padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:12px}.sync strong{color:var(--teal)}
     .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:9px 12px;font-weight:650}.btn:hover{border-color:#b7c6c1}.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}.btn:disabled{opacity:.55;cursor:wait}
     .error{display:none;margin:0 0 16px;padding:11px 13px;border:1px solid #f4b7b1;background:var(--red-soft);color:var(--red);border-radius:10px}.error.show{display:block}
-    .hero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.metric{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:var(--shadow);text-align:left;color:inherit;cursor:pointer}.metric:hover,.metric:focus-visible{border-color:#9fb9b3;transform:translateY(-1px)}.metric .label{color:var(--muted);font-size:12px;letter-spacing:.03em}.metric .number{font-size:31px;line-height:1.1;font-weight:760;margin:7px 0}.metric .note{font-size:12px;color:var(--muted)}.metric.attention{border-top:3px solid var(--red)}.metric.working{border-top:3px solid var(--teal)}.metric.closed{border-top:3px solid #4b9b69}.metric.patients{border-top:3px solid #8a67c7}
+    .hero{display:grid;grid-template-columns:1.25fr repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.metric{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:var(--shadow);text-align:left;color:inherit;cursor:pointer}.metric:hover,.metric:focus-visible{border-color:#9fb9b3;transform:translateY(-1px)}.metric .label{color:var(--muted);font-size:12px;letter-spacing:.03em}.metric .number{font-size:31px;line-height:1.1;font-weight:760;margin:7px 0}.metric .note{font-size:12px;color:var(--muted)}.metric.attention{border-top:3px solid var(--red)}.metric.working{border-top:3px solid var(--teal)}.metric.closed{border-top:3px solid #4b9b69}.metric.patients{border-top:3px solid #8a67c7}
+    .metric.danger{border:1px solid #f0b3ac;border-top:5px solid var(--red);background:var(--red-soft)}.metric.danger:hover,.metric.danger:focus-visible{border-color:#e08b81}.metric.danger .label{color:var(--red);font-weight:700}.metric.danger .number{font-size:38px;color:var(--red)}.metric.danger .note{color:#8a3c33}
+    .queue-link{display:inline-block;border-bottom:1px dashed currentColor;color:var(--red);font-weight:650;cursor:pointer}.queue-link:hover,.queue-link:focus-visible{color:#8a1d13}.metric.closed .queue-link{color:var(--amber)}
     .grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,.8fr);gap:18px}.column{display:grid;gap:18px;align-content:start}.panel{background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);overflow:hidden}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 17px;border-bottom:1px solid var(--line)}.panel-head h2{font-size:15px;margin:0}.panel-head p{font-size:12px;color:var(--muted);margin:2px 0 0}.panel-body{padding:15px 17px}
     .tabs{display:flex;gap:7px;overflow:auto;padding:12px 16px;border-bottom:1px solid var(--line)}.tab{white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 10px;color:var(--muted);font-size:12px}.tab.active{background:var(--teal-soft);border-color:#9ed7cf;color:#075e57;font-weight:700}.tab .badge{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;margin-left:5px;border-radius:10px;background:rgba(15,118,110,.1);font-size:11px}
-    .rows{display:grid;gap:9px}.row{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff}.row.danger{border-left:4px solid var(--red)}.row.urgent{border-left:4px solid var(--amber)}.row h3{font-size:14px;margin:0 0 4px}.row .meta{display:flex;gap:7px;flex-wrap:wrap;color:var(--muted);font-size:12px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef2f1;color:#53605e;font-size:11px}.row .text{margin:9px 0;color:#34413f}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.action-wrap{display:flex;gap:6px;flex:1 1 230px}.action-wrap input{min-width:100px;flex:1;border:1px solid var(--line);border-radius:9px;padding:8px}.action{border:1px solid #a7cbc5;background:var(--teal-soft);color:#075e57;border-radius:9px;padding:7px 10px;font-weight:650}
+    .rows{display:grid;gap:9px}.row{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff}.row.danger{border-left:4px solid var(--red)}.row.urgent{border-left:4px solid var(--amber)}.row h3{font-size:14px;margin:0 0 4px}.row .meta{display:flex;gap:7px;flex-wrap:wrap;color:var(--muted);font-size:12px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef2f1;color:#53605e;font-size:11px}.row .text{margin:9px 0;color:#34413f}.lines{margin:9px 0;display:grid;gap:3px}.line{color:#22302e;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.line.muted,.muted{color:var(--muted);font-size:12px}.media-note{margin:7px 0 0;font-size:12px;color:var(--blue);background:var(--blue-soft);border-radius:8px;padding:4px 8px;display:inline-block}.no-evidence{margin:7px 0 0;font-size:12px;color:var(--muted);font-style:italic}.action:disabled{opacity:.5;cursor:not-allowed;background:#f2f5f4;border-color:var(--line);color:var(--muted)}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.action-wrap{display:flex;gap:6px;flex:1 1 230px}.action-wrap input{min-width:100px;flex:1;border:1px solid var(--line);border-radius:9px;padding:8px}.action{border:1px solid #a7cbc5;background:var(--teal-soft);color:#075e57;border-radius:9px;padding:7px 10px;font-weight:650}
     .empty{padding:25px 8px;text-align:center;color:var(--muted)}
     .patient-list{display:grid;gap:7px}.patient{width:100%;text-align:left;border:1px solid var(--line);border-radius:11px;background:#fff;padding:11px}.patient:hover{background:#f8fbfa}.patient strong{display:block}.patient span{color:var(--muted);font-size:12px}.pager{display:flex;align-items:center;justify-content:space-between;margin-top:12px;color:var(--muted);font-size:12px}
     .bp-head{display:flex;justify-content:space-between;gap:12px}.bp-value{font-size:28px;font-weight:760;margin:12px 0 4px}.bp-readings{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.reading{padding:6px 8px;background:var(--teal-soft);border-radius:8px;color:#075e57;font-variant-numeric:tabular-nums}.summary-line{margin:10px 0 0;color:var(--muted);font-size:12px}
     .event-list{display:grid;gap:0}.event{padding:10px 0;border-bottom:1px solid var(--line)}.event:last-child{border:0}.event time{font-size:11px;color:var(--muted)}.event p{margin:3px 0}.event .kind{color:var(--teal);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
     .health{display:grid;grid-template-columns:1fr 1fr;gap:9px}.health div{padding:10px;border:1px solid var(--line);border-radius:10px}.health b{display:block;font-size:12px}.health span{font-size:11px;color:var(--muted)}
     .drawer{display:none;position:fixed;inset:0;background:rgba(12,25,23,.35);padding:5vh 18px;z-index:5}.drawer.open{display:flex;justify-content:flex-end}.drawer-card{width:min(620px,100%);height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:18px;box-shadow:0 25px 70px rgba(0,0,0,.2)}.drawer-head{display:flex;align-items:center;justify-content:space-between}.drawer-head h2{margin:0}.detail-section{border-top:1px solid var(--line);padding-top:13px;margin-top:13px}.detail-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-    @media(max-width:900px){.hero{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.shell{padding:14px}.head-actions .sync{display:none}}
-    @media(max-width:520px){.hero{grid-template-columns:1fr 1fr;gap:8px}.metric{padding:13px}.metric .number{font-size:25px}header{align-items:flex-start}.brand p{max-width:180px}.panel-head{align-items:flex-start}.health{grid-template-columns:1fr}.drawer{padding:0}.drawer-card{height:100vh;border-radius:0}}
+    @media(max-width:1180px){.hero{grid-template-columns:repeat(3,minmax(0,1fr))}.metric.danger{grid-column:1 / -1}}
+    @media(max-width:900px){.hero{grid-template-columns:repeat(2,minmax(0,1fr))}.metric.danger{grid-column:1 / -1}.grid{grid-template-columns:1fr}.shell{padding:14px}.head-actions .sync{display:none}}
+    @media(max-width:520px){.hero{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric.danger{grid-column:1 / -1}.metric{padding:13px}.metric .number{font-size:25px}.metric.danger .number{font-size:30px}header{align-items:flex-start}.brand p{max-width:180px}.panel-head{align-items:flex-start}.health{grid-template-columns:1fr}.drawer{padding:0}.drawer-card{height:100vh;border-radius:0}}
   </style>
 </head>
 <body>
@@ -44,6 +47,7 @@
     </header>
     <p class="error" id="errorBox" role="alert"></p>
     <section class="hero" aria-label="Workspace metrics">
+      <button class="metric danger" type="button" data-metric-queue="danger"><div class="label">Danger, unacknowledged</div><div class="number" id="dangerMetric">-</div><div class="note" id="dangerNote">Critical rows nobody has acknowledged</div></button>
       <button class="metric attention" type="button" data-metric-queue="terminal_waiting_review"><div class="label">Terminal, waiting for review</div><div class="number" id="terminalMetric">-</div><div class="note">Review states and deadline outcomes</div></button>
       <button class="metric working" type="button" data-metric-queue="sanad_working"><div class="label">Sanad working</div><div class="number" id="workingMetric">-</div><div class="note">Active obligations Sanad can advance</div></button>
       <button class="metric closed" type="button" data-metric-queue="closed_today"><div class="label">Closed today</div><div class="number" id="closedMetric">-</div><div class="note" id="closedNote">Explicit close transitions only</div></button>
@@ -163,6 +167,15 @@
       requireCountedRefs(metric, "metric " + metricName, false);
       if (metric.count !== queue.count || JSON.stringify(metric.row_ids) !== JSON.stringify(queue.row_ids)) fail("metric " + metricName + " does not match its queue");
     });
+    // Optional server slice. Absent on an older projection, and then nothing
+    // about it is asserted; present, it is held to the same metric/queue pair
+    // rule as every other counted number on the page.
+    if (snapshot.metrics.reviewed_unverified !== undefined){
+      requireCountedRefs(snapshot.queues.reviewed_unverified, "queue reviewed_unverified", true);
+      requireCountedRefs(snapshot.metrics.reviewed_unverified, "metric reviewed_unverified", false);
+      if (snapshot.metrics.reviewed_unverified.count !== snapshot.queues.reviewed_unverified.count
+        || JSON.stringify(snapshot.metrics.reviewed_unverified.row_ids) !== JSON.stringify(snapshot.queues.reviewed_unverified.row_ids)) fail("metric reviewed_unverified does not match its queue");
+    }
 
     const page = snapshot.patients;
     if (!isObject(page) || !Array.isArray(page.items) || !Number.isInteger(page.total) || page.total < 0 || !Number.isInteger(page.offset) || page.offset < 0 || !Number.isInteger(page.limit) || page.limit < 1 || typeof page.has_more !== "boolean") fail("patient page is malformed");
@@ -201,16 +214,51 @@
     return item ? item.count : "-";
   }
 
+  function queueLink(queueName, label){
+    return '<span class="queue-link" role="button" tabindex="0" data-open-queue="' + escapeHtml(queueName) + '">' + escapeHtml(label) + '</span>';
+  }
+
+  function openQueue(name){
+    S.selectedQueue = name;
+    renderQueueTabs();
+    renderQueue(S.selectedQueue);
+    byId("queueRows").scrollIntoView({behavior:"smooth", block:"nearest"});
+  }
+
+  function bindQueueLinks(container){
+    container.querySelectorAll("[data-open-queue]").forEach(function(link){
+      link.onclick = function(event){ event.stopPropagation(); openQueue(link.dataset.openQueue); };
+      link.onkeydown = function(event){
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault(); event.stopPropagation(); openQueue(link.dataset.openQueue);
+      };
+    });
+  }
+
   function renderHero(){
     const snapshot = S.workspaceSnapshot;
-    const closed_today = snapshot && snapshot.metrics ? snapshot.metrics.closed_today : null;
+    const metrics = snapshot && snapshot.metrics ? snapshot.metrics : {};
+    const queues = snapshot && snapshot.queues ? snapshot.queues : {};
+    const closed_today = metrics.closed_today || null;
+    const danger = metrics.danger_unacknowledged || null;
+    const legacyRed = queues.unclassified_red || null;
+    const reviewedUnverified = metrics.reviewed_unverified || null;
+    byId("dangerMetric").textContent = danger ? danger.count : "-";
+    byId("dangerNote").innerHTML = "Critical rows nobody has acknowledged"
+      + (legacyRed && legacyRed.count > 0
+        ? " · " + queueLink("unclassified_red", "+" + legacyRed.count + " legacy red")
+        : "");
     byId("terminalMetric").textContent = valueOfMetric("terminal_waiting_review");
     byId("workingMetric").textContent = valueOfMetric("sanad_working");
     byId("closedMetric").textContent = closed_today ? closed_today.count : "-";
     byId("patientMetric").textContent = valueOfMetric("active_patients_total");
-    byId("closedNote").textContent = closed_today && closed_today.row_ids.length
+    byId("closedNote").innerHTML = escapeHtml(closed_today && closed_today.row_ids.length
       ? closed_today.row_ids.length + " explicit close transition" + (closed_today.row_ids.length === 1 ? "" : "s")
-      : "No explicit close transition recorded today";
+      : "No explicit close transition recorded today")
+      + (reviewedUnverified && reviewedUnverified.count > 0
+        ? " · " + queueLink("reviewed_unverified", reviewedUnverified.count + " reviewed without verified evidence")
+        : "");
+    bindQueueLinks(document.querySelector(".hero"));
   }
 
   const QUEUES = [
@@ -219,6 +267,19 @@
     ["blocked","Blocked"],["doctor_actions","Other doctor actions"],
     ["unclassified_red","Legacy red · unclassified"]
   ];
+  // Tabs the server may or may not project yet. Each is offered only when the
+  // committed snapshot actually carries its queue, so the page is correct
+  // against a projection that has never heard of it.
+  const OPTIONAL_QUEUES = [
+    ["reviewed_unverified","Reviewed · unverified"]
+  ];
+
+  function visibleQueues(snapshot){
+    const queues = (snapshot && snapshot.queues) || {};
+    const offered = [];
+    OPTIONAL_QUEUES.forEach(function(item){ if (queues[item[0]]) offered.push(item); });
+    return QUEUES.concat(offered);
+  }
 
   function queueRenderKey(snapshot, name){
     const bucket = snapshot.queues[name] || {row_ids:[]};
@@ -235,7 +296,25 @@
       const title = row.title || card.title || row.patient_name || row.source_id || row.id;
       const text = row.text || row.reason || row.state || "";
       const className = name === "danger" ? " danger" : name === "urgent_review" ? " urgent" : "";
-      const actions = (card.actions || []).map(function(action, index){
+      // The decision itself lives in card.lines: the BP numbers, the analyte
+      // values and their flags, the "decided_by" attribution. A red headline
+      // with the values withheld is not a card the doctor can act on.
+      const cardLines = Array.isArray(card.lines) ? card.lines : [];
+      const lines = cardLines.length ? '<div class="lines">' + cardLines.map(function(line){
+        const value = String(line === null || line === undefined ? "" : line);
+        return '<div class="line' + (value.indexOf("decided_by:") === 0 ? " muted" : "") + '">' + escapeHtml(value) + '</div>';
+      }).join("") + '</div>' : '';
+      const media = Array.isArray(row.media) ? row.media : [];
+      const mediaNote = media.length
+        ? '<div class="media-note">' + escapeHtml(media.length) + ' attachment' + (media.length === 1 ? '' : 's') + ' on this row</div>'
+        : '';
+      const offered = card.actions || [];
+      // No action without its evidence. If the snapshot carries buttons but no
+      // decision context at all, the buttons are shown inert rather than
+      // inviting a click on nothing.
+      const evidence = Boolean(cardLines.length || text);
+      const actions = offered.map(function(action, index){
+        if (!evidence) return '<span class="action-wrap"><button class="action" type="button" disabled>' + escapeHtml(action.label || "Open") + '</button></span>';
         const inputId = "action-" + escapeHtml(row.id) + "-" + index;
         const draftKey = row.id + ":" + action.id;
         const draft = S.drafts[draftKey] || "";
@@ -243,7 +322,9 @@
           + '<button class="action" type="button" data-action="' + escapeHtml(action.id) + '" data-input="' + inputId + '" data-draft="' + escapeHtml(draftKey) + '">' + escapeHtml(action.label || "Open") + '</button></span>';
       }).join("");
       return '<article class="row' + className + '"><h3>' + escapeHtml(title) + '</h3><div class="meta"><span class="pill">' + escapeHtml(row.kind || "row") + '</span><span>' + escapeHtml(row.patient_name || "") + '</span><span>' + escapeHtml(row.state || row.notification_class || "") + '</span></div>'
-        + (text ? '<p class="text">' + escapeHtml(text) + '</p>' : '') + (actions ? '<div class="actions">' + actions + '</div>' : '') + '</article>';
+        + (text ? '<p class="text">' + escapeHtml(text) + '</p>' : '') + lines + mediaNote
+        + (actions ? '<div class="actions">' + actions + '</div>' : '')
+        + (offered.length && !evidence ? '<p class="no-evidence">evidence unavailable in this snapshot</p>' : '') + '</article>';
     }).join("") : '<div class="empty">No rows in this queue.</div>';
     byId("queueRows").querySelectorAll("[data-action]").forEach(function(button){
       button.onclick = function(){
@@ -259,7 +340,7 @@
 
   function renderQueueTabs(){
     const snapshot = S.workspaceSnapshot;
-    byId("queueTabs").innerHTML = QUEUES.map(function(item){
+    byId("queueTabs").innerHTML = visibleQueues(snapshot).map(function(item){
       const bucket = snapshot.queues[item[0]] || {count:0};
       return '<button class="tab' + (S.selectedQueue === item[0] ? " active" : "") + '" type="button" data-queue="' + item[0] + '">' + escapeHtml(item[1]) + '<span class="badge">' + escapeHtml(bucket.count) + '</span></button>';
     }).join("");
@@ -302,10 +383,38 @@
       + '<div class="bp-readings">' + readings.slice(-6).map(function(reading){ return '<span class="reading">' + escapeHtml(reading.value) + '</span>'; }).join("") + '</div>';
   }
 
+  function eventKey(event){
+    if (event && event.id !== undefined && event.id !== null) return "id:" + String(event.id);
+    // An identity-less event still must not be printed twice because it
+    // reached the page down both paths.
+    return "row:" + String(event && event.kind) + "|" + String(event && (event.ts || event.ts_ms)) + "|" + String(event && event.text);
+  }
+
+  function eventOrder(event){
+    const parsed = Date.parse(event && event.ts ? event.ts : "");
+    if (!Number.isNaN(parsed)) return parsed;
+    const milliseconds = Number(event ? event.ts_ms : NaN);
+    return Number.isFinite(milliseconds) ? milliseconds : 0;
+  }
+
   function renderEvents(){
-    const block = S.workspaceSnapshot.agent_events || {items:[]};
-    const events = block.recent || block.items || [];
-    byId("eventRows").innerHTML = events.length ? events.slice(-12).reverse().map(function(event){
+    const block = S.workspaceSnapshot.agent_events || {};
+    // `recent` is a tail window and `items` is the cursor page the server just
+    // handed over. Reading one or the other lets a whole burst page advance the
+    // cursor without ever reaching the doctor at all, so the page shows the
+    // union, keyed by event identity and ordered by time.
+    const cursorPage = Array.isArray(block.items) ? block.items : [];
+    const tail = Array.isArray(block.recent) ? block.recent : [];
+    const seen = Object.create(null);
+    const events = [];
+    cursorPage.concat(tail).forEach(function(event){
+      const key = eventKey(event);
+      if (seen[key]) return;
+      seen[key] = true;
+      events.push(event);
+    });
+    events.sort(function(left, right){ return eventOrder(left) - eventOrder(right); });
+    byId("eventRows").innerHTML = events.length ? events.slice(-20).reverse().map(function(event){
       return '<article class="event"><span class="kind">' + escapeHtml(event.kind) + '</span><p>' + escapeHtml(event.text || "Persisted event") + '</p><time>' + escapeHtml(displayTime(event.ts || event.ts_ms)) + '</time></article>';
     }).join("") : '<div class="empty">No persisted events yet.</div>';
   }
@@ -331,6 +440,7 @@
     renderQueueTabs();
     if (S.renderedQueueKey !== queueRenderKey(snapshot, S.selectedQueue)) renderQueue(S.selectedQueue);
     renderPatients(); renderBP(); renderEvents(); renderHealth();
+    refreshOpenDrawer(snapshot);
   }
 
   async function postJson(path, body){
@@ -383,15 +493,79 @@
     paintError();
   }
 
+  function detailLines(heading, values){
+    if (!values.length) return "";
+    return '<div class="lines"><div class="line muted">' + escapeHtml(heading) + '</div>'
+      + values.map(function(value){ return '<div class="line">' + escapeHtml(value) + '</div>'; }).join("") + '</div>';
+  }
+
+  function verifiedSummary(verified){
+    if (!verified || typeof verified !== "object" || Array.isArray(verified)) return [];
+    const parts = [];
+    if (verified.satisfies !== undefined) parts.push("satisfies the contract: " + String(verified.satisfies));
+    if (verified.identity) parts.push("identity: " + String(verified.identity));
+    if (verified.dated) parts.push("date: " + String(verified.dated));
+    if (verified.collected_on) parts.push("collected on: " + String(verified.collected_on));
+    if (Array.isArray(verified.missing) && verified.missing.length) parts.push("missing: " + verified.missing.join(", "));
+    if (Array.isArray(verified.reasons) && verified.reasons.length) parts.push(verified.reasons.join("; "));
+    return parts;
+  }
+
+  function loopDetail(item){
+    const readings = Array.isArray(item.readings) ? item.readings : [];
+    const results = Array.isArray(item.results) ? item.results : [];
+    // The doctor should not have to leave this page to see the evidence the
+    // loop is carrying, so the readings, the read values and the verdict the
+    // verifier returned are printed with the obligation itself.
+    const readingLines = readings.slice(-4).map(function(reading){
+      const at = reading && reading.at ? " · " + String(reading.at) : "";
+      return String(reading && reading.value !== undefined && reading.value !== null ? reading.value : "recorded reading") + at;
+    });
+    const resultLines = results.map(function(result){
+      if (result && result.line) return String(result.line);
+      return [result && result.analyte, result && result.value].filter(Boolean).join(" ") || "recorded result";
+    });
+    return '<article class="row"><h3>' + escapeHtml(item.title) + '</h3><span class="pill">' + escapeHtml(item.state) + '</span>'
+      + detailLines("Readings", readingLines)
+      + detailLines("Results", resultLines)
+      + detailLines("Verified", verifiedSummary(item.verified))
+      + '</article>';
+  }
+
+  function drawerIsOpen(){
+    return byId("patientDrawer").classList.contains("open");
+  }
+
+  function closePatientDrawer(){
+    byId("patientDrawer").classList.remove("open");
+    byId("patientDrawer").setAttribute("aria-hidden", "true");
+  }
+
   function openPatientDetail(){
     const detail = S.workspaceSnapshot.selected_patient;
     if (!detail || !detail.patient) return;
     byId("detailName").textContent = detail.patient.name;
     const loops = detail.loops || [];
     byId("detailBody").innerHTML = '<section class="detail-section"><h3>Plan</h3><p>' + escapeHtml(detail.patient.plan || "No plan text recorded") + '</p></section><section class="detail-section"><h3>Obligations</h3>'
-      + (loops.length ? loops.map(function(item){ return '<article class="row"><h3>' + escapeHtml(item.title) + '</h3><span class="pill">' + escapeHtml(item.state) + '</span></article>'; }).join("") : '<div class="empty">No obligations.</div>') + '</section>';
+      + (loops.length ? loops.map(loopDetail).join("") : '<div class="empty">No obligations.</div>') + '</section>';
     byId("patientDrawer").classList.add("open");
     byId("patientDrawer").setAttribute("aria-hidden", "false");
+  }
+
+  function refreshOpenDrawer(snapshot){
+    if (!drawerIsOpen()) return;
+    // A newer snapshot has just been committed underneath an open drawer. It
+    // either carries the same patient, in which case the drawer is redrawn
+    // from it, or it does not, in which case stale clinical detail is taken
+    // off the screen rather than left standing.
+    const detail = snapshot.selected_patient;
+    if (detail && detail.patient && (!S.patientId || detail.patient.id === S.patientId)){
+      openPatientDetail();
+      return;
+    }
+    closePatientDrawer();
+    S.patientId = null;
+    showError("Patient view refreshed; reopen from the list.", false);
   }
 
   async function poll(request){
@@ -425,16 +599,11 @@
 
   byId("refreshButton").onclick = poll;
   document.querySelectorAll("[data-metric-queue]").forEach(function(button){
-    button.onclick = function(){
-      S.selectedQueue = button.dataset.metricQueue;
-      renderQueueTabs();
-      renderQueue(S.selectedQueue);
-      byId("queueRows").scrollIntoView({behavior:"smooth", block:"nearest"});
-    };
+    button.onclick = function(){ openQueue(button.dataset.metricQueue); };
   });
   byId("previousPatients").onclick = async function(){ await poll({patientOffset:Math.max(0, S.patientOffset - 20),patientId:null}); };
   byId("nextPatients").onclick = async function(){ await poll({patientOffset:S.patientOffset + 20,patientId:null}); };
-  byId("closeDrawer").onclick = function(){ byId("patientDrawer").classList.remove("open"); byId("patientDrawer").setAttribute("aria-hidden", "true"); S.patientId = null; };
+  byId("closeDrawer").onclick = function(){ closePatientDrawer(); S.patientId = null; };
   byId("patientDrawer").onclick = function(event){ if (event.target === byId("patientDrawer")) byId("closeDrawer").click(); };
 
   (async function boot(){ await poll(); setInterval(poll, 3000); })();
