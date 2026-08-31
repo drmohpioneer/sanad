@@ -31,6 +31,8 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 MAIN = (APP_ROOT / "main.py").read_text(encoding="utf-8")
 REPORT = (APP_ROOT / "core" / "report.py").read_text(encoding="utf-8")
 DISPATCH = (APP_ROOT / "core" / "dispatch.py").read_text(encoding="utf-8")
+ACTIONS = (APP_ROOT / "core" / "doctor_actions.py").read_text(
+    encoding="utf-8")
 
 NOW = datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc)
 
@@ -381,25 +383,39 @@ class TheRoutesAreShapedTheWayTheyHaveToBe(unittest.TestCase):
     def test_the_card_is_resolved_after_the_action_runs_and_never_instead(self) -> None:
         """The verb runs first; retiring the card is the last thing.
 
-        The two are in two functions now (codex re-audit 17): `_carry_out` does
-        the work, `action` retires the card after it returns. That is the same
+        The two are in two functions (codex re-audit 17): `carry_out` does the
+        work, `perform` retires the card after it returns. That is the same
         order, and it is what makes the resolve failure recoverable without
         running the work twice, so the assertion follows the call rather than
         the text.
+
+        S24-C moved both of them out of the route and into
+        core/doctor_actions.py, because Telegram has to run the same ritual and
+        a route is not somewhere a second surface can call. The rail follows
+        the code: the route may only delegate, and it owns nothing but the HTTP
+        status for a verb the domain cannot name.
         """
-        block = MAIN.split("async def action(", 1)[1]
-        self.assertLess(block.index("_carry_out("), block.index("cards.resolve("))
-        work = MAIN.split("async def _carry_out(", 1)[1].split("\n@app.", 1)[0]
-        self.assertIn('raise HTTPException(400, "unknown action")', work)
+        block = ACTIONS.split("async def perform(", 1)[1]
+        self.assertLess(block.index("carry_out("), block.index("cards.resolve("))
+        work = ACTIONS.split("async def carry_out(", 1)[1].split(
+            "\n\nasync def perform(", 1)[0]
+        self.assertIn("raise UnknownAction(verb)", work)
         self.assertNotIn("cards.resolve(", work)
+
+        route = MAIN.split("async def _legacy_action(", 1)[1].split("\n@app.", 1)[0]
+        self.assertIn("doctor_actions.perform(", route)
+        self.assertIn('raise HTTPException(400, "unknown action")', route)
+        for own in ("cards.claim(", "cards.resolve(", "store.claim_action("):
+            with self.subTest(own=own):
+                self.assertNotIn(own, route)
 
     def test_the_domain_work_is_claimed_by_its_action_id(self) -> None:
         """codex re-audit 17. Resolve failing must not let the work run twice."""
-        block = MAIN.split("async def action(", 1)[1].split("async def _carry_out",
-                                                            1)[0]
+        block = ACTIONS.split("async def perform(", 1)[1].split(
+            "\n\n# ", 1)[0]
         self.assertLess(block.index("store.claim_action("),
-                        block.index("_carry_out("))
-        self.assertLess(block.index("_carry_out("),
+                        block.index("carry_out("))
+        self.assertLess(block.index("carry_out("),
                         block.index("store.release_action("))
 
     def test_the_cards_route_serves_only_the_open_ones(self) -> None:

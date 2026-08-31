@@ -31,9 +31,10 @@ import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from core import adapters, dispatch, events, tg_router
+from core import adapters, dispatch, doctor_actions, events, tg_router
 from core.adapters import InboundMessage, OutboundMessage
 from core.models import Doctor, Event, Relay
 
@@ -370,10 +371,24 @@ class ProviderRejectionIsNotDelivery(unittest.IsolatedAsyncioTestCase):
         )
 
 
-class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
-    """A phone-only compose mode must not reinterpret another ingress lane."""
+class AnAnswerWindowIsOnTheRecordAndNotOnTheChannel(unittest.IsolatedAsyncioTestCase):
+    """S24-C. A compose window belongs to the card, not to the door it opened.
 
-    async def test_telegram_reply_mode_does_not_consume_a_web_dictation(self) -> None:
+    S23 scoped it to its channel, which fixed one bug and made another: a
+    doctor who tapped "Answer" on his phone and then typed the answer into the
+    console was not answering anything, and the console could not close a
+    window it could not see. The window is global again and the record is what
+    is protected: the answer runs the same action claim the button runs, so
+    two answers to one question are one send and one addendum, whichever
+    surfaces they arrive on.
+
+    The cost is the S23 defect coming back on its own terms: while a window is
+    open, the doctor's next typed message on ANY surface is read as the
+    answer. The ten-minute expiry and /cancel are what bound it, and /cancel
+    now works from either surface too.
+    """
+
+    async def test_a_phone_window_is_answered_from_the_web_console(self) -> None:
         doctor = a_doctor()
         relay = Relay(
             id="relay-1",
@@ -414,6 +429,12 @@ class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
                 "get_relay",
                 AsyncMock(return_value=relay),
             ),
+            patch.object(
+                doctor_actions.store, "list_events", AsyncMock(return_value=[])
+            ),
+            patch.object(
+                doctor_actions.store, "claim_action", AsyncMock(return_value=True)
+            ),
             patch.object(dispatch.events, "append_event", AsyncMock()),
             patch.object(dispatch.concierge, "doctor_reply", doctor_reply),
             patch.object(dispatch.registrar, "handle_doctor", registrar_inbound),
@@ -430,26 +451,18 @@ class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
                 InboundMessage(
                     channel="web",
                     sender_ref=f"doctor:{doctor.web_token}",
-                    text="New patient Mariam, 42, with diabetes. Check HbA1c.",
-                )
-            )
-            await dispatch.handle_inbound(
-                InboundMessage(
-                    channel="telegram",
-                    sender_ref=f"doctor:{doctor.web_token}",
                     text="Yes, continue it until we review.",
                 )
             )
 
-        registrar_inbound.assert_awaited_once()
-        self.assertEqual("web", registrar_inbound.await_args.kwargs["channel"])
+        registrar_inbound.assert_not_awaited()
         doctor_reply.assert_awaited_once_with(
             doctor,
             relay.id,
             "Yes, continue it until we review.",
         )
 
-    async def test_telegram_note_mode_does_not_consume_a_web_dictation(self) -> None:
+    async def test_a_phone_window_is_cancelled_from_the_web_console(self) -> None:
         doctor = a_doctor(
             awaiting_note_loop_id="loop-1",
             awaiting_since=NOW,
@@ -457,11 +470,15 @@ class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
         )
         note_to_patient = AsyncMock()
         registrar_inbound = AsyncMock()
+        said: list[str] = []
 
         async def update_doctor(doctor_id: str, **fields: object) -> None:
             self.assertEqual(doctor_id, doctor.id)
             for key, value in fields.items():
                 setattr(doctor, key, value)
+
+        async def send(_ref: str, message: OutboundMessage) -> None:
+            said.append(message.text)
 
         with (
             patch.object(
@@ -474,29 +491,20 @@ class ReplyModeIsScopedToItsChannel(unittest.IsolatedAsyncioTestCase):
             patch.object(dispatch.events, "append_event", AsyncMock()),
             patch.object(dispatch.concierge, "note_to_patient", note_to_patient),
             patch.object(dispatch.registrar, "handle_doctor", registrar_inbound),
+            patch.object(dispatch, "fanout", lambda: SimpleNamespace(send=send)),
         ):
             await dispatch.handle_inbound(
                 InboundMessage(
                     channel="web",
                     sender_ref=f"doctor:{doctor.web_token}",
-                    text="New patient Noura, 51, due for HbA1c.",
-                )
-            )
-            await dispatch.handle_inbound(
-                InboundMessage(
-                    channel="telegram",
-                    sender_ref=f"doctor:{doctor.web_token}",
-                    text="Please repeat the fasting panel next week.",
+                    text="/cancel",
                 )
             )
 
-        registrar_inbound.assert_awaited_once()
-        self.assertEqual("web", registrar_inbound.await_args.kwargs["channel"])
-        note_to_patient.assert_awaited_once_with(
-            doctor,
-            "loop-1",
-            "Please repeat the fasting panel next week.",
-        )
+        note_to_patient.assert_not_awaited()
+        registrar_inbound.assert_not_awaited()
+        self.assertEqual([dispatch.CANCELLED], said)
+        self.assertIsNone(doctor.awaiting_note_loop_id)
         self.assertIsNone(doctor.awaiting_channel)
 
 
@@ -531,7 +539,10 @@ class TelegramCallbacksUseActionIdempotency(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=doctor),
             ),
             patch.object(tg_router.store, "claim_action", claim_action),
-            patch.object(tg_router.registrar, "commit", commit),
+            patch.object(
+                doctor_actions.store, "list_events", AsyncMock(return_value=[])
+            ),
+            patch.object(doctor_actions.registrar, "commit", commit),
             patch.object(tg_router.telegram, "answer_callback", AsyncMock()),
         ):
             await asyncio.gather(
@@ -583,7 +594,10 @@ class TelegramCallbacksUseActionIdempotency(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(tg_router.store, "claim_action", claim_action),
             patch.object(tg_router.store, "release_action", release_action),
-            patch.object(tg_router.registrar, "commit", commit),
+            patch.object(
+                doctor_actions.store, "list_events", AsyncMock(return_value=[])
+            ),
+            patch.object(doctor_actions.registrar, "commit", commit),
             patch.object(tg_router.telegram, "answer_callback", answer_callback),
         ):
             with self.assertRaisesRegex(RuntimeError, "temporary registrar failure"):

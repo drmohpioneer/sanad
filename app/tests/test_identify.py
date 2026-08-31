@@ -1147,10 +1147,19 @@ class EveryButtonFitsInsideATelegramCallback(unittest.TestCase):
 
 @unittest.skipIf(SDK_MISSING, SDK_MISSING)
 class TheActionRouteKnowsTheNewVerbs(unittest.TestCase):
-    def test_all_three_are_named_in_the_route(self) -> None:
+    """S9's three verbs, and S24-C: there is one place that carries them out.
+
+    They used to be named twice, once in the action route and once in the
+    Telegram router, which is how the two surfaces drifted apart in the first
+    place. The rail now asks that the verb table exists once and that the
+    phone reaches it rather than keeping a copy.
+    """
+
+    def test_all_three_are_named_in_the_one_action_path(self) -> None:
         from pathlib import Path
 
-        source = Path(sanad_main.__file__).read_text(encoding="utf-8")
+        source = (Path(sanad_main.__file__).parent / "core"
+                  / "doctor_actions.py").read_text(encoding="utf-8")
         for verb in ('elif verb == "existing"', 'elif verb == "newpatient"',
                      'elif verb == "openpatient"'):
             self.assertIn(verb, source)
@@ -1160,9 +1169,10 @@ class TheActionRouteKnowsTheNewVerbs(unittest.TestCase):
 
         router = (Path(sanad_main.__file__).parent / "core" / "tg_router.py"
                   ).read_text(encoding="utf-8")
-        for verb in ('verb == "existing"', 'verb == "newpatient"',
-                     'verb == "openpatient"'):
+        self.assertIn("doctor_actions.perform(", router)
+        for verb in ('"existing"', '"newpatient"', '"openpatient"'):
             self.assertIn(verb, router)
+        self.assertNotIn("registrar.", router)
 
 
 if __name__ == "__main__":

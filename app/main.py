@@ -41,6 +41,7 @@ from core import (
     concierge,
     contract,
     dispatch,
+    doctor_actions,
     events,
     extractor,
     gender,
@@ -1386,92 +1387,24 @@ async def action(
 async def _legacy_action(
     body: ActionIn, request: Request, doctor: Doctor
 ) -> dict:
+    """The web door onto the one doctor-action path.
+
+    S24-C. The ritual this function used to spell out (claim the card, take the
+    action key, do the work, retire the card, and which of those two claims a
+    failure gives back) is `core/doctor_actions.perform` now, because Telegram
+    has to run the same one. Nothing on the wire moved: the bodies it returns
+    are built by the same code that built them here, and the golden replay
+    drives this route hard enough to say so.
+
+    The only thing that stays on this side of the seam is the HTTP status. A
+    verb the domain cannot name is a `doctor_actions.UnknownAction` there and a
+    400 here, because core/ owns no web framework.
+    """
     verb, _, ident = body.action_id.partition(":")
     log.info("action doctor_id=%s verb=%s id=%s", doctor.id, verb, ident)
-
-    # codex item 17. The claim is in front of the domain work, not behind it: a
-    # second press while the first is still running is answered instead of
-    # carried out. A press that fails gives the card back at the bottom of this
-    # function, so a real failure is still something the doctor can retry.
-    may, claimed = await cards.claim(doctor.id, body.action_id)
-    if not may:
-        return {"ok": False, "already": True, "action_id": body.action_id,
-                "detail": "already done"}
-
-    # codex re-audit 17, the second half of it. The card claim is a fact on the
-    # CARD, and it is handed back when the work behind the button fails, which
-    # is what lets a doctor press again after a real failure. It could not
-    # answer the other case: the work SUCCEEDED and the write that retires the
-    # card threw. The claim went back, the doctor pressed again, and Confirm
-    # made a second patient.
-    #
-    # So the domain work carries its own key, and the key is the action id he
-    # pressed. It is written before the work and released only when the work
-    # itself throws, never when the bookkeeping after it does. A verb no card
-    # carries (a purged card, a script) is covered by this and by nothing else,
-    # because `cards.claim` has nothing to claim for one.
-    if cards.retires(body.action_id):
-        if not await store.claim_action(doctor.id, body.action_id):
-            await cards.release(claimed)
-            return {"ok": False, "already": True, "action_id": body.action_id,
-                    "detail": "already done"}
-
     try:
-        answer = await _carry_out(body, request, doctor, verb, ident)
-    except Exception:
-        await cards.release(claimed)
-        if cards.retires(body.action_id):
-            await store.release_action(doctor.id, body.action_id)
-        raise
-
-    # The work is done; now the card behind the button is finished. This is
-    # OUTSIDE the block above on purpose. Retiring the card is bookkeeping about
-    # a thing that has already happened, so a failure here must not give the
-    # action back: the claim stands, the doctor's next press is answered
-    # "already done", and the work is not repeated. He sees a card that is still
-    # open, which is the honest picture of a card whose flag could not be
-    # written.
-    answer["resolved"] = await cards.resolve(doctor.id, body.action_id)
-    return answer
-
-
-async def _carry_out(body: ActionIn, request: Request, doctor: Doctor,
-                     verb: str, ident: str) -> dict:
-    """One claimed action, carried out and then retired."""
-    if verb == "confirm":
-        await registrar.commit(doctor, ident, str(request.base_url))
-    elif verb == "cancel":
-        await registrar.cancel(doctor, ident)
-    elif verb == "reply":
-        await concierge.doctor_reply(doctor, ident, body.text)
-    elif verb == "reviewed":
-        await concierge.mark_reviewed(doctor, ident)
-    elif verb == "note":
-        await concierge.note_to_patient(doctor, ident, body.text)
-    elif verb == "attach":
-        await extractor.attach_results(doctor, ident)
-    elif verb == "openloop":
-        await extractor.open_loop_for(doctor, ident)
-    elif verb == "existing":
-        # "existing:<patient id>:<proposal id>". The proposal id is last so the
-        # verb and the patient still read left to right, and so the split is the
-        # same one every other action id uses.
-        patient_id, _, confirm_id = ident.partition(":")
-        await registrar.choose_existing(doctor, patient_id, confirm_id)
-    elif verb == "newpatient":
-        await registrar.choose_new(doctor, ident)
-    elif verb == "openpatient":
-        # A row on a lookup list. There is nothing to do on the server: the
-        # list created nothing and this button only opens a record that already
-        # exists. The dashboard opens the patient panel; pressing it here
-        # retires the list, which is what a list that has been used is.
-        pass
-    elif verb == cards.SEEN:
-        # A red emergency card has nothing to do to it but read it, so "Seen"
-        # does no work of its own. It exists so that acknowledging one is a
-        # fact on the server rather than a tab that is still open.
-        pass
-    else:
+        return await doctor_actions.perform(
+            doctor, body.action_id, body.text, base_url=str(request.base_url)
+        )
+    except doctor_actions.UnknownAction:
         raise HTTPException(400, "unknown action")
-
-    return {"ok": True, "resolved": []}

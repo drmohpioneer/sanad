@@ -17,8 +17,7 @@ from typing import Any, Optional
 from pydantic import StrictBool
 
 from . import (
-    cards, concierge, dispatch, events, gender, links, registrar, store,
-    telegram, uploads,
+    dispatch, doctor_actions, events, gender, links, store, telegram, uploads,
 )
 from .adapters import (
     InboundMessage,
@@ -45,16 +44,35 @@ INTRO = (
 )
 
 
-# These callbacks finish their domain work at the tap itself. `reply` only
-# opens a compose window (and must be tappable again after cancel/expiry),
-# `note` is a repeatable side action, and `openpatient` is only navigation.
-# The value is also the unchanged acknowledgement for an already-finished tap.
-_RETIRING_CALLBACK_NOTES = {
+# The toast Telegram shows above the card when a tap comes back. It is an
+# acknowledgement and nothing else: the work itself is one call to
+# `core/doctor_actions.perform`, the same call the web console makes, and the
+# same line is shown whether that call did the work or found it already done.
+# A doctor who taps twice must not be told two different things about one fact.
+_CALLBACK_NOTES = {
     "confirm": "confirmed",
     "cancel": "cancelled",
     "existing": "which record",
     "newpatient": "new patient",
     "reviewed": "closed",
+    "attach": "attached",
+    "openloop": "loop opened",
+    "seen": "seen",
+    "openpatient": "open it on the board",
+}
+
+# The two verbs that cannot finish at the tap, because what they need is the
+# doctor's next message. The tap opens the window; `core/dispatch.py` runs the
+# same `perform` when the message lands, which is what retires the card. Both
+# halves therefore go through one unit and a relay can no longer be answered
+# while its card stays open.
+_WINDOW_NOTES = {"reply": "waiting for your answer", "note": "send your note"}
+_WINDOW_PROMPTS = {
+    "reply": ("Answering the patient: send your answer as the next message and "
+              "it goes to the patient and into the plan. You have ten minutes, "
+              "and /cancel stops it."),
+    "note": ("Send your note as the next message. You have ten minutes, and "
+             "/cancel stops it."),
 }
 
 
@@ -106,86 +124,61 @@ async def _handle_update(
 
 
 async def _callback(query: dict[str, Any], base_url: str) -> None:
+    """One tap on a card in Telegram, carried out down the one action path.
+
+    S24-C. This function used to hold a second copy of the doctor's actions:
+    it claimed the action key for five verbs, called the Registrar and the
+    Concierge itself, and never touched `cards.claim` or `cards.resolve`. So a
+    tap here and the same tap in the browser meant two different things, and
+    the card the phone finished stayed open on the board.
+
+    Nothing domain-shaped is decided here now. The router says who tapped and
+    which button; `core/doctor_actions.perform` does the rest, exactly as it
+    does for the console. What stays is the Telegram-shaped part: the toast
+    that goes back on the callback, the compose prompt for the two-step verbs,
+    and turning a released claim into the retry signal the webhook understands.
+    """
     chat_id = ((query.get("message") or {}).get("chat") or {}).get("id")
     data = query.get("data") or ""
     doctor = await store.doctor_by_telegram(chat_id) if chat_id else None
     note = "not your board"
     if doctor is not None:
-        verb, _, ident = data.partition(":")
-        retiring = verb in _RETIRING_CALLBACK_NOTES and cards.retires(data)
-        claimed = False
-        if retiring:
-            claimed = await store.claim_action(doctor.id, data)
-            if not claimed:
-                # The work already happened on this or another surface. Keep
-                # the callback acknowledgement byte-for-byte the same while
-                # doing none of the domain work again.
-                await telegram.answer_callback(
-                    query.get("id", ""), _RETIRING_CALLBACK_NOTES[verb]
+        verb = data.partition(":")[0]
+        if verb in _WINDOW_NOTES:
+            # Firestore holds which card he is answering; the process holds
+            # nothing. The card is retired when the message lands, not here.
+            await doctor_actions.open_answer_window(
+                doctor, data, channel="telegram"
+            )
+            await send_edge_card(chat_id, _WINDOW_PROMPTS[verb],
+                                 target_ref=f"doctor:{doctor.web_token}")
+            note = _WINDOW_NOTES[verb]
+        else:
+            released = False
+
+            def _released() -> None:
+                nonlocal released
+                released = True
+
+            try:
+                await doctor_actions.perform(
+                    doctor, data, base_url=base_url, on_released=_released
                 )
-                return
-        try:
-            if verb == "confirm":
-                await registrar.commit(doctor, ident, base_url)
-                note = "confirmed"
-            elif verb == "cancel":
-                await registrar.cancel(doctor, ident)
-                note = "cancelled"
-            elif verb == "existing":
-                # S9: the same three ids the console sends, so a doctor who picks
-                # the record on his phone gets the same confirm card he would have
-                # got in the browser.
-                patient_id, _, confirm_id = ident.partition(":")
-                await registrar.choose_existing(doctor, patient_id, confirm_id)
-                note = "which record"
-            elif verb == "newpatient":
-                await registrar.choose_new(doctor, ident)
-                note = "new patient"
-            elif verb == "openpatient":
-                note = "open it on the board"
-            elif verb in ("reviewed", "note"):
-                # The lab-values card carries the same action ids on both surfaces.
-                if verb == "reviewed":
-                    await concierge.mark_reviewed(doctor, ident)
-                    note = "closed"
-                else:
-                    await store.update_doctor(
-                        doctor.id, awaiting_relay_id=None,
-                        awaiting_note_loop_id=ident, awaiting_since=store.now(),
-                        awaiting_channel="telegram",
-                    )
-                    await send_edge_card(
-                        chat_id, "Send your note as the next message. You have ten "
-                        "minutes, and /cancel stops it.",
-                        target_ref=f"doctor:{doctor.web_token}",
-                    )
-                    note = "send your note"
-            elif verb == "reply":
-                # Firestore holds which card he is answering; the process holds nothing.
-                await store.update_doctor(
-                    doctor.id, awaiting_relay_id=ident,
-                    awaiting_note_loop_id=None, awaiting_since=store.now(),
-                    awaiting_channel="telegram",
-                )
-                await send_edge_card(
-                    chat_id, "Answering the patient: send your answer as the next "
-                    "message and it goes to the patient and into the plan. You "
-                    "have ten "
-                    "minutes, and /cancel stops it.",
-                    target_ref=f"doctor:{doctor.web_token}",
-                )
-                note = "waiting for your answer"
-            else:
+            except doctor_actions.UnknownAction:
                 note = "unknown button"
-        except Exception as exc:
-            # A failed domain operation is retryable. As on the web action
-            # route, only successful work permanently owns the action key.
-            if claimed:
-                await store.release_action(doctor.id, data)
-                raise RetryableCallbackError(
-                    str(exc) or "the retiring callback action claim was released"
-                ) from exc
-            raise
+            except Exception as exc:
+                # A failed domain operation is retryable, but only when the
+                # action key actually went back. If the release itself failed
+                # the key is still held, and calling that retryable would let
+                # Telegram redeliver an update that can never be carried out.
+                if released:
+                    raise RetryableCallbackError(
+                        str(exc) or "the retiring callback action claim was released"
+                    ) from exc
+                raise
+            else:
+                # The same line for work just done and for work already done.
+                note = _CALLBACK_NOTES.get(verb, "done")
     await telegram.answer_callback(query.get("id", ""), note)
 
 

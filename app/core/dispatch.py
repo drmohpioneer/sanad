@@ -19,8 +19,8 @@ import logging
 from datetime import timedelta
 
 from . import (
-    bounded, chaser, concierge, digest, events, lang, media, registrar, report,
-    sentinel, store,
+    bounded, chaser, concierge, digest, doctor_actions, events, lang, media,
+    registrar, report, sentinel, store,
 )
 from .adapters import InboundMessage, OutboundMessage, fanout
 from .models import Doctor
@@ -76,11 +76,15 @@ async def handle_inbound(msg: InboundMessage) -> None:
         # He tapped a button that consumes his next message: "Answer" on a
         # relay card, or "Send a note" on a lab-values card. It lasts ten
         # minutes and /cancel calls it off (S2 review, carry-over 2).
-        # Missing awaiting_channel is a pre-migration Telegram window: no other
-        # lane could open one before that field existed.
-        pending_channel = doctor.awaiting_channel or "telegram"
+        #
+        # S24-C. The window is not scoped to the door it was opened from. For
+        # one release it was: a window opened on the phone refused the answer
+        # he typed into the console, and /cancel only worked on the surface
+        # that had opened it. That is a lock on the doctor rather than on the
+        # record, and it made one question two questions. The lock that
+        # matters is the action claim below, which is on the record and is the
+        # same claim a second press of the button meets.
         if (doctor.awaiting_relay_id or doctor.awaiting_note_loop_id) \
-                and msg.channel == pending_channel \
                 and text and not msg.audio_bytes and not msg.image_bytes:
             if text.lower().startswith(CANCEL_COMMAND):
                 await clear_pending(doctor)
@@ -92,14 +96,7 @@ async def handle_inbound(msg: InboundMessage) -> None:
                     meta={"source": "card answer"},
                     synthetic=msg.synthetic,
                 )
-                if doctor.awaiting_relay_id:
-                    # doctor_reply clears the flag itself, as it did in S2.
-                    await concierge.doctor_reply(doctor, doctor.awaiting_relay_id, text)
-                else:
-                    await concierge.note_to_patient(
-                        doctor, doctor.awaiting_note_loop_id or "", text
-                    )
-                    await clear_pending(doctor)
+                await _land_answer(doctor, msg, text)
                 return
             # The window closed; this is an ordinary message again.
             await clear_pending(doctor)
@@ -138,6 +135,44 @@ async def handle_inbound(msg: InboundMessage) -> None:
     # An unresolvable ref has no feed to write to, which is why the /c routes
     # validate the token and the patient id before they ever call in here.
     await out.send(msg.sender_ref, OutboundMessage(text=UNKNOWN_REPLY))
+
+
+async def _land_answer(doctor: Doctor, msg: InboundMessage, text: str) -> None:
+    """The second half of a two-step card action: the doctor's own words.
+
+    S24-C. This used to call the Concierge straight, which closed the relay
+    and sent the patient the answer while leaving the card that asked for it
+    open for ever. Nothing on the board said the question was finished, and a
+    doctor looking at his Inbox saw a question he had already answered.
+
+    So the answer runs the same unit the button runs (core/doctor_actions.py)
+    with the same action id the card carries: the card is claimed, the work is
+    done, and the card is retired, in that order. An answer that arrives twice,
+    or on two surfaces at once, meets the claim and is refused rather than sent
+    to the patient a second time.
+    """
+    out = fanout()
+    if doctor.awaiting_relay_id:
+        # `concierge.doctor_reply` clears the awaiting flag itself, as it did
+        # in S2, so nothing is cleared here on the path that ran.
+        answered = await doctor_actions.perform(
+            doctor, f"reply:{doctor.awaiting_relay_id}", text
+        )
+        if answered.get("already"):
+            await clear_pending(doctor)
+            await out.send(msg.sender_ref, OutboundMessage(
+                text=concierge.ALREADY_ANSWERED,
+                meta={"decided_by": "code (core/doctor_actions.py, the action "
+                                    "is already claimed)"}))
+        return
+    # "Send a note" is a side action: it sends the line and deliberately leaves
+    # the lab-values card open, because the review that closes the loop has not
+    # happened yet (core/cards.SIDE_ACTIONS). Running it through the same unit
+    # is what makes that a property of the button rather than of the surface.
+    await doctor_actions.perform(
+        doctor, f"note:{doctor.awaiting_note_loop_id or ''}", text
+    )
+    await clear_pending(doctor)
 
 
 async def _handle_patient(patient, doctor, msg: InboundMessage) -> None:
