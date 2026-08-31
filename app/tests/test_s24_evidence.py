@@ -193,10 +193,20 @@ class TheGuardsRefuseWhatWasNotOffered(unittest.TestCase):
 
         self.assertEqual({"kind", "loop_id", "reason"},
                          set(EvidenceProposal.model_fields))
-        facts = self._facts()
-        for loop_id, expected in (("test-open", "attach_to_loop"),
-                                  ("", "unexpected_result")):
-            with self.subTest(loop_id=loop_id):
+        # The route is the table's answer over whatever loop survived the
+        # guard. An empty proposal is no longer enough on its own to leave the
+        # page unfiled: since S24 finding 4, code keeps its own open loop when
+        # it has one, so the unfiled case is the case where code had nothing to
+        # file on either.
+        for loop_id, code_loop_id, expected in (
+                ("test-open", "test-open", "attach_to_loop"),
+                ("", "", "unexpected_result"),
+        ):
+            with self.subTest(loop_id=loop_id, code_loop_id=code_loop_id):
+                facts = self._facts(
+                    code_loop_id=code_loop_id,
+                    code_route=("attach_to_loop" if code_loop_id
+                                else "unexpected_result"))
                 decided = self.evidence.guard(
                     facts, _proposal("lab_slip", loop_id))
                 self.assertEqual(expected, decided.route)

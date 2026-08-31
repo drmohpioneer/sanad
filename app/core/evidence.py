@@ -421,6 +421,25 @@ def guard(facts: Facts, proposal: EvidenceProposal) -> Disposition:
                 f"{facts.code_loop_id or 'no loop'} stands"
             )
             loop_id = facts.code_loop_id
+    elif facts.code_loop_id:
+        # The loop was not named wrongly; it was left out. That used to survive
+        # the guard untouched, and it was the whole of the hole: the route came
+        # back unexpected_result, core/extractor ran the slip with no loop, and
+        # with no loop there is no verify.check - no printed name, no collection
+        # date, no completeness - so the identity-mismatch card could never
+        # fire and the doctor read "Nothing was ordered for this" over an open
+        # order. The model may re-file a page onto another offered loop of the
+        # right type. It may not take the page off the lane code put it on, and
+        # least of all by saying nothing, because the reasons it gives for
+        # leaving it out (the name, the date) are the two checks its own prompt
+        # tells it code makes after it and overrules it on.
+        refusals.append(
+            f"code guard refused an empty loop: {facts.code_loop_id} is an "
+            f"open {wanted} obligation on this patient's record, and whether "
+            "this page answers it is decided by the checks in code; "
+            f"{facts.code_loop_id} stands"
+        )
+        loop_id = facts.code_loop_id
 
     # A fallback to the table's own choice is only a fallback when the table's
     # choice is still valid for the kind that survived.
