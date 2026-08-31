@@ -27,8 +27,11 @@ to listen to himself. In every case the patient gets a sentence, the doctor gets
 a card, and the event log says what broke.
 
 The deadlines are generous on purpose. They are there to stop a hang, not to cut
-a slow answer short: a real Gemini call on this workload lands in a second or
-two, so a call that has taken twenty is not a slow call, it is a lost one.
+a slow answer short. These numbers were widened on 2026-08-31 after measurement:
+plain generation on this workload answers in about two seconds, but the same
+model asked for a structured JSON schema was measured at 13.6 to 20.0 seconds,
+which is what the votes ask for. The bound exists so a waiting patient always
+gets an answer and no stuck call holds an instance, not to make the model hurry.
 """
 
 from __future__ import annotations
@@ -42,9 +45,9 @@ log = logging.getLogger("sanad.bounded")
 T = TypeVar("T")
 
 # Seconds. One table, and every patient-facing dependency reads from it.
-TRIAGE = 12.0        # core/sentinel.model_net, the emergency vote
-VOTE = 12.0          # core/validator's two yes/no votes
-TEXT = 30.0          # core/concierge.answer, the one model-written sentence
+TRIAGE = 30.0        # core/sentinel.model_net, the emergency vote
+VOTE = 30.0          # core/validator's two yes/no votes
+TEXT = 45.0          # core/concierge.answer, the one model-written sentence
 TRANSCRIBE = 45.0    # core/media.transcribe_async, ffmpeg plus the model
 PHOTO = 45.0         # core/extractor._ask, one photograph
 STORAGE = 20.0       # core/storage.put_image
