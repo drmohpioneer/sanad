@@ -1317,8 +1317,9 @@ async def summary_view(doctor: Doctor = Depends(current_doctor)) -> dict:
     number carried. The suite drives every combination through it and asserts
     that sum.
     """
+    patients = await store.list_patients(doctor.id)
     loops = []
-    for patient in await store.list_patients(doctor.id):
+    for patient in patients:
         loops += await store.list_loops(patient.id)
     history = await events.last_events(doctor.id, 0)
     relays = await store.open_relays(doctor.id)
@@ -1331,11 +1332,24 @@ async def summary_view(doctor: Doctor = Depends(current_doctor)) -> dict:
     # from the one that was counted.
     cairo_now = store.now().astimezone(timing.CAIRO)
     counts = summary.compute(loops, history, relays, on=summary.today(store.now()))
+    # A card the phone stayed quiet for is owed to the doctor somewhere, and
+    # until now the only place that listed one was the Telegram /digest
+    # command. A doctor with no bound chat could not reach a parked
+    # REVIEW_READY card on any surface at all. `summary.card` has taken the
+    # block since S24-G; this route simply never handed it over. Reading is all
+    # that happens here: unlike the digest, this does not release anything, so
+    # the card stays owed until the digest actually delivers it.
+    # The block goes on the card and nowhere else: the legacy API shape is
+    # sealed by the Gate 0B goldens, so this route may not grow a key.
     return {
         "doctor": doctor.name,
         "line": summary.line(counts),
         "counts": counts.as_dict(),
-        "card": summary.card(counts, doctor.name, cairo_now),
+        "card": summary.card(
+            counts, doctor.name, cairo_now,
+            parked=summary.parked_rows(history),
+            names={person.id: person.name for person in patients},
+        ),
     }
 
 
