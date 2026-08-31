@@ -296,6 +296,77 @@ class ConciergeCodeGateHarness(unittest.IsolatedAsyncioTestCase):
         self.change_vote.assert_not_awaited()
         self.answer_model.assert_not_awaited()
 
+    # ---- S24 finding 6: a pressure written inside a sentence -------------
+    # Both messages below were sent to the live service on rev 31. The first
+    # filed nothing, so the Closure Auditor later reported all fourteen
+    # readings missing about a patient who had just reported two. The second
+    # escalated on a model triage vote, which is the exact card the comment in
+    # core/concierge.py says was found and fixed - it had been fixed for a bare
+    # "190/125" only.
+    async def test_two_pressures_in_one_sentence_are_both_filed(self):
+        self.loops = [loop()]
+        with patch.object(concierge.intents, "handle",
+                          AsyncMock(return_value=None)), \
+             patch.object(concierge.coordinator, "carrying",
+                          lambda loops, text: loops[0]), \
+             patch.object(concierge.coordinator, "on_patient_reply",
+                          AsyncMock(return_value="answered")):
+            await self.handle("Morning BP 148/92, evening 152/95")
+
+        self.assertEqual([row["value"] for _, row in self.readings],
+                         ["148/92", "152/95"])
+        self.assertEqual([row["number"] for _, row in self.readings],
+                         [148.0, 152.0])
+        # The sentence is still answered as a sentence: the Coordinator carried
+        # it, exactly as it did live, and no fixed reading template replaced
+        # the reply.
+        self.assertEqual(self.to("patient:"), [])
+        self.answer_model.assert_not_awaited()
+
+    async def test_a_crisis_inside_a_sentence_escalates_in_code(self):
+        self.loops = [loop()]
+        escalated = AsyncMock()
+        with patch.object(concierge.extractor, "escalate_bp", escalated):
+            await self.handle(
+                "My BP this morning was 190/125 and I have a bad headache")
+
+        self.assertEqual([row["value"] for _, row in self.readings], ["190/125"])
+        escalated.assert_awaited_once()
+        verdict = escalated.await_args.args[2]
+        self.assertEqual("crisis", verdict.level)
+        self.assertEqual((190, 125), (verdict.systolic, verdict.diastolic))
+        # The card names three numbers in code, not a vote.
+        self.assertEqual("code", verdict.as_meta()["net"])
+        self.assertIn("core/vitals.py", verdict.as_meta()["decided_by"])
+        # The table ran before any model was asked, which is the whole point.
+        self.change_vote.assert_not_awaited()
+        self.answer_model.assert_not_awaited()
+
+    async def test_the_worst_pressure_in_a_sentence_is_the_one_escalated(self):
+        """Two readings, one of them a crisis. The crisis is not the first."""
+        self.loops = [loop()]
+        escalated = AsyncMock()
+        with patch.object(concierge.extractor, "escalate_bp", escalated):
+            await self.handle("Yesterday 140/85, this morning 195/130")
+
+        self.assertEqual([row["value"] for _, row in self.readings],
+                         ["140/85", "195/130"])
+        self.assertEqual((195, 130), (escalated.await_args.args[2].systolic,
+                                      escalated.await_args.args[2].diastolic))
+
+    async def test_a_date_in_a_sentence_is_not_filed_as_a_pressure(self):
+        """The guard that makes the search safe, driven rather than described."""
+        self.loops = [loop()]
+        with patch.object(concierge.intents, "handle",
+                          AsyncMock(return_value=None)), \
+             patch.object(concierge.coordinator, "carrying",
+                          lambda loops, text: loops[0]), \
+             patch.object(concierge.coordinator, "on_patient_reply",
+                          AsyncMock(return_value="answered")):
+            await self.handle("I did the test on 28/08/2026 and took 1/2 tablet")
+
+        self.assertEqual(self.readings, [])
+
     async def test_a_normal_bp_without_a_monitor_is_not_claimed_as_recorded(self):
         await self.handle("120/80")
         self.assertEqual(self.readings, [])
@@ -319,7 +390,12 @@ class ConciergeCodeGateHarness(unittest.IsolatedAsyncioTestCase):
             sentinel.Sentinel(fired=True, net="code",
                               concept="chest pain / pressure"),
         )
-        self.assertEqual(self.readings, [])
+        # S24: the reading is now filed on the way past. It used to be dropped
+        # for being written in a sentence, which is how a patient who had just
+        # reported two pressures was told he had missed all fourteen. The
+        # sentence itself still reaches the Sentinel, which is what this test
+        # is here for, and the chest pain still ends the turn as an emergency.
+        self.assertEqual([row["value"] for _, row in self.readings], ["120/80"])
         self.assertIn("emergency", self.to("patient:")[0].text.lower())
         self.change_vote.assert_not_awaited()
         self.answer_model.assert_not_awaited()

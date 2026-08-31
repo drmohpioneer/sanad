@@ -97,6 +97,73 @@ class ReadingTheMessage(unittest.TestCase):
         self.assertEqual(vitals.judge_text("142/91").level, "normal")
 
 
+class ReadingASentence(unittest.TestCase):
+    """S24 finding 6. A measurement reported in prose is still a measurement.
+
+    `parse` stays anchored, because "is this whole message a reading" is a
+    different question and the answer to it decides whether the patient gets
+    the fixed acknowledgement. What is new is reading every plausible pressure
+    out of a sentence, so the chart and the table both see it.
+    """
+
+    def test_two_readings_in_one_sentence_are_both_found(self) -> None:
+        self.assertEqual(
+            vitals.find_all("Morning BP 148/92, evening 152/95"),
+            ((148, 92), (152, 95)))
+
+    def test_a_crisis_in_a_sentence_is_found_and_graded(self) -> None:
+        found = vitals.judge_all(
+            "My BP this morning was 190/125 and I have a bad headache")
+        self.assertEqual(1, len(found))
+        self.assertEqual("crisis", found[0].level)
+        self.assertEqual("code", found[0].as_meta()["net"])
+
+    def test_arabic_prose_is_read_the_same_way(self) -> None:
+        self.assertEqual(vitals.find_all("ضغطي 190/120"), ((190, 120),))
+
+    def test_the_worst_reading_wins_wherever_it_was_written(self) -> None:
+        worst = vitals.worst(vitals.judge_all("140/85 then 195/130"))
+        self.assertEqual((195, 130), (worst.systolic, worst.diastolic))
+
+    def test_two_readings_of_the_same_severity_keep_the_order_written(self
+                                                                     ) -> None:
+        worst = vitals.worst(vitals.judge_all("148/92 then 152/95"))
+        self.assertEqual((148, 92), (worst.systolic, worst.diastolic))
+
+    def test_nothing_to_read_is_no_reading(self) -> None:
+        self.assertEqual((), vitals.find_all("I feel fine today"))
+        self.assertIsNone(vitals.worst(()))
+
+    def test_what_the_plausibility_guard_refuses(self) -> None:
+        """A fraction, a date, a time, a score. None of them is a pressure."""
+        for text in ("I took 1/2 tablet", "collected on 28/08/2026",
+                     "the appointment is at 10/30", "3/4 of the dose",
+                     "my sugar was 90/300", "reference 12/2026"):
+            with self.subTest(text=text):
+                self.assertEqual((), vitals.find_all(text))
+
+    def test_the_bounds_are_the_ones_the_guard_names(self) -> None:
+        self.assertTrue(vitals.plausible(60, 30))
+        self.assertTrue(vitals.plausible(300, 200))
+        self.assertFalse(vitals.plausible(59, 30))
+        self.assertFalse(vitals.plausible(301, 200))
+        self.assertFalse(vitals.plausible(120, 29))
+        self.assertFalse(vitals.plausible(120, 201))
+        # A diastolic at or above the systolic is not a reading either way up.
+        self.assertFalse(vitals.plausible(90, 90))
+        self.assertFalse(vitals.plausible(90, 120))
+
+    def test_a_pressure_is_never_read_out_of_a_longer_run_of_digits(self) -> None:
+        self.assertEqual((), vitals.find_all("serial 1148/9224"))
+        self.assertEqual((), vitals.find_all("ref 4148/92"))
+
+    def test_the_anchored_door_is_unchanged(self) -> None:
+        """`parse` still answers only for a message that is nothing else."""
+        self.assertIsNone(vitals.parse("Morning BP 148/92, evening 152/95"))
+        self.assertIsNone(vitals.judge_text("my pressure was 190/120 yesterday"))
+        self.assertEqual((148, 92), vitals.parse("148/92"))
+
+
 class WhatTheDoctorSees(unittest.TestCase):
     def test_the_card_names_the_file_that_decided(self) -> None:
         card = vitals.red_card("Hend Ismail", vitals.judge(190, 125))

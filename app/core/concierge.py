@@ -485,8 +485,20 @@ async def handle_patient_message(
     #
     # A bare reading is wholly described by the table. Red readings keep the
     # emergency route; non-red readings are filed and acknowledged by a fixed
-    # sentence. Prose cannot parse as a bare reading and still reaches Sentinel.
-    bp = vitals.judge_text(text) if text else None
+    # sentence, and prose still reaches the Sentinel and the Coordinator so the
+    # sentence around the numbers is answered as a sentence.
+    #
+    # S24 found the fix above had only ever been made for a bare "190/125". A
+    # pressure written inside a sentence still went nowhere: "Morning BP
+    # 148/92, evening 152/95" left `readings` empty and the Closure Auditor
+    # later reported, truthfully from the record, that all fourteen readings
+    # were missing; and "My BP this morning was 190/125 and I have a bad
+    # headache" escalated on the model triage vote, which is the same card the
+    # comment above says was wrong. The table now reads every plausible
+    # pressure in the message, wherever it sits in it.
+    bare = vitals.judge_text(text) if text else None
+    readings = vitals.judge_all(text) if text else ()
+    bp = vitals.worst(readings)
     if bp is not None and bp.red:
         loop = await record_reading(patient, text, synthetic=synthetic)
         await extractor.escalate_bp(
@@ -500,11 +512,11 @@ async def handle_patient_message(
             synthetic=evidence_synthetic,
         )
         return
-    if bp is not None:
+    if bare is not None:
         loop = await record_reading(patient, text, synthetic=synthetic)
-        line = (f"Recorded {bp.systolic}/{bp.diastolic}"
+        line = (f"Recorded {bare.systolic}/{bare.diastolic}"
                 if loop is not None else
-                f"I read {bp.systolic}/{bp.diastolic}, but there is no open "
+                f"I read {bare.systolic}/{bare.diastolic}, but there is no open "
                 "monitoring request to file it under")
         await fanout().send(f"patient:{patient.id}", OutboundMessage(
             text=line + ". Thank you.",
@@ -512,6 +524,13 @@ async def handle_patient_message(
                   "decided_by": "code (core/vitals.py normal reading)"},
         ))
         return
+    if readings:
+        # A normal pressure inside a sentence. It is filed here rather than at
+        # the end of the turn, because the Coordinator answers a sentence like
+        # this one and returns before the general path is reached: that early
+        # return is why the reading was lost. The message itself carries on to
+        # the Sentinel and is answered as what it is.
+        await record_reading(patient, text, synthetic=synthetic)
 
     # Gate 1 - Sentinel. Both nets get their chance; a hit ends the turn here.
     # A caption on a photo is still the patient's words, so it is checked first
@@ -769,7 +788,12 @@ async def handle_patient_message(
         # The closing line is code's, not the model's, so it is never forgotten.
         result.reply = result.reply.rstrip() + "\n" + plan_overrides_line(text)
 
-    await record_reading(patient, text, synthetic=synthetic)
+    if not readings:
+        # Gate 1a has already filed every pressure it found. What is left for
+        # this call is the single number a monitor loop can also carry - a
+        # weight, a glucose - which only ever files when the whole message is
+        # one.
+        await record_reading(patient, text, synthetic=synthetic)
 
     audit = {
         "tier": tier,
@@ -1023,21 +1047,31 @@ async def record_reading(
     the same place. Returns the loop it was filed on, or None when there was
     none open, which is what tells the caller whether it may say "recorded".
     """
-    match = BP_READING.match(text) or ONE_NUMBER.match(text)
-    if not match:
-        return None
+    pressures = vitals.find_all(text)
+    if pressures:
+        values = [(f"{systolic}/{diastolic}", float(systolic))
+                  for systolic, diastolic in pressures]
+    else:
+        # No pressure anywhere in the message. A single number is still a
+        # reading, and that one is only ever read off a whole message: a bare
+        # "82" is a weight the loop asked for, where an 82 inside a sentence is
+        # a number in a sentence.
+        match = ONE_NUMBER.match(text or "")
+        if not match:
+            return None
+        values = [(text.strip(), float(match.group(1).replace(",", ".")))]
     loop = photos.open_monitor_loop(await store.list_loops(patient.id))
     if loop is None:
         return None
-    row = provenance.evidence({
-        "at": store.now().isoformat(timespec="minutes"),
-        "value": text.strip(),
-        "number": float(match.group(1).replace(",", ".")),
-    }, synthetic=provenance.derived(patient.synthetic, synthetic))
-    # ArrayUnion, not read-append-write (codex item 13, wave B's handoff): a
-    # patient who sends two readings in the same second keeps both, and a
-    # message the phone delivered twice is still one row.
-    await store.append_reading(loop.id, row)
+    at = store.now().isoformat(timespec="minutes")
+    for value, number in values:
+        row = provenance.evidence({
+            "at": at, "value": value, "number": number,
+        }, synthetic=provenance.derived(patient.synthetic, synthetic))
+        # ArrayUnion, not read-append-write (codex item 13, wave B's handoff): a
+        # patient who sends two readings in the same second keeps both, and a
+        # message the phone delivered twice is still one row.
+        await store.append_reading(loop.id, row)
     return loop
 
 
