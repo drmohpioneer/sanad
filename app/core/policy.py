@@ -419,3 +419,82 @@ def _schedule(args: dict[str, Any], facts: LoopFacts, policy: Policy,
         return make(False, "this patient already hears from Sanad that day")
 
     return make(True, when=when, notes=tuple(notes))
+
+
+# --------------------------------------------------------------------------- #
+# What the Case Steward is allowed to do with a proposal (S24-F)
+# --------------------------------------------------------------------------- #
+# core/steward.py is judgment on top of this file and never a way around it, so
+# the limits of that judgment are written here, in the file that already owns
+# every other limit. Three entries, and the Steward reads all three:
+#
+#   what it may never revise away    the handover to the doctor. Reversing a
+#                                    decision to put a human in the loop is not
+#                                    a judgment call an agent gets to make.
+#   what it may never revise INTO    a request for a missing analyte. That tool
+#                                    needs the name of one analyte, and the
+#                                    name comes off the verifier's own missing
+#                                    list in core/coordinator.py, not from a
+#                                    steward that was never shown the slip.
+#   how long it may delay            the ceilings below.
+STEWARD_KEEPS: tuple[str, ...] = ("escalate_barrier",)
+STEWARD_NEVER_REVISED_INTO: tuple[str, ...] = ("request_missing_evidence",)
+
+# A hold delays when the doctor is told and nothing else. Two hours on a case
+# that is already his - handed over, or sitting in his review queue - and six
+# on anything the system is still working itself. Both are shorter than the
+# distance to the next 09:00, which is what makes them ceilings rather than
+# decoration: core/steward.release_at takes whichever comes first.
+STEWARD_HANDED_OVER: tuple[str, ...] = ("escalate_barrier",)
+STEWARD_NEEDS_REVIEW: tuple[str, ...] = ("pending_review",)
+STEWARD_HOLD_HANDED_OVER = timedelta(hours=2)
+STEWARD_HOLD_ORDINARY = timedelta(hours=6)
+
+
+def steward_keeps(tool: str) -> bool:
+    """True for a decision the Steward may never revise away from."""
+    return tool in STEWARD_KEEPS
+
+
+def steward_hold_ceiling(tool: str, facts: LoopFacts) -> timedelta:
+    """The longest a hold on this proposal may keep the doctor waiting."""
+    if tool in STEWARD_HANDED_OVER or facts.state in STEWARD_NEEDS_REVIEW:
+        return STEWARD_HOLD_HANDED_OVER
+    return STEWARD_HOLD_ORDINARY
+
+
+def steward_args(tool: str, facts: LoopFacts,
+                 policy: Policy = DEFAULT) -> dict[str, Any]:
+    """The arguments an alternative would be carried out with, from the facts.
+
+    The Steward names a tool and nothing else. What that tool would be called
+    with is read off the same coded snapshot every guard reads, here, so a
+    revise can never smuggle an argument in beside the name: a barrier class
+    the record does not hold, a date outside the doctor's window, an analyte
+    nobody is missing.
+    """
+    if tool == "schedule_next_contact":
+        return {"days_from_now": 0 if facts.wake else policy.earliest_days}
+    if tool in ("classify_barrier", "escalate_barrier"):
+        return {"barrier": facts.barrier or "unclear"}
+    return {}
+
+
+def steward_alternatives(tool: str, facts: LoopFacts,
+                         policy: Policy = DEFAULT) -> tuple[str, ...]:
+    """The other tools `check` would allow on these facts, right now.
+
+    Computed in code before the model is asked, and it is the whole of what a
+    revise may name: a verdict naming anything outside this tuple is not a
+    revise, it is an approve with a line saying why (core/steward.py). The
+    proposal itself is never in it, because "revise to what you already chose"
+    is not a revision.
+    """
+    allowed: list[str] = []
+    for candidate in TOOLS:
+        if candidate == tool or candidate in STEWARD_NEVER_REVISED_INTO:
+            continue
+        if check(candidate, steward_args(candidate, facts, policy), facts,
+                 policy).allowed:
+            allowed.append(candidate)
+    return tuple(allowed)

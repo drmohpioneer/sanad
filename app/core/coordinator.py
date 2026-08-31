@@ -64,8 +64,8 @@ from typing import Any, Optional
 
 from . import (
     auditor, contract, events, gender, labs, lang, names,
-    policy as policy_module, sentinel, settings, store, tasks, templates,
-    timing,
+    policy as policy_module, sentinel, settings, store,
+    steward as steward_module, tasks, templates, timing,
 )
 from .adapters import OutboundMessage, fanout
 from .models import Doctor, Loop, Patient
@@ -168,6 +168,12 @@ class Turn:
     # agent switched off. False when it ran and chose to do nothing, which is a
     # different thing and gets a different audit line.
     model_failed: bool = False
+    # What the Case Steward said about this turn's proposal (S24-F), when it
+    # was asked at all. None is every turn off the v2 cohort and every turn on
+    # a decision that was never the Steward's to judge, and it is what makes a
+    # non-enrolled doctor's event byte-identical to the one he had before this
+    # agent existed: an absent key, not a key saying "not asked".
+    steward: Optional[steward_module.Verdict] = None
 
     @staticmethod
     def _key(tool: str, args: dict[str, Any]) -> tuple:
@@ -1005,10 +1011,25 @@ async def _execute(turn: Turn, decision: policy_module.Decision) -> dict[str, An
               "detail": detail, "receipt": turn.receipt,
               "audit": {"tier": "coordinator", "coordinator": decision.as_meta(),
                         "line": decision.audit(), "receipt": turn.receipt},
-              "decided_by": DECIDED_BY_AGENT},
+              # S24-F. The Steward's line goes on the turn's own event and
+              # nowhere else: one wake-up is one row on the trail, and a second
+              # event per wake-up saying an agent agreed with another agent is
+              # noise on the record a judge reads. The key is absent entirely
+              # when no Steward was asked, so a doctor off the cohort keeps the
+              # event he already had. The sentence is from the fixed bank in
+              # core/steward.py, so nothing a model wrote is in it.
+              **({"steward": turn.steward.as_meta()}
+                 if turn.steward is not None else {}),
+              "decided_by": (turn.steward.decided_by
+                             if turn.steward is not None
+                             and not turn.steward.approved
+                             else DECIDED_BY_AGENT)},
     )
-    return {"tool": tool, "answered": answered, "audit": decision.audit(),
-            "detail": detail}
+    answer = {"tool": tool, "answered": answered, "audit": decision.audit(),
+              "detail": detail}
+    if turn.steward is not None:
+        answer["steward"] = turn.steward.as_meta()
+    return answer
 
 
 # --------------------------------------------------------------------------- #
@@ -1163,6 +1184,65 @@ async def _turn_for(loop: Loop, patient: Patient, doctor: Doctor, trigger: str,
     )
 
 
+async def _stewarded(turn: Turn, decision: policy_module.Decision
+                     ) -> policy_module.Decision:
+    """Put one accepted choice to the Case Steward, and return what executes.
+
+    S24-F, and the proposal half of the dynamic workflow. The Coordinator has
+    chosen, core/policy.check has already allowed the choice, and nothing has
+    happened yet: this is the last moment at which a second mind can look at
+    the plan, and it is the only place in this file where one does.
+
+    Three things can come back, and only one of them changes what runs:
+
+      approve          `decision` is returned untouched, so the turn is byte
+                       for byte the turn it was before this agent existed;
+      revise           the named alternative is put through core/policy.check
+                       here, in code, exactly as the proposal was. A refusal
+                       from that check is not an argument: the original stands,
+                       because a steward that cannot produce a legal move has
+                       not produced a move at all;
+      hold_for_digest  `decision` is returned untouched too. A hold is timing
+                       and nothing else (rail 3): the action is carried out,
+                       and what the Steward has said is that the doctor does
+                       not need to hear about it before the release moment on
+                       the verdict. It can never drop a card, a queue row or a
+                       count, and tests/test_s24_steward.py asserts that by
+                       running both ways and comparing every write.
+
+    It is asked on the v2 fact cohort only. A doctor who was never enrolled
+    never constructs a Steward turn, pays none of its deadline, and gets the
+    event he already had, with no steward key on it at all - which is what
+    keeps the golden replay in tests/test_gate0b_characterization.py byte
+    stable, because every doctor in that replay is off the cohort.
+    """
+    if not turn.doctor.workspace_facts_enabled:
+        return decision
+
+    verdict = await steward_module.review(
+        decision, turn.facts, turn.policy, trigger=turn.trigger,
+        now=turn.facts.now)
+    turn.steward = verdict
+    if not verdict.revised:
+        return decision
+
+    # The revision goes through the same guard the proposal went through, with
+    # arguments core/policy.py reads off the facts rather than anything the
+    # model wrote. A refused revision is an approve, out loud.
+    revised = policy_module.check(
+        verdict.tool,
+        policy_module.steward_args(verdict.tool, turn.facts, turn.policy),
+        turn.facts, turn.policy, reason=decision.reason,
+    )
+    if not revised.allowed:
+        log.info("the case steward's alternative was refused by the guard "
+                 "(%s); the plan stands", revised.why)
+        turn.steward = steward_module.stands(
+            steward_module.OUT_OF_POLICY, guard=revised.why, asked=True)
+        return decision
+    return revised
+
+
 async def run(loop: Loop, patient: Patient, doctor: Doctor, trigger: str,
               message: str = "", receipt: str = "", said: str = "",
               facts: Optional[policy_module.LoopFacts] = None,
@@ -1180,6 +1260,7 @@ async def run(loop: Loop, patient: Patient, doctor: Doctor, trigger: str,
     if decision is None:
         await _stood_down(turn)
         return None
+    decision = await _stewarded(turn, decision)
     return await _execute(turn, decision)
 
 
